@@ -77,6 +77,10 @@ struct {
  */
 #define SOS_SYSCALL0 0
 
+/* syscall for printing */
+#define SOS_SYSCALL_PRINT 2
+#define PRINT_MESSAGE_START 2
+
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
@@ -85,11 +89,78 @@ seL4_CPtr _sos_interrupt_ep_cap;
  */
 extern fhandle_t mnt_point;
 
+static inline int CONST min(int a, int b)
+{
+    return (a < b) ? a : b;
+}
+
+/**
+ * Use syscall_print_sendbuf to send the buffer
+ * @param msgBuf message buffer
+ * @param length of content to send
+ */
+static size_t
+syscall_print_sendbuf(char* msgBuf, size_t length) {
+    struct serial* serial = serial_init();
+    // Length should be no more than standard MTU
+    assert(length <= 1500);
+    serial_send(serial, msgBuf, length);
+    return length;
+}
+
+/**
+ * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
+ * @param msgBuf starting point of buffer to store contents.  Must have at
+ * least 4 chars available.
+ * @param packed_data word packed with 4 characters
+ */
+static int unpack_word(char* msgBuf, seL4_Word packed_data) {
+    int length = 0;
+    int j = sizeof(seL4_Word);
+    while (j > 0) {
+        // Unpack data encoded 4-chars per word.
+        *msgBuf = (char)(packed_data >> ((--j) * 8));
+        if (*msgBuf == 0) {
+            return length;
+        }
+        length++;
+        msgBuf++;
+    }
+    return length;
+}
+
+/**
+ * @param num_args number of IPC args supplied
+ * @returns length of the message printed
+ */
+static size_t syscall_print(size_t num_args) {
+    size_t i,unpack_len,send_len;
+    size_t total_unpack = 0;
+    seL4_Word packed_data;
+    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
+    char *bufPtr = msgBuf;
+    char req_count = seL4_GetMR(1);
+    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
+    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
+        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
+        unpack_len = unpack_word(bufPtr, packed_data);
+        total_unpack += unpack_len;
+        bufPtr += unpack_len;
+        /* Unpack was short the expected amount, so we signal the end. */
+        if (unpack_len < sizeof(seL4_Word)) {
+            break;
+        }
+    }
+    send_len = syscall_print_sendbuf(msgBuf, min(req_count, total_unpack));
+    free(msgBuf);
+    return send_len;
+}
 
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
-
+    seL4_MessageInfo_t reply;
+    seL4_Word reply_msg;
 
     syscall_number = seL4_GetMR(0);
 
@@ -102,12 +173,17 @@ void handle_syscall(seL4_Word badge, int num_args) {
     case SOS_SYSCALL0:
         dprintf(0, "syscall: thread made syscall 0!\n");
 
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        reply = seL4_MessageInfo_new(0, 0, 0, 1);
         seL4_SetMR(0, 0);
         seL4_Send(reply_cap, reply);
-
         break;
-
+    case SOS_SYSCALL_PRINT:
+        reply_msg = syscall_print(num_args);
+        reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        seL4_SetMR(0, 0);
+        seL4_SetMR(1, reply_msg);
+        seL4_Send(reply_cap, reply);
+        break;
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
