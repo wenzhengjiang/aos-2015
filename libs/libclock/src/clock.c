@@ -1,9 +1,10 @@
+#include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
 #include <clock/clock.h>
-#include <sync/mutex.h>
+#include "../../libsel4sync/include/sync/mutex.h"
 
-static const timestamp_t max_tick = (1LL<<63) - 1;
+static const timestamp_t max_tick = (1ULL<<63) - 1;
 
 struct callback {
     uint32_t id;
@@ -11,7 +12,7 @@ struct callback {
     uint64_t delay;
     timer_callback_t fun;
     void *data;
-    struct timer_callback *next;
+    struct callback *next;
 };
 typedef struct callback callback_t;
 
@@ -39,7 +40,7 @@ static void cblist_add(callback_t *new) {
     sync_acquire(callback_m); 
 
     callback_t *cur = callback_list, *prev = NULL;
-    while (cur && cur->next_time <= new->next_time) {
+    while (cur && cur->next_timeout <= new->next_timeout) {
         prev = cur;
         cur = cur->next;
     }
@@ -92,12 +93,14 @@ static void cblist_destroy() {
 int start_timer(seL4_CPtr interrupt_ep) {
     (void) interrupt_ep;
 
-    if (!(callback_m = sync_create_mutex()) 
+    if (!(callback_m = sync_create_mutex())) 
         return CLOCK_R_FAIL;
-    if (!(gid_m = sync_create_mutex())
+    if (!(gid_m = sync_create_mutex()))
         return CLOCK_R_FAIL;
 
     initialized = true;
+
+    return 0;
 }
 /*
  * Register a callback to be called after a given delay
@@ -110,7 +113,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (!initialized) return 0;
-    callback_t * cb = (callback_t)malloc(sizeof(callback_t));
+    callback_t * cb = (callback_t*)malloc(sizeof(callback_t));
     if (!cb)
         return 0; 
     
@@ -153,13 +156,13 @@ int timer_interrupt(void) {
     sync_acquire(callback_m); 
     for (callback_t *p = callback_list; p; p = p->next) {
         if (overflowed || p->next_timeout <= cur_tick) {
-            p->fun(p->data);
+            p->fun(p->id, p->data);
             if (max_tick - cur_tick < p->delay)
                 p->next_timeout = max_tick;
             else
                 p->next_timeout = cur_tick + p->delay;
         }
-        if (!overflow && p->next_timout > cur_tick)
+        if (!overflowed && p->next_timeout > cur_tick)
             break;
     }
     sync_release(callback_m);
@@ -174,7 +177,8 @@ timestamp_t time_stamp(void) {
 }
 
 int stop_timer(void) {
-    cb_destory();
+    cblist_destroy();
     sync_destroy_mutex(callback_m);
     sync_destroy_mutex(gid_m);
+    return 0;
 }
