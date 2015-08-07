@@ -27,7 +27,7 @@
 
 #include "ut_manager/ut.h"
 #include "vmem_layout.h"
-#include <device/mapping.h>
+#include "mapping.h"
 
 #include <autoconf.h>
 
