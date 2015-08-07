@@ -71,34 +71,34 @@ typedef char byte_t;
 
 // TODO: How do we ensure the compiler doesn't modify the struct layout?
 struct gpt_control_register {
-    byte_t enable;
-    byte_t enable_mode;
-    byte_t debug_mode;
-    byte_t wain_mode;
-    byte_t doze_mode;
-    byte_t stop_mode_enabled;
-    byte_t clock_source[3];
-    byte_t free_run_or_restart;
-    byte_t reserved[4];
-    byte_t software_reset;
-    byte_t input_operating_mode_1[2];
-    byte_t input_operating_mode_2[2];
-    byte_t output_compare_mode_1[3];
-    byte_t output_compare_mode_2[3];
-    byte_t output_compare_mode_3[3];
-    byte_t force_output_compare_1;
-    byte_t force_output_compare_2;
-    byte_t force_output_compare_3;
+    unsigned enable : 1;
+    unsigned enable_mode: 1;
+    unsigned debug_mode : 1;
+    unsigned wain_mode : 1;
+    unsigned doze_mode : 1;
+    unsigned stop_mode_enabled : 1;
+    unsigned clock_source : 3;
+    unsigned free_run_or_restart : 1;
+    unsigned reserved : 4;
+    unsigned software_reset : 1;
+    unsigned input_operating_mode_1 : 2;
+    unsigned input_operating_mode_2 : 2;
+    unsigned output_compare_mode_1 : 3;
+    unsigned output_compare_mode_2 : 3;
+    unsigned output_compare_mode_3 : 3;
+    unsigned force_output_compare_1 : 3;
+    unsigned force_output_compare_2 : 3;
+    unsigned force_output_compare_3 : 3;
 };
 
 struct gpt_interrupt_register {
-    byte_t output_compare_1_enable;
-    byte_t output_compare_2_enable;
-    byte_t output_compare_3_enable;
-    byte_t input_capture_1_enable;
-    byte_t input_capture_2_enable;
-    byte_t rollover_interrupt_enable;
-    byte_t reserved[26];
+    unsigned output_compare_1_enable : 1;
+    unsigned output_compare_2_enable : 1;
+    unsigned output_compare_3_enable : 1;
+    unsigned input_capture_1_enable : 1;
+    unsigned input_capture_2_enable : 1;
+    unsigned rollover_interrupt_enable : 1;
+    unsigned reserved : 26;
 };
 
 struct timer_callback {
