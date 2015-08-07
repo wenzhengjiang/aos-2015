@@ -161,9 +161,10 @@ static size_t syscall_print(size_t num_args) {
 }
 
 static int timer_init(seL4_CPtr interrupt_ep) {
-    void* gpt_clock_addr = map_device(CLOCK_GPT_PADDR, sizeof(struct gpt_register_set));
+    void* gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(struct gpt_register_set));
     clock_set_device_address(gpt_clock_addr);
     start_timer(interrupt_ep);
+    return 0;
 }
 
 void handle_syscall(seL4_Word badge, int num_args) {
@@ -483,6 +484,17 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     conditional_panic(!badged_cap, "Failed to allocate badged cap");
     return badged_cap;
 }
+
+//void* sync_new_ep(seL4_CPtr* ep, int badge) {
+//
+//    *ep = cspace_mint_cap(cur_cspace, cur_cspace, *ep, seL4_AllRights, seL4_CapData_Badge_new(badge));
+//    return (void*)ep;
+//}
+//
+//void sync_free_ep(seL4_CPtr ep) {
+//    (void)ep;
+//}
+
 static void print_time(uint32_t id, void *data) {
     (void) data;
     printf("%d expired at %llu\n", id, time_stamp());
@@ -502,14 +514,12 @@ int main(void) {
 
     _sos_init(&_sos_ipc_ep_cap, &_sos_interrupt_ep_cap);
 
-    /* Initialise and start the clock driver */
-    timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
-
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
-    
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
-    
+
+    /* Initialise and start the clock driver */
+    //timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
+
     setup_timers();
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);

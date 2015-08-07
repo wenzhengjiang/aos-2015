@@ -12,6 +12,7 @@ config LIB_CLOCK
     bool "Build libclock"
     select LIB_SEL4 
     select LIB_SEL4_C
+    select LIB_SEL4_SYNC
     select HAVE_SEL4_LIBS
     default y
     help

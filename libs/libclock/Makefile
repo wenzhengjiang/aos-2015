@@ -11,6 +11,8 @@
 # Targets
 TARGETS := libclock.a
 
+LIBS := sel4 sel4sync
+
 # Source files required to build the target
 CFILES := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c)) 
 

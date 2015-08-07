@@ -6,7 +6,7 @@
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
-#include "../../libsel4sync/include/sync/mutex.h"
+//#include <sync/mutex.h>
 
 static const timestamp_t max_tick = (1ULL<<63) - 1;
 
@@ -21,10 +21,10 @@ struct callback {
 typedef struct callback callback_t;
 
 static callback_t *callback_list;
-static sync_mutex_t callback_m;
+//static sync_mutex_t callback_m;
 
 static uint32_t gid;
-static sync_mutex_t gid_m;
+//static sync_mutex_t gid_m;
 
 static bool initialized;
 
@@ -115,9 +115,9 @@ void* gpt_clock_addr;
 static uint32_t clock_tick_count;
 
 uint64_t get_uniq_id() {
-    sync_acquire(gid_m); 
+    //sync_acquire(gid_m); 
     int ret = ++gid; // TODO better solusion ?
-    sync_release(gid_m);
+    //sync_release(gid_m);
 
     return ret;
 };
@@ -125,7 +125,7 @@ uint64_t get_uniq_id() {
 /* Insert a new node while maintaining the increasing order of next_timou*/
 
 static void cblist_add(callback_t *new) {
-    sync_acquire(callback_m); 
+    //sync_acquire(callback_m); 
 
     callback_t *cur = callback_list, *prev = NULL;
     while (cur && cur->next_timeout <= new->next_timeout) {
@@ -141,14 +141,14 @@ static void cblist_add(callback_t *new) {
         new->next = cur;
     }
 
-    sync_release(callback_m);
+    //sync_release(callback_m);
 }
 
 /*
  * @return  CLOCK_R_OK if item removed successfully 
  *          CLOCK_R_FAIL if item was not found */
 static int cblist_remove(uint32_t id) {
-    sync_acquire(callback_m); 
+    //sync_acquire(callback_m); 
 
     callback_t *cur = callback_list, *prev = NULL;
     while (cur && cur->id != id) {
@@ -165,7 +165,7 @@ static int cblist_remove(uint32_t id) {
         free(cur);
     }
 
-    sync_release(callback_m);
+    //sync_release(callback_m);
     return ret;
 }
 
@@ -197,10 +197,10 @@ enable_irq(int irq, seL4_CPtr aep) {
 int start_timer(seL4_CPtr interrupt_ep) {
     struct gpt_control_register* gpt_control_register = &(gpt_register_set->control);
     struct gpt_interrupt_register* gpt_interrupt_register = &(gpt_register_set->interrupt);
-    if (!(callback_m = sync_create_mutex())) 
-        return CLOCK_R_FAIL;
-    if (!(gid_m = sync_create_mutex()))
-        return CLOCK_R_FAIL;
+    //if (!(callback_m = sync_create_mutex())) 
+    //    return CLOCK_R_FAIL;
+    //if (!(gid_m = sync_create_mutex()))
+    //    return CLOCK_R_FAIL;
 
     initialized = true;
 
@@ -289,7 +289,7 @@ int timer_interrupt(void) {
     timestamp_t cur_tick = time_stamp();
     bool overflowed = cur_tick < last_tick;
 
-    sync_acquire(callback_m); 
+    //sync_acquire(callback_m); 
     for (callback_t *p = callback_list; p; p = p->next) {
         if (overflowed || p->next_timeout <= cur_tick) {
             p->fun(p->id, p->data);
@@ -301,7 +301,7 @@ int timer_interrupt(void) {
         if (!overflowed && p->next_timeout > cur_tick)
             break;
     }
-    sync_release(callback_m);
+    //sync_release(callback_m);
 
     last_tick = cur_tick;
 
@@ -314,7 +314,7 @@ timestamp_t time_stamp(void) {
 
 int stop_timer(void) {
     cblist_destroy();
-    sync_destroy_mutex(callback_m);
-    sync_destroy_mutex(gid_m);
+    //sync_destroy_mutex(callback_m);
+    //sync_destroy_mutex(gid_m);
     return 0;
 }
