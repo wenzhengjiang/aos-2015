@@ -19,6 +19,7 @@
 #include <nfs/nfs.h>
 #include <elf/elf.h>
 #include <serial/serial.h>
+#include <clock/clock.h>
 
 #include "network.h"
 #include "elf.h"
@@ -44,6 +45,7 @@
 /* All badged IRQs set high bet, then we use uniq bits to
  * distinguish interrupt sources */
 #define IRQ_BADGE_NETWORK (1 << 0)
+#define IRQ_BADGE_CLOCK (1 << 1)
 
 #define TTY_NAME             CONFIG_SOS_STARTUP_APP
 #define TTY_PRIORITY         (0)
@@ -131,6 +133,10 @@ void syscall_loop(seL4_CPtr ep) {
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
+            }
+            if (badge &  IRQ_BADGE_CLOCK) {
+                timer_interrupt();
+                printf("current tick is %llu\n", time_stamp());
             }
 
         }else if(label == seL4_VMFault){
@@ -394,7 +400,16 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     conditional_panic(!badged_cap, "Failed to allocate badged cap");
     return badged_cap;
 }
-
+static void print_time(uint32_t id, void *data) {
+    (void) data;
+    printf("%d expired at %llu\n", id, time_stamp());
+}
+//uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
+static void setup_timers(void) {
+       register_timer(500, print_time, NULL);
+       register_timer(2000, print_time, NULL);
+       register_timer(8000, print_time, NULL);
+}
 /*
  * Main entry point - called by crt.
  */
@@ -406,7 +421,10 @@ int main(void) {
 
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
-
+    
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
+    
+    setup_timers();
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
