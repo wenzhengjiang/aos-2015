@@ -21,12 +21,14 @@
 #include <serial/serial.h>
 #include <clock/clock.h>
 
+#include <clock/clock.h>
+
 #include "network.h"
 #include "elf.h"
 
 #include "ut_manager/ut.h"
 #include "vmem_layout.h"
-#include "mapping.h"
+#include <device/mapping.h>
 
 #include <autoconf.h>
 
@@ -162,6 +164,12 @@ static size_t syscall_print(size_t num_args) {
     return send_len;
 }
 
+static int timer_init(seL4_CPtr interrupt_ep) {
+    void* gpt_clock_addr = map_device(CLOCK_GPT_PADDR, sizeof(struct gpt_register_set));
+    clock_set_device_address(gpt_clock_addr);
+    start_timer(interrupt_ep);
+}
+
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -214,9 +222,14 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
             }
+<<<<<<< HEAD
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
                 printf("current tick is %llu\n", time_stamp());
+=======
+            if (badge & IRQ_BADGE_TIMER) {
+                //timer_interrupt();
+>>>>>>> eb7349ba543c519d8600a1dba061f975b08cac95
             }
 
         }else if(label == seL4_VMFault){
@@ -498,6 +511,9 @@ int main(void) {
     dprintf(0, "\nSOS Starting...\n");
 
     _sos_init(&_sos_ipc_ep_cap, &_sos_interrupt_ep_cap);
+
+    /* Initialise and start the clock driver */
+    timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
 
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
