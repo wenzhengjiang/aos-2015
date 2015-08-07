@@ -1,10 +1,34 @@
+#include <stdlib.h>
+#include <stdbool.h>
+#include <limits.h>
 #include <clock/clock.h>
 #include <cspace/cspace.h>
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
+#include "../../libsel4sync/include/sync/mutex.h"
 
-#define CALLBACK_ARRAY_LENGTH 1024
+static const timestamp_t max_tick = (1ULL<<63) - 1;
+
+struct callback {
+    uint32_t id;
+    uint64_t next_timeout;
+    uint64_t delay;
+    timer_callback_t fun;
+    void *data;
+    struct callback *next;
+};
+typedef struct callback callback_t;
+
+static callback_t *callback_list;
+static sync_mutex_t callback_m;
+
+static uint32_t gid;
+static sync_mutex_t gid_m;
+
+static bool initialized;
+
+static timestamp_t last_tick;
 
 /* 
  * GPT Clock Register Settings
@@ -86,15 +110,72 @@ struct timer_callback {
 
 struct gpt_register_set* gpt_register_set;
 static uint32_t tick_count = 0;
-static struct timer_callback callbacks[CALLBACK_ARRAY_LENGTH];
 static seL4_CPtr _timer_cap = seL4_CapNull;
 void* gpt_clock_addr;
 static uint32_t clock_tick_count;
 
+uint64_t get_uniq_id() {
+    sync_acquire(gid_m); 
+    int ret = ++gid; // TODO better solusion ?
+    sync_release(gid_m);
 
-/* TODO: we shouldn't do this */
-void clock_set_device_address(void* mapping) {
-    gpt_clock_addr = mapping;
+    return ret;
+};
+
+/* Insert a new node while maintaining the increasing order of next_timou*/
+
+static void cblist_add(callback_t *new) {
+    sync_acquire(callback_m); 
+
+    callback_t *cur = callback_list, *prev = NULL;
+    while (cur && cur->next_timeout <= new->next_timeout) {
+        prev = cur;
+        cur = cur->next;
+    }
+    new->next = NULL;
+    if (!prev) {            // insert at head
+        new->next = callback_list;
+        callback_list = new;
+    } else {                // insert after prev
+        prev->next = new;
+        new->next = cur;
+    }
+
+    sync_release(callback_m);
+}
+
+/*
+ * @return  CLOCK_R_OK if item removed successfully 
+ *          CLOCK_R_FAIL if item was not found */
+static int cblist_remove(uint32_t id) {
+    sync_acquire(callback_m); 
+
+    callback_t *cur = callback_list, *prev = NULL;
+    while (cur && cur->id != id) {
+        prev = cur;
+        cur = cur->next;
+    }
+    int ret = CLOCK_R_OK;
+    if (!cur) ret = CLOCK_R_FAIL; // not found
+    else {
+        if (!prev)
+            callback_list = callback_list->next; // remove head
+        else
+            prev->next = cur->next;
+        free(cur);
+    }
+
+    sync_release(callback_m);
+    return ret;
+}
+
+static void cblist_destroy() {
+    callback_t * p = callback_list, *next = NULL;
+    while (p) {
+        next = p->next;
+        free(p);
+        p = next;
+    }
 }
 
 static seL4_CPtr
@@ -116,6 +197,12 @@ enable_irq(int irq, seL4_CPtr aep) {
 int start_timer(seL4_CPtr interrupt_ep) {
     struct gpt_control_register* gpt_control_register = &(gpt_register_set->control);
     struct gpt_interrupt_register* gpt_interrupt_register = &(gpt_register_set->interrupt);
+    if (!(callback_m = sync_create_mutex())) 
+        return CLOCK_R_FAIL;
+    if (!(gid_m = sync_create_mutex()))
+        return CLOCK_R_FAIL;
+
+    initialized = true;
 
     gpt_register_set = gpt_clock_addr;
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
@@ -142,6 +229,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     /* Enable the clock */
     gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
+
+    return 0;
+}
+
+/* TODO: we shouldn't do this */
+void clock_set_device_address(void* mapping) {
+    gpt_clock_addr = mapping;
 }
 
 /*
@@ -152,7 +246,27 @@ int start_timer(seL4_CPtr interrupt_ep) {
  *
  * Returns 0 on failure, otherwise an unique ID for this timeout
  */
-uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
+
+uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
+    if (!initialized) return 0;
+    callback_t * cb = (callback_t*)malloc(sizeof(callback_t));
+    if (!cb)
+        return 0; 
+    
+    cb->id = get_uniq_id();
+    cb->delay = delay;
+    timestamp_t curtick = time_stamp();
+    if (max_tick - curtick < delay) {
+        cb->next_timeout = max_tick; // workaround for overflow
+    } else {
+        cb->next_timeout = curtick + delay;
+    }
+    cb->fun = callback_fun;
+    cb->data = data;
+    
+    cblist_add(cb);
+
+    return cb->id;
 }
 
 /*
@@ -160,7 +274,9 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
  *    id: Unique ID returned by register_time
  * Returns CLOCK_R_OK iff successful.
  */
+
 int remove_timer(uint32_t id) {
+    return cblist_remove(id);
 }
 
 /*
@@ -168,22 +284,37 @@ int remove_timer(uint32_t id) {
  *
  * Returns CLOCK_R_OK iff successful
  */
+
 int timer_interrupt(void) {
+    timestamp_t cur_tick = time_stamp();
+    bool overflowed = cur_tick < last_tick;
+
+    sync_acquire(callback_m); 
+    for (callback_t *p = callback_list; p; p = p->next) {
+        if (overflowed || p->next_timeout <= cur_tick) {
+            p->fun(p->id, p->data);
+            if (max_tick - cur_tick < p->delay)
+                p->next_timeout = max_tick;
+            else
+                p->next_timeout = cur_tick + p->delay;
+        }
+        if (!overflowed && p->next_timeout > cur_tick)
+            break;
+    }
+    sync_release(callback_m);
+
+    last_tick = cur_tick;
+
+    return CLOCK_R_OK;
 }
 
-/*
- * Returns present time in microseconds since booting.
- *
- * Returns a negative value if failure.
- */
 timestamp_t time_stamp(void) {
+    return 0;
 }
 
-/*
- * Stop clock driver operation.
- *
- * Returns CLOCK_R_OK iff successful.
- */
 int stop_timer(void) {
-
+    cblist_destroy();
+    sync_destroy_mutex(callback_m);
+    sync_destroy_mutex(gid_m);
+    return 0;
 }

@@ -39,6 +39,7 @@ struct gpt_register_set {
 
 typedef uint64_t timestamp_t;
 typedef void (*timer_callback_t)(uint32_t id, void *data);
+#define CALLBACK_ARRAY_LENGTH 1024
 
 void clock_set_device_address(void* mapping);
 
