@@ -66,9 +66,6 @@ const unsigned CLOCK_GPT_IR_OF1IE = 1;
 const unsigned CLOCK_GPT_IR_OF2IE = 0;
 const unsigned CLOCK_GPT_IR_OF3IE = 0;
 
-/* The physical starting address of the GPT for memory mapping */
-typedef char byte_t;
-
 // TODO: How do we ensure the compiler doesn't modify the struct layout?
 struct gpt_control_register {
     unsigned enable : 1;
