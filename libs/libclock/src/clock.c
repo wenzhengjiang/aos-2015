@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -105,6 +106,9 @@ int start_timer(seL4_CPtr interrupt_ep) {
 }
 =======
 #include <clock.h>
+=======
+#include <clock/clock.h>
+>>>>>>> 0e45b398da2a650c8c81484659a4bf9d512379ed
 #include <cspace/cspace.h>
 #include <sel4/types.h>
 #include <assert.h>
