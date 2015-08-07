@@ -111,12 +111,6 @@ struct gpt_register_set {
     uint32_t counter;
 };
 
-struct timer_callback {
-    uint32_t  id;
-    uint64_t  next_timeout;
-    timer_callback_t callback;
-    void *data;
-};
 
 #define CALLBACK_ARRAY_LENGTH 1024
 

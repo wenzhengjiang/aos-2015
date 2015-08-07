@@ -1,9 +1,11 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
 #include <clock/clock.h>
+#include <cspace/cspace.h>
+#include <sel4/types.h>
+#include <assert.h>
+#include <string.h>
 #include "../../libsel4sync/include/sync/mutex.h"
 
 static const timestamp_t max_tick = (1ULL<<63) - 1;
@@ -27,6 +29,12 @@ static sync_mutex_t gid_m;
 static bool initialized;
 
 static timestamp_t last_tick;
+
+struct gpt_register_set* gpt_register_set;
+static uint32_t tick_count = 0;
+static seL4_CPtr _timer_cap = seL4_CapNull;
+void* gpt_clock_addr;
+static uint32_t clock_tick_count;
 
 uint64_t get_uniq_id() {
     sync_acquire(gid_m); 
@@ -104,22 +112,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     return 0;
 }
-=======
-#include <clock.h>
-=======
-#include <clock/clock.h>
->>>>>>> 0e45b398da2a650c8c81484659a4bf9d512379ed
-#include <cspace/cspace.h>
-#include <sel4/types.h>
-#include <assert.h>
-#include <string.h>
 
-struct gpt_register_set* gpt_register_set;
-static uint32_t tick_count = 0;
-static struct timer_callback callbacks[CALLBACK_ARRAY_LENGTH];
-static seL4_CPtr _timer_cap = seL4_CapNull;
-void* gpt_clock_addr;
-static uint32_t clock_tick_count;
 
 /* TODO: we shouldn't do this */
 void clock_set_device_address(void* mapping) {
@@ -173,7 +166,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
 }
 
->>>>>>> eb7349ba543c519d8600a1dba061f975b08cac95
 /*
  * Register a callback to be called after a given delay
  *    delay:  Delay time in microseconds before callback is invoked
@@ -182,7 +174,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
  *
  * Returns 0 on failure, otherwise an unique ID for this timeout
  */
-<<<<<<< HEAD
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (!initialized) return 0;
@@ -204,9 +195,6 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
     cblist_add(cb);
 
     return cb->id;
-=======
-uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
->>>>>>> eb7349ba543c519d8600a1dba061f975b08cac95
 }
 
 /*
@@ -214,13 +202,9 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
  *    id: Unique ID returned by register_time
  * Returns CLOCK_R_OK iff successful.
  */
-<<<<<<< HEAD
 
 int remove_timer(uint32_t id) {
     return cblist_remove(id);
-=======
-int remove_timer(uint32_t id) {
->>>>>>> eb7349ba543c519d8600a1dba061f975b08cac95
 }
 
 /*
@@ -228,7 +212,6 @@ int remove_timer(uint32_t id) {
  *
  * Returns CLOCK_R_OK iff successful
  */
-<<<<<<< HEAD
 
 int timer_interrupt(void) {
     timestamp_t cur_tick = time_stamp();
@@ -262,24 +245,4 @@ int stop_timer(void) {
     sync_destroy_mutex(callback_m);
     sync_destroy_mutex(gid_m);
     return 0;
-=======
-int timer_interrupt(void) {
-}
-
-/*
- * Returns present time in microseconds since booting.
- *
- * Returns a negative value if failure.
- */
-timestamp_t time_stamp(void) {
-}
-
-/*
- * Stop clock driver operation.
- *
- * Returns CLOCK_R_OK iff successful.
- */
-int stop_timer(void) {
-
->>>>>>> eb7349ba543c519d8600a1dba061f975b08cac95
 }
