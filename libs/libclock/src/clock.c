@@ -188,7 +188,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_control_register->output_compare_mode_2 = 0;
     gpt_control_register->output_compare_mode_3 = 0;
     /*gpt_control_register->force_output_compare_1 = CLOCK_GPT_CR_FO1;*/
-    gpt_register_set->output_compare_1 = 10000ul;
+    gpt_register_set->output_compare_1 = 1000ul;
     gpt_register_set->prescaler = 66;
 
     /*gpt_interrupt_register->rollover_interrupt_enable = 1;*/
