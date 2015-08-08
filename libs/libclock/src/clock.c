@@ -11,7 +11,7 @@
 
 #define MAX_CALLBACK_ID 20
 
-
+#define CLOCK_SUBTICK_CAP 50ul
 
 /* 
  * GPT Clock Register Settings
@@ -81,23 +81,25 @@ struct gpt_interrupt_register {
     unsigned reserved : 26;
 };
 
-struct timer_callback {
-    uint32_t  id;
-    uint64_t  next_timeout;
-    timer_callback_t callback;
-    void *data;
+struct gpt_status_register {
+    unsigned output_compare_1_occurred : 1;
+    unsigned output_compare_2_occurred : 1;
+    unsigned output_compare_3_occurred : 1;
+    unsigned input_capture_1_occurred : 1;
+    unsigned input_capture_2_occurred : 1;
+    unsigned rollover_occurred : 1;
+    unsigned reserved : 26;
 };
 
 struct gpt_register_set* gpt_register_set;
 static uint32_t tick_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
 void* gpt_clock_addr;
-static uint32_t clock_tick_count;
 
 struct callback {
     bool valid;
     uint32_t id;
-    uint64_t next_timeout;
+    uint32_t next_timeout;
     uint64_t delay;
     timer_callback_t fun;
     void *data;
@@ -111,8 +113,6 @@ static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
 
 static bool initialized;
-
-static timestamp_t last_tick;
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -136,16 +136,13 @@ void clock_set_device_address(void* mapping) {
 
 int start_timer(seL4_CPtr interrupt_ep) {
     struct gpt_control_register* gpt_control_register;
-    struct gpt_interrupt_register* gpt_interrupt_register;
     if (!(callback_m = sync_create_mutex())) 
         return CLOCK_R_FAIL;
-
-    initialized = true;
 
     gpt_register_set = gpt_clock_addr;
 
     gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
-    gpt_interrupt_register = (struct gpt_interrupt_register*)&(gpt_register_set->interrupt);
+
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
     assert(sizeof(gpt_control_register) == 4);
     /* Ensure the clock is stopped */
@@ -188,7 +185,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_control_register->output_compare_mode_2 = 0;
     gpt_control_register->output_compare_mode_3 = 0;
     /*gpt_control_register->force_output_compare_1 = CLOCK_GPT_CR_FO1;*/
-    gpt_register_set->output_compare_1 = 1000ul;
+    gpt_register_set->output_compare_1 = CLOCK_SUBTICK_CAP;
     gpt_register_set->prescaler = 66;
 
     /*gpt_interrupt_register->rollover_interrupt_enable = 1;*/
@@ -198,6 +195,8 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     /* Step 10: Enable IR */
     gpt_register_set->interrupt = -1;
+
+    initialized = true;
 
     return 0;
 }
@@ -211,19 +210,17 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         dprintf(0, "timer hasn't been initialised \n");
         return 0;
     }
-    timestamp_t curtick = time_stamp();
     callback_t *cb = NULL;
-    for (int i = 1;i <= MAX_CALLBACK_ID; i++) {
+    timestamp_t cur = time_stamp();
+    for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
         if (!callback_arr[i].valid) {
             cb = &callback_arr[i];
             cb->valid = true;
             cb->id = i;
             cb->delay = delay;
-            if (MAX_TICK - curtick < delay) {
-                cb->next_timeout = MAX_TICK; // workaround for overflow
-            } else {
-                cb->next_timeout = curtick + delay;
-            }
+            // TODO: As interrupts now occur on clock equality, overflow now
+            // becomes an interrupt selection concern
+            cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
             cb->data = data;
             break;
@@ -243,33 +240,40 @@ int remove_timer(uint32_t id) {
 }
 
 int timer_interrupt(void) {
-    timestamp_t cur_tick = time_stamp();
-    bool overflowed = cur_tick < last_tick;
+    int err;
+    struct gpt_status_register *status = (struct gpt_status_register*)&(gpt_register_set->status);
+    // Status register not being found set.  WIP
+    //if (status->output_compare_1_occurred) {
+        tick_count++;
+        printf("current tick is %llu\n", time_stamp());
+    //}
 
-    sync_acquire(callback_m); 
-    for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
-        callback_t *p = &callback_arr[i];
-        if (overflowed || p->next_timeout <= cur_tick) {
-            p->fun(p->id, p->data);
-            if (MAX_TICK - cur_tick < p->delay)
-                p->next_timeout = MAX_TICK;
-            else
-                p->next_timeout = cur_tick + p->delay;
+    if (status->output_compare_2_occurred) {
+        sync_acquire(callback_m);
+        for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
+            callback_t *p = &callback_arr[i];
+            /* We should be able to depend on equality as interrupts freeze the
+             * clock */
+            if (p->next_timeout == tick_count) {
+                /* Fire and remove the callback */
+                p->fun(p->id, p->data);
+                remove_timer(p->id);
+            }
         }
+        sync_release(callback_m);
     }
-    sync_release(callback_m);
 
-    last_tick = cur_tick;
-    printf("Tick!\n");
-    printf("current tick is %llu\n", time_stamp());
     gpt_register_set->status = 1;
-    int err = seL4_IRQHandler_Ack(_timer_cap);
+    err = seL4_IRQHandler_Ack(_timer_cap);
     assert(!err);
     return CLOCK_R_OK;
 }
 
 timestamp_t time_stamp(void) {
-    return 0;
+    uint32_t counter_low = gpt_register_set->counter;
+    timestamp_t time = (timestamp_t)tick_count << 32;
+    time |= counter_low * (-1u / CLOCK_SUBTICK_CAP);
+    return time;
 }
 
 int stop_timer(void) {
@@ -278,6 +282,5 @@ int stop_timer(void) {
     gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
     gpt_control_register->enable = CLOCK_GPT_CR_DISABLE;
     initialized = false;
-    last_tick = 0;
     return 0;
 }

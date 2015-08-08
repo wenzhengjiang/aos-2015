@@ -221,7 +221,6 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
-                printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
