@@ -197,7 +197,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
 
     /* Step 10: Enable IR */
-    gpt_register_set->interrupt = 0xffffffff;
+    gpt_register_set->interrupt = -1;
 
     return 0;
 }
