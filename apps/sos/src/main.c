@@ -34,6 +34,8 @@
 #include <sys/debug.h>
 #include <sys/panic.h>
 
+#include <sync/mutex.h>
+
 /* This is the index where a clients syscall enpoint will
  * be stored in the clients cspace. */
 #define USER_EP_CAP          (1)
@@ -483,15 +485,27 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
-//void* sync_new_ep(seL4_CPtr* ep, int badge) {
-//
-//    *ep = cspace_mint_cap(cur_cspace, cur_cspace, *ep, seL4_AllRights, seL4_CapData_Badge_new(badge));
-//    return (void*)ep;
-//}
-//
-//void sync_free_ep(seL4_CPtr ep) {
-//    (void)ep;
-//}
+void* sync_new_ep(seL4_CPtr* ep, int badge) {
+
+    seL4_Word aep_addr = ut_alloc(seL4_EndpointBits);
+    conditional_panic(!aep_addr, "No memory for mutex async endpoint");
+    int err = cspace_ut_retype_addr(aep_addr,
+                                seL4_AsyncEndpointObject,
+                                seL4_EndpointBits,
+                                cur_cspace,
+                                ep);
+    conditional_panic(err, "Failed to allocate c-slot for Interrupt endpoint");
+
+    ///* Bind the Async endpoint to our TCB */
+    //err = seL4_TCB_BindAEP(seL4_CapInitThreadTCB, *ep);
+    //conditional_panic(err, "Failed to bind ASync EP to TCB");
+    *ep = cspace_mint_cap(cur_cspace, cur_cspace, *ep, seL4_AllRights, seL4_CapData_Badge_new(badge));
+    return (void*)ep;
+}
+
+void sync_free_ep(void* ep){
+    (void)ep;
+}
 
 static void print_time(uint32_t id, void *data) {
     (void) data;
@@ -503,6 +517,42 @@ static void setup_timers(void) {
        register_timer(2000, print_time, NULL);
        register_timer(8000, print_time, NULL);
 }
+#define test_assert(tst)        \
+    do {                        \
+        if(!tst){               \
+            printf("FAILED\n"); \
+            assert(tst);        \
+        }                       \
+    }while(0)
+
+static void test_mutex(void){
+    sync_mutex_t m1, m2;
+    printf("UNIT TEST | sync/mutex: ");
+    m1 = sync_create_mutex();
+    test_assert(m1);
+    m2 = sync_create_mutex();
+    test_assert(m2);
+    /* Test simple operations */
+    test_assert(sync_try_acquire(m1));
+    test_assert(!sync_try_acquire(m1));
+    sync_release(m1);
+    test_assert(sync_try_acquire(m1));
+    sync_release(m1);
+    sync_acquire(m1);
+    sync_release(m1);
+    sync_acquire(m1);
+    sync_release(m1);
+    /* Test independance */
+    test_assert(sync_try_acquire(m1));
+    test_assert(sync_try_acquire(m2));
+    sync_release(m1);
+    sync_release(m2);
+    /* Clean up */
+    sync_destroy_mutex(m1);
+    sync_destroy_mutex(m2);
+    printf("PASSED\n");
+}
+
 /*
  * Main entry point - called by crt.
  */
@@ -519,9 +569,11 @@ int main(void) {
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 
     setup_timers();
+
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
+    test_mutex();
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
@@ -529,5 +581,3 @@ int main(void) {
     /* Not reached */
     return 0;
 }
-
-
