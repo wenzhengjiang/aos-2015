@@ -512,11 +512,11 @@ int main(void) {
 
     _sos_init(&_sos_ipc_ep_cap, &_sos_interrupt_ep_cap);
 
+    /* Initialise and start the clock driver */
+    timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
+
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
-
-    /* Initialise and start the clock driver */
-    //timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     setup_timers();
     /* Start the user application */

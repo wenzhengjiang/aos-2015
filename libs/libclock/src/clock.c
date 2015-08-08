@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -71,7 +72,7 @@ struct gpt_control_register {
     unsigned enable : 1;
     unsigned enable_mode: 1;
     unsigned debug_mode : 1;
-    unsigned wain_mode : 1;
+    unsigned wait_mode : 1;
     unsigned doze_mode : 1;
     unsigned stop_mode_enabled : 1;
     unsigned clock_source : 3;
@@ -192,8 +193,8 @@ enable_irq(int irq, seL4_CPtr aep) {
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
-    struct gpt_control_register* gpt_control_register = &(gpt_register_set->control);
-    struct gpt_interrupt_register* gpt_interrupt_register = &(gpt_register_set->interrupt);
+    struct gpt_control_register* gpt_control_register;
+    struct gpt_interrupt_register* gpt_interrupt_register;
     //if (!(callback_m = sync_create_mutex())) 
     //    return CLOCK_R_FAIL;
     //if (!(gid_m = sync_create_mutex()))
@@ -202,31 +203,61 @@ int start_timer(seL4_CPtr interrupt_ep) {
     initialized = true;
 
     gpt_register_set = gpt_clock_addr;
+
+    gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
+    gpt_interrupt_register = (struct gpt_interrupt_register*)&(gpt_register_set->interrupt);
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
-
     assert(sizeof(gpt_control_register) == 4);
-
     /* Ensure the clock is stopped */
+
+    /* Step 1: Disable GPT */
     gpt_control_register->enable = CLOCK_GPT_CR_DISABLE;
 
-    /* Configure the clock */
+    /* Step 2: Disable Interrupt Register */
+    gpt_register_set->interrupt = 0;
+
+    /* Step 3: Configure Output Mode to disconnected */
+    gpt_control_register->output_compare_mode_1 = 0;
+    gpt_control_register->output_compare_mode_2 = 0;
+    gpt_control_register->output_compare_mode_3 = 0;
+
+    /* Step 4: Disable Input Capture Modes */
+    gpt_control_register->input_operating_mode_1 = 0;
+    gpt_control_register->input_operating_mode_2 = 0;
+
+    /* Step 5: Set clock source to the desired value */
+    gpt_control_register->clock_source = 2;
+
+    /* Step 6: Assert SWR */
+    gpt_control_register->software_reset = 1;
+
+    /* Step 7: Clear GPT status register */
+    gpt_register_set->status = 0;
+
+    /* Step 8: Set ENMOD = 1 */
     gpt_control_register->enable_mode = CLOCK_GPT_CR_ENMOD;
-    memcpy(gpt_control_register->clock_source, &CLOCK_GPT_CR_OM1, 3);
+    /* Step 8.5 other setup */
+
+    gpt_control_register->stop_mode_enabled = 1;
+    gpt_control_register->doze_mode = 0;
+    gpt_control_register->wait_mode = 0;
+    gpt_control_register->debug_mode = 0;
+
     gpt_control_register->free_run_or_restart = CLOCK_GPT_CR_FRR_RESTART;
-    memcpy(gpt_control_register->output_compare_mode_1, &CLOCK_GPT_CR_OM1, 3);
-    gpt_control_register->force_output_compare_1 = CLOCK_GPT_CR_FO1;
+    gpt_control_register->output_compare_mode_1 = 1;
+    gpt_control_register->output_compare_mode_2 = 0;
+    gpt_control_register->output_compare_mode_3 = 0;
+    /*gpt_control_register->force_output_compare_1 = CLOCK_GPT_CR_FO1;*/
+    gpt_register_set->output_compare_1 = 10000ul;
+    gpt_register_set->prescaler = 66;
 
-    gpt_register_set->prescaler = CLOCK_GPT_PRESCALER;
+    /*gpt_interrupt_register->rollover_interrupt_enable = 1;*/
 
-    gpt_interrupt_register->output_compare_1_enable = CLOCK_GPT_IR_OF1IE;
-    gpt_interrupt_register->output_compare_2_enable = CLOCK_GPT_IR_OF2IE;
-    gpt_interrupt_register->output_compare_3_enable = CLOCK_GPT_IR_OF3IE;
-
-    assert(gpt_interrupt_register->reserved == 0);
-
-    /* Enable the clock */
+    /* Step 9: Enable GPT */
     gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
 
+    /* Step 10: Enable IR */
+    gpt_register_set->interrupt = 0xffffffff;
     return 0;
 }
 
@@ -301,7 +332,11 @@ int timer_interrupt(void) {
     //sync_release(callback_m);
 
     last_tick = cur_tick;
-
+    printf("Tick!\n");
+    printf("current tick is %llu\n", time_stamp());
+    gpt_register_set->status = 1;
+    int err = seL4_IRQHandler_Ack(_timer_cap);
+    assert(!err);
     return CLOCK_R_OK;
 }
 
