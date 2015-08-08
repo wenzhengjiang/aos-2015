@@ -273,7 +273,10 @@ timestamp_t time_stamp(void) {
 }
 
 int stop_timer(void) {
+    struct gpt_control_register *gpt_control_register;
     sync_destroy_mutex(callback_m);
+    gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
+    gpt_control_register->enable = CLOCK_GPT_CR_DISABLE;
     initialized = false;
     last_tick = 0;
     return 0;
