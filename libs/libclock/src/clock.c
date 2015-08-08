@@ -10,7 +10,91 @@
 
 #define MAX_CALLBACK_ID 20
 
-static const timestamp_t MAX_TICK = (1ULL<<63) - 1;
+
+
+/* 
+ * GPT Clock Register Settings
+ */
+
+/* FORCE OUTPUT COMPARE on Output Compare 1 */
+const unsigned CLOCK_GPT_CR_FO1 = 1;
+/* Set the mode of comparison for output compare 1.  Active low-pulse mode is
+ * configured. */
+const unsigned CLOCK_GPT_CR_OM1 = 4;
+
+/** FREE RUN OR RESTART MODE.  0 sets Restart mode that causes the counter to
+ * reset when a compare is successful */
+const unsigned CLOCK_GPT_CR_FRR = 0;
+
+/* CLOCK SOURCE: 001 - Peripheral Clock */
+const unsigned CLOCK_GPT_CR_CLKSRC = 1;
+
+/* Enable mode */
+const unsigned CLOCK_GPT_CR_ENMOD = 1;
+
+/* Enable / disabled state */
+const unsigned CLOCK_GPT_CR_ENABLE = 1;
+const unsigned CLOCK_GPT_CR_DISABLE = 0;
+
+/* Free run or return restart mode */
+const unsigned CLOCK_GPT_CR_FRR_RESTART = 0;
+
+/* As the prescaler uses values 1..4096, where zero is illegal, they shift the
+ * value mapping by one.  So need to subtract 1 to produce the desired value. */
+const unsigned CLOCK_GPT_PRESCALER = (66 - 1);
+
+/* GPT Interrupt register behaviours for output compare */
+const unsigned CLOCK_GPT_IR_OF1IE = 1;
+const unsigned CLOCK_GPT_IR_OF2IE = 0;
+const unsigned CLOCK_GPT_IR_OF3IE = 0;
+
+/* The physical starting address of the GPT for memory mapping */
+typedef char byte_t;
+
+// TODO: How do we ensure the compiler doesn't modify the struct layout?
+struct gpt_control_register {
+    unsigned enable : 1;
+    unsigned enable_mode: 1;
+    unsigned debug_mode : 1;
+    unsigned wain_mode : 1;
+    unsigned doze_mode : 1;
+    unsigned stop_mode_enabled : 1;
+    unsigned clock_source : 3;
+    unsigned free_run_or_restart : 1;
+    unsigned reserved : 4;
+    unsigned software_reset : 1;
+    unsigned input_operating_mode_1 : 2;
+    unsigned input_operating_mode_2 : 2;
+    unsigned output_compare_mode_1 : 3;
+    unsigned output_compare_mode_2 : 3;
+    unsigned output_compare_mode_3 : 3;
+    unsigned force_output_compare_1 : 3;
+    unsigned force_output_compare_2 : 3;
+    unsigned force_output_compare_3 : 3;
+};
+
+struct gpt_interrupt_register {
+    unsigned output_compare_1_enable : 1;
+    unsigned output_compare_2_enable : 1;
+    unsigned output_compare_3_enable : 1;
+    unsigned input_capture_1_enable : 1;
+    unsigned input_capture_2_enable : 1;
+    unsigned rollover_interrupt_enable : 1;
+    unsigned reserved : 26;
+};
+
+struct timer_callback {
+    uint32_t  id;
+    uint64_t  next_timeout;
+    timer_callback_t callback;
+    void *data;
+};
+
+struct gpt_register_set* gpt_register_set;
+static uint32_t tick_count = 0;
+static seL4_CPtr _timer_cap = seL4_CapNull;
+void* gpt_clock_addr;
+static uint32_t clock_tick_count;
 
 struct callback {
     bool valid;
@@ -23,6 +107,8 @@ struct callback {
 
 typedef struct callback callback_t;
 
+static const timestamp_t MAX_TICK = (1ULL<<63) - 1;
+
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
 
@@ -30,10 +116,28 @@ static bool initialized;
 
 static timestamp_t last_tick;
 
-int start_timer(seL4_CPtr interrupt_ep)
-{
-    (void)interrupt_ep;
-    callback_m = sync_create_mutex();
+static seL4_CPtr
+enable_irq(int irq, seL4_CPtr aep) {
+    seL4_CPtr cap;
+    int err;
+    /* Create an IRQ handler */
+    cap = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, irq);
+    assert(cap);
+    /* Assign to an end point */
+    err = seL4_IRQHandler_SetEndpoint(cap, aep);
+    assert(!err);
+    /* Ack the handler before continuing */
+    err = seL4_IRQHandler_Ack(cap);
+    assert(!err);
+    return cap;
+}
+
+int start_timer(seL4_CPtr interrupt_ep) {
+    struct gpt_control_register* gpt_control_register = &(gpt_register_set->control);
+    struct gpt_interrupt_register* gpt_interrupt_register = &(gpt_register_set->interrupt);
+    if (!(callback_m = sync_create_mutex())) 
+        return CLOCK_R_FAIL;
+
     initialized = true;
     return 0;
 }

@@ -21,8 +21,6 @@
 #include <serial/serial.h>
 #include <clock/clock.h>
 
-#include <clock/clock.h>
-
 #include "network.h"
 #include "elf.h"
 
