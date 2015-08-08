@@ -130,6 +130,10 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+void clock_set_device_address(void* mapping) {
+    gpt_clock_addr = mapping;
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
     struct gpt_control_register* gpt_control_register;
     struct gpt_interrupt_register* gpt_interrupt_register;
