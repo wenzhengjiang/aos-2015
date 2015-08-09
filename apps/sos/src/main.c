@@ -515,6 +515,7 @@ static void print_time(uint32_t id, void *data) {
 
 static void stop(uint32_t id, void *data) {
     printf("timer stopped at %llu\n", time_stamp());
+    stop_timer();
     timer_stop = true;
 }
 

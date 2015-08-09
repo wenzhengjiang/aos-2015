@@ -56,7 +56,6 @@ static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
 
 static timestamp_t next_timeout;
-static bool initialized;
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -81,7 +80,7 @@ static void update_outcmp2(timestamp_t t) {
         gpt_reg->ir |= GPT_IR_OF2IE;
     }
 
-} 
+}
 
 static void disable_outcmp2(void) {
     gpt_reg->ir &= ~GPT_IR_OF2IE;
@@ -147,7 +146,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
     //printf("gpt_reg->ocr2 = %p\n", &(gpt_reg->ocr2));
     //assert(&(gpt_reg->ocr1) == 0x2098010);
     //assert(&(gpt_reg->ocr2) == 0x2098014);
-    initialized = true;
 
     return 0;
 }
@@ -157,7 +155,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         printf("invalid callback_fun\n");
         return 0;
     }
-    if (!initialized) {
+    if (!(gpt_reg->cr & GPT_CR_EN)) {
         printf("timer hasn't been initialised \n");
         return 0;
     }
@@ -222,6 +220,12 @@ int timer_interrupt(void) {
 
     err = seL4_IRQHandler_Ack(_timer_cap);
     assert(!err);
+    if (!(gpt_reg->cr & GPT_CR_EN)) {
+        int err = seL4_IRQHandler_Clear(_timer_cap);
+        assert(!err);
+        err = cspace_delete_cap(cur_cspace, _timer_cap);
+        assert(err == CSPACE_NOERROR);
+    }
     return CLOCK_R_OK;
 }
 
@@ -236,12 +240,5 @@ int stop_timer(void) {
     //printf("stop_timer called\n");
     sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;
-
-    int err = seL4_IRQHandler_Clear(_timer_cap);
-    assert(!err);
-    err = cspace_delete_cap(cur_cspace, _timer_cap);
-    assert(err == CSPACE_NOERROR);
-
-    initialized = false;
     return 0;
 }
