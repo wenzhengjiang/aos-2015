@@ -61,7 +61,6 @@ const seL4_BootInfo* _boot_info;
 
 
 struct {
-
     seL4_Word tcb_addr;
     seL4_TCB tcb_cap;
 
@@ -161,7 +160,7 @@ static size_t syscall_print(size_t num_args) {
 }
 
 static int timer_init(seL4_CPtr interrupt_ep) {
-    void* gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(struct gpt_register_set));
+    void* gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(gpt_register_t));
     clock_set_device_address(gpt_clock_addr);
     start_timer(interrupt_ep);
     return 0;

@@ -24,19 +24,20 @@
 #define CLOCK_GPT_PADDR 0x2098000
 #define GPT_IRQ 87
 
-struct gpt_register_set {
-    uint32_t control;
-    uint32_t prescaler;
-    uint32_t status;
-    uint32_t interrupt;
-    uint32_t output_compare_1;
-    uint32_t output_compare_2;
-    uint32_t output_compare_3;
-    uint32_t input_capture_1;
-    uint32_t input_capture_2;
-    uint32_t counter;
+struct gpt_register {
+    uint32_t cr;
+    uint32_t pr;
+    uint32_t sr;
+    uint32_t ir;
+    uint32_t ocr1;
+    uint32_t ocr2;
+    uint32_t ocr3;
+    uint32_t icr1;
+    uint32_t icr2;
+    uint32_t cnt;;
 };
 
+typedef struct gpt_register gpt_register_t;
 typedef uint64_t timestamp_t;
 typedef void (*timer_callback_t)(uint32_t id, void *data);
 #define CALLBACK_ARRAY_LENGTH 1024
