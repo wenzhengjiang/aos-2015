@@ -36,6 +36,7 @@
 
 static const unsigned GPT_PRESCALER = (66 - 1);
 
+static bool handling_interrupt = false;
 gpt_register_t *gpt_reg;
 static uint32_t high_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
@@ -79,7 +80,6 @@ static void update_outcmp2(timestamp_t t) {
         gpt_reg->cr |= GPT_CR_OM2;
         gpt_reg->ir |= GPT_IR_OF2IE;
     }
-
 }
 
 static void disable_outcmp2(void) {
@@ -125,9 +125,9 @@ void debug_bits(uint32_t i) {
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
-    if (!(callback_m = sync_create_mutex())) 
+    if (!(callback_m = sync_create_mutex())) {
         return CLOCK_R_FAIL;
-
+    }
 
     gpt_reg = gpt_clock_addr;
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
@@ -136,17 +136,10 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_reg->ir = GPT_IR_ROVIE | GPT_IR_OF1IE;
     gpt_reg->pr = GPT_PRESCALER;
 
-    gpt_reg->ocr1 = CLOCK_SUBTICK_CAP;  
+    gpt_reg->ocr1 = CLOCK_SUBTICK_CAP;
     gpt_reg->cr |= GPT_CR_EN;
-    
-    debug_bits(gpt_reg->cr);
-    //assert(gpt_reg->cr == 0b00000000010000000000001001000011);
-    //printf("gpt_reg = %p\n", gpt_reg);
-    //printf("gpt_reg->ocr1 = %p\n", &(gpt_reg->ocr1));
-    //printf("gpt_reg->ocr2 = %p\n", &(gpt_reg->ocr2));
-    //assert(&(gpt_reg->ocr1) == 0x2098010);
-    //assert(&(gpt_reg->ocr2) == 0x2098014);
-
+    // Ensure the control register is configured as expected
+    assert(gpt_reg->cr == 0b00000000010000000000001001000011);
     return 0;
 }
 
@@ -159,6 +152,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         printf("timer hasn't been initialised \n");
         return 0;
     }
+    sync_acquire(callback_m);
     callback_t *cb = NULL;
     timestamp_t cur = time_stamp();
 
@@ -176,6 +170,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         }
     }
     update_timeout();
+    sync_release(callback_m);
     if (cb) return cb->id;
     else return 0;
 }
@@ -185,22 +180,30 @@ int remove_timer(uint32_t id) {
         return CLOCK_R_FAIL;
     if (!callback_arr[id].valid)
         return CLOCK_R_FAIL;
+    if (!(gpt_reg->cr & GPT_CR_EN)) {
+        return CLOCK_R_UINT;
+    }
+    sync_acquire(callback_m);
     callback_arr[id].valid = false;
     update_timeout();
+    sync_release(callback_m);
     return CLOCK_R_OK;
 }
 
+/**
+ * Interrupt handler
+ * @return status code indicating whether the action was successful
+ */
 int timer_interrupt(void) {
-    //printf("enter timer_interrupt\n");
     int err;
+    handling_interrupt = true;
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
         gpt_reg->sr &= GPT_SR_OF1;
-        printf("of1, ocr1 = %u\n", gpt_reg->ocr1);
+        printf("OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
-
     if (gpt_reg->sr & GPT_SR_OF2) {
-        printf("GPT_SR_OF2 is on \n");
+        printf("OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
         for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
             callback_t *p = &callback_arr[i];
             if (p->valid && p->next_timeout == next_timeout) {
@@ -208,12 +211,12 @@ int timer_interrupt(void) {
                 callback_arr[i].valid = false;
             }
         }
-        //printf("before update_timeout\n");
         update_timeout();
         printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
+        printf("Rollover interrupt\n");
         high_count++;
         gpt_reg->sr &= GPT_SR_ROV;
     }
@@ -221,24 +224,41 @@ int timer_interrupt(void) {
     err = seL4_IRQHandler_Ack(_timer_cap);
     assert(!err);
     if (!(gpt_reg->cr & GPT_CR_EN)) {
+        err = seL4_IRQHandler_Clear(_timer_cap);
+        assert(!err);
+        err = cspace_delete_cap(cur_cspace, _timer_cap);
+        assert(err == CSPACE_NOERROR);
+    }
+    handling_interrupt = false;
+    return CLOCK_R_OK;
+}
+
+/**
+ * Return a timestamp indicating the elapsed time since boot
+ * return 64-bit timestamp
+ * Timer is 64-bit and will roll over.
+ */
+timestamp_t time_stamp(void) {
+    timestamp_t time;
+    while(1) {
+        uint32_t counter_low = gpt_reg->cnt;
+        time = (timestamp_t)high_count << 32;
+        time |= counter_low ;
+        if (counter_low <= gpt_reg->cnt) {
+            break;
+        }
+    }
+    return time;
+}
+
+int stop_timer(void) {
+    sync_destroy_mutex(callback_m);
+    gpt_reg->cr &= ~GPT_CR_EN;
+    if (!handling_interrupt) {
         int err = seL4_IRQHandler_Clear(_timer_cap);
         assert(!err);
         err = cspace_delete_cap(cur_cspace, _timer_cap);
         assert(err == CSPACE_NOERROR);
     }
-    return CLOCK_R_OK;
-}
-
-timestamp_t time_stamp(void) {
-    uint32_t counter_low = gpt_reg->cnt;
-    timestamp_t time = (timestamp_t)high_count << 32;
-    time |= counter_low ;
-    return time;
-}
-
-int stop_timer(void) {
-    //printf("stop_timer called\n");
-    sync_destroy_mutex(callback_m);
-    gpt_reg->cr &= ~GPT_CR_EN;
     return 0;
 }
