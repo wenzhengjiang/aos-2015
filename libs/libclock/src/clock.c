@@ -11,7 +11,7 @@
 
 #define MAX_CALLBACK_ID 20
 
-#define CLOCK_SUBTICK_CAP 1000000ul
+#define CLOCK_SUBTICK_CAP 100000ul
 
 #define BITS(n) (1ul<<(n))
 
