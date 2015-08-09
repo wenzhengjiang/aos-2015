@@ -512,9 +512,9 @@ static void print_time(uint32_t id, void *data) {
 }
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
 static void setup_timers(void) {
-       register_timer(500, print_time, NULL);
-       register_timer(2000, print_time, NULL);
-       register_timer(8000, print_time, NULL);
+       register_timer(1000, print_time, NULL);
+       register_timer(10000, print_time, NULL);
+       register_timer(50000, print_time, NULL);
 }
 #define test_assert(tst)        \
     do {                        \
@@ -561,9 +561,11 @@ int main(void) {
 
     _sos_init(&_sos_ipc_ep_cap, &_sos_interrupt_ep_cap);
 
+    dprintf(0, "\ninit timer ...\n");
     /* Initialise and start the clock driver */
     timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
+    dprintf(0, "\nafter init timer\n");
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 

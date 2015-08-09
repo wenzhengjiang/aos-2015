@@ -13,41 +13,17 @@
 
 #define CLOCK_SUBTICK_CAP 50ul
 
+static const uint32_t GPT_MAX_TICK = -1UL;
 /* 
  * GPT Clock Register Settings
  */
 
-/* FORCE OUTPUT COMPARE on Output Compare 1 */
-const unsigned CLOCK_GPT_CR_FO1 = 1;
-/* Set the mode of comparison for output compare 1.  Active low-pulse mode is
- * configured. */
-const unsigned CLOCK_GPT_CR_OM1 = 4;
+static const unsigned GPT_OM_LOWPULSE = 4;
+static const unsigned GPT_OM_DISCONNECTED = 0;
+static const unsigned GPT_FRR_FREEFUN = 1;
+static const unsigned GPT_SRC_PERICLOCK = 1;
 
-/** FREE RUN OR RESTART MODE.  0 sets Restart mode that causes the counter to
- * reset when a compare is successful */
-const unsigned CLOCK_GPT_CR_FRR = 1;
-
-/* CLOCK SOURCE: 001 - Peripheral Clock */
-const unsigned CLOCK_GPT_CR_CLKSRC = 1;
-
-/* Enable mode */
-const unsigned CLOCK_GPT_CR_ENMOD = 1;
-
-/* Enable / disabled state */
-const unsigned CLOCK_GPT_CR_ENABLE = 1;
-const unsigned CLOCK_GPT_CR_DISABLE = 0;
-
-/* Free run or return restart mode */
-const unsigned CLOCK_GPT_CR_FRR_RESTART = 0;
-
-/* As the prescaler uses values 1..4096, where zero is illegal, they shift the
- * value mapping by one.  So need to subtract 1 to produce the desired value. */
-const unsigned CLOCK_GPT_PRESCALER = (66 - 1);
-
-/* GPT Interrupt register behaviours for output compare */
-const unsigned CLOCK_GPT_IR_OF1IE = 1;
-const unsigned CLOCK_GPT_IR_OF2IE = 2;
-const unsigned CLOCK_GPT_IR_OF3IE = 4;
+static const unsigned GPT_PRESCALER = (66 - 1);
 
 // TODO: How do we ensure the compiler doesn't modify the struct layout?
 struct gpt_control_register {
@@ -92,7 +68,7 @@ struct gpt_status_register {
 };
 
 struct gpt_register_set* gpt_register_set;
-static uint32_t tick_count = 0;
+static uint32_t high_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
 void* gpt_clock_addr;
 
@@ -106,8 +82,6 @@ struct callback {
 };
 
 typedef struct callback callback_t;
-
-static const timestamp_t MAX_TICK = (1ULL<<63) - 1;
 
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
@@ -131,6 +105,26 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+static void enable_outcmp2(timestamp_t t) {
+    struct gpt_control_register* cr_reg = (struct gpt_control_register*)&(gpt_register_set->control);
+    struct gpt_interrupt_register* int_reg = (struct gpt_interrupt_register*)&(gpt_register_set->interrupt); 
+
+    // the interval might larger than MAX_UINT32, global var next_timeout is used to
+    // check whether current interrupt really means a timeout happens
+    gpt_register_set->output_compare_2 = (uint32_t)t; 
+    cr_reg->force_output_compare_2 = 1;
+    cr_reg->output_compare_mode_2 = GPT_OM_LOWPULSE; 
+    int_reg->output_compare_2_enable = 1;
+    printf("output_compare_2: %u\n", gpt_register_set->output_compare_2);
+} 
+
+static void disable_outcmp2(void) {
+    struct gpt_control_register* cr_reg = (struct gpt_control_register*)&(gpt_register_set->control);
+    struct gpt_interrupt_register* int_reg = (struct gpt_interrupt_register*)&(gpt_register_set->interrupt); 
+    int_reg->output_compare_2_enable = 0; 
+    cr_reg->output_compare_mode_2 = GPT_OM_DISCONNECTED;
+}
+
 static void update_timeout() {
     timestamp_t cur_time = time_stamp();
     timestamp_t closest_timeout = cur_time - 1;
@@ -144,21 +138,13 @@ static void update_timeout() {
         }
     }
 
-    struct gpt_control_register* gpt_control_register;
-    gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
     if (updated) {
-        // the interval might larger than MAX_UINT32, global var next_timeout is used to
-        // check whether current interrupt really means a timeout happens
-        gpt_register_set->output_compare_2 = (uint32_t)(closest_timeout - cur_time); 
+        enable_outcmp2(closest_timeout);
         next_timeout = closest_timeout;
-        if (!gpt_control_register->output_compare_mode_2) {
-            gpt_control_register->output_compare_mode_2 = 1; 
-            gpt_register_set->interrupt |= CLOCK_GPT_IR_OF2IE;
-        }
-    } else {
-        gpt_register_set->interrupt &= ~CLOCK_GPT_IR_OF2IE;
-        gpt_control_register->output_compare_mode_2 = 0; 
     }
+    else
+        disable_outcmp2();
+
 }
 
 void clock_set_device_address(void* mapping) {
@@ -166,66 +152,42 @@ void clock_set_device_address(void* mapping) {
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
-    struct gpt_control_register* gpt_control_register;
     if (!(callback_m = sync_create_mutex())) 
         return CLOCK_R_FAIL;
 
     gpt_register_set = gpt_clock_addr;
-
-    gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
-
+    struct gpt_control_register* gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
+
     assert(sizeof(gpt_control_register) == 4);
-    /* Ensure the clock is stopped */
+    // Ensure the clock is stopped
+    gpt_control_register->enable_mode = 0;
+    gpt_register_set->interrupt = 0;;
+    gpt_control_register->output_compare_mode_1 = GPT_OM_DISCONNECTED;
+    gpt_control_register->output_compare_mode_2 = GPT_OM_DISCONNECTED;
+    gpt_control_register->output_compare_mode_3 = GPT_OM_DISCONNECTED;
 
-    /* Step 1: Disable GPT */
-    gpt_control_register->enable = CLOCK_GPT_CR_DISABLE;
-
-    /* Step 2: Disable Interrupt Register */
-    gpt_register_set->interrupt = 0;
-
-    /* Step 3: Configure Output Mode to disconnected */
-    gpt_control_register->output_compare_mode_1 = 0;
-    gpt_control_register->output_compare_mode_2 = 0;
-    gpt_control_register->output_compare_mode_3 = 0;
-
-    /* Step 4: Disable Input Capture Modes */
-    gpt_control_register->input_operating_mode_1 = 0;
-    gpt_control_register->input_operating_mode_2 = 0;
-
-    /* Step 5: Set clock source to the desired value */
-    gpt_control_register->clock_source = 2;
-
-    /* Step 6: Assert SWR */
+    // set control register
+    gpt_control_register->output_compare_mode_1 = GPT_OM_LOWPULSE;
     gpt_control_register->software_reset = 1;
-
-    /* Step 7: Clear GPT status register */
-    gpt_register_set->status = 0;
-
-    /* Step 8: Set ENMOD = 1 */
-    gpt_control_register->enable_mode = CLOCK_GPT_CR_ENMOD;
-    /* Step 8.5 other setup */
-
+    gpt_control_register->free_run_or_restart = GPT_FRR_FREEFUN;
+    gpt_control_register->clock_source = GPT_SRC_PERICLOCK;
     gpt_control_register->stop_mode_enabled = 1;
+    gpt_control_register->enable_mode = 1;
     gpt_control_register->doze_mode = 0;
     gpt_control_register->wait_mode = 0;
     gpt_control_register->debug_mode = 0;
+    // set status register
+    gpt_register_set->status = 0;
 
-    gpt_control_register->free_run_or_restart = CLOCK_GPT_CR_FRR_RESTART;
-    gpt_control_register->output_compare_mode_1 = 1;
-    gpt_control_register->output_compare_mode_2 = 0;
-    gpt_control_register->output_compare_mode_3 = 0;
-    /*gpt_control_register->force_output_compare_1 = CLOCK_GPT_CR_FO1;*/
     gpt_register_set->output_compare_1 = CLOCK_SUBTICK_CAP;
-    gpt_register_set->prescaler = 66;
+    gpt_register_set->prescaler = GPT_PRESCALER;
 
-    /*gpt_interrupt_register->rollover_interrupt_enable = 1;*/
+    /* Enable GPT */
+    gpt_control_register->enable = 1;
 
-    /* Step 9: Enable GPT */
-    gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
-
-    /* Step 10: Enable IR */
-    gpt_register_set->interrupt = CLOCK_GPT_IR_OF1IE; // TODO: should be 1 instead of -1 ?
+    /*  Enable IR OF1IE and rollover ?*/
+    gpt_register_set->interrupt = -1;
 
     initialized = true;
 
@@ -278,12 +240,13 @@ int timer_interrupt(void) {
     struct gpt_status_register *status = (struct gpt_status_register*)&(gpt_register_set->status);
     // Status register not being found set.  WIP
     if (status->output_compare_1_occurred) {
-        tick_count++;
         gpt_register_set->output_compare_1 += CLOCK_SUBTICK_CAP;
         printf("current tick is %llu\n", time_stamp());
+        status->output_compare_1_occurred = 0;
     }
 
     if (status->output_compare_2_occurred) {
+        printf("output_compare_2_occurred\n");
         sync_acquire(callback_m);
         for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
             callback_t *p = &callback_arr[i];
@@ -296,9 +259,13 @@ int timer_interrupt(void) {
             }
         }
         sync_release(callback_m);
+        status->output_compare_2_occurred = 0;
+    }
+    if (status->rollover_occurred) {
+        high_count++;
+        status->output_compare_3_occurred = 0;
     }
 
-    gpt_register_set->status = 1;
     err = seL4_IRQHandler_Ack(_timer_cap);
     assert(!err);
     return CLOCK_R_OK;
@@ -306,8 +273,8 @@ int timer_interrupt(void) {
 
 timestamp_t time_stamp(void) {
     uint32_t counter_low = gpt_register_set->counter;
-    timestamp_t time = (timestamp_t)tick_count << 32;
-    time |= counter_low * (-1u / CLOCK_SUBTICK_CAP);
+    timestamp_t time = (timestamp_t)high_count << 32;
+    time |= counter_low ;
     return time;
 }
 
@@ -315,7 +282,7 @@ int stop_timer(void) {
     struct gpt_control_register *gpt_control_register;
     sync_destroy_mutex(callback_m);
     gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
-    gpt_control_register->enable = CLOCK_GPT_CR_DISABLE;
+    gpt_control_register->enable = 0;
     initialized = false;
     return 0;
 }
