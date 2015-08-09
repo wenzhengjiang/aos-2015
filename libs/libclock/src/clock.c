@@ -197,7 +197,7 @@ int timer_interrupt(void) {
     int err;
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
-        gpt_reg->sr |= GPT_SR_OF1;
+        gpt_reg->sr &= GPT_SR_OF1;
         printf("of1, ocr1 = %u\n", gpt_reg->ocr1);
     }
 
@@ -213,11 +213,11 @@ int timer_interrupt(void) {
         //printf("before update_timeout\n");
         update_timeout();
         printf("ocr1 = %u\n", gpt_reg->ocr1);
-        gpt_reg->sr |= GPT_SR_OF2;
+        gpt_reg->sr &= GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
         high_count++;
-        gpt_reg->sr |= GPT_SR_ROV;
+        gpt_reg->sr &= GPT_SR_ROV;
     }
 
     err = seL4_IRQHandler_Ack(_timer_cap);
