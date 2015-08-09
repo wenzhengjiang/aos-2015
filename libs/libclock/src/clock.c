@@ -25,7 +25,7 @@ const unsigned CLOCK_GPT_CR_OM1 = 4;
 
 /** FREE RUN OR RESTART MODE.  0 sets Restart mode that causes the counter to
  * reset when a compare is successful */
-const unsigned CLOCK_GPT_CR_FRR = 0;
+const unsigned CLOCK_GPT_CR_FRR = 1;
 
 /* CLOCK SOURCE: 001 - Peripheral Clock */
 const unsigned CLOCK_GPT_CR_CLKSRC = 1;
@@ -46,8 +46,8 @@ const unsigned CLOCK_GPT_PRESCALER = (66 - 1);
 
 /* GPT Interrupt register behaviours for output compare */
 const unsigned CLOCK_GPT_IR_OF1IE = 1;
-const unsigned CLOCK_GPT_IR_OF2IE = 0;
-const unsigned CLOCK_GPT_IR_OF3IE = 0;
+const unsigned CLOCK_GPT_IR_OF2IE = 2;
+const unsigned CLOCK_GPT_IR_OF3IE = 4;
 
 // TODO: How do we ensure the compiler doesn't modify the struct layout?
 struct gpt_control_register {
@@ -112,6 +112,7 @@ static const timestamp_t MAX_TICK = (1ULL<<63) - 1;
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
 
+static timestamp_t next_timeout;
 static bool initialized;
 
 static seL4_CPtr
@@ -128,6 +129,36 @@ enable_irq(int irq, seL4_CPtr aep) {
     err = seL4_IRQHandler_Ack(cap);
     assert(!err);
     return cap;
+}
+
+static void update_timeout() {
+    timestamp_t cur_time = time_stamp();
+    timestamp_t closest_timeout = cur_time - 1;
+    callback_t *cb;
+    bool updated = false;
+    for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
+        cb = &callback_arr[i];
+        if (cb->valid && cb->next_timeout - cur_time <= closest_timeout - cur_time){
+            closest_timeout = cb->next_timeout;
+            updated = true;
+        }
+    }
+
+    struct gpt_control_register* gpt_control_register;
+    gpt_control_register = (struct gpt_control_register*)&(gpt_register_set->control);
+    if (updated) {
+        // the interval might larger than MAX_UINT32, global var next_timeout is used to
+        // check whether current interrupt really means a timeout happens
+        gpt_register_set->output_compare_2 = (uint32_t)(closest_timeout - cur_time); 
+        next_timeout = closest_timeout;
+        if (!gpt_control_register->output_compare_mode_2) {
+            gpt_control_register->output_compare_mode_2 = 1; 
+            gpt_register_set->interrupt |= CLOCK_GPT_IR_OF2IE;
+        }
+    } else {
+        gpt_register_set->interrupt &= ~CLOCK_GPT_IR_OF2IE;
+        gpt_control_register->output_compare_mode_2 = 0; 
+    }
 }
 
 void clock_set_device_address(void* mapping) {
@@ -194,7 +225,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_control_register->enable = CLOCK_GPT_CR_ENABLE;
 
     /* Step 10: Enable IR */
-    gpt_register_set->interrupt = -1;
+    gpt_register_set->interrupt = CLOCK_GPT_IR_OF1IE; // TODO: should be 1 instead of -1 ?
 
     initialized = true;
 
@@ -212,13 +243,14 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
     }
     callback_t *cb = NULL;
     timestamp_t cur = time_stamp();
+
     for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
         if (!callback_arr[i].valid) {
             cb = &callback_arr[i];
             cb->valid = true;
             cb->id = i;
             cb->delay = delay;
-            // TODO: As interrupts now occur on clock equality, overflow now
+            // As interrupts now occur on clock equality, overflow now
             // becomes an interrupt selection concern
             cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
@@ -226,6 +258,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
             break;
         }
     }
+    update_timeout();
     if (cb) return cb->id;
     else return 0;
 }
@@ -236,6 +269,7 @@ int remove_timer(uint32_t id) {
     if (!callback_arr[id].valid)
         return CLOCK_R_FAIL;
     callback_arr[id].valid = false;
+    update_timeout();
     return CLOCK_R_OK;
 }
 
@@ -243,10 +277,11 @@ int timer_interrupt(void) {
     int err;
     struct gpt_status_register *status = (struct gpt_status_register*)&(gpt_register_set->status);
     // Status register not being found set.  WIP
-    //if (status->output_compare_1_occurred) {
+    if (status->output_compare_1_occurred) {
         tick_count++;
+        gpt_register_set->output_compare_1 += CLOCK_SUBTICK_CAP;
         printf("current tick is %llu\n", time_stamp());
-    //}
+    }
 
     if (status->output_compare_2_occurred) {
         sync_acquire(callback_m);
@@ -254,7 +289,7 @@ int timer_interrupt(void) {
             callback_t *p = &callback_arr[i];
             /* We should be able to depend on equality as interrupts freeze the
              * clock */
-            if (p->next_timeout == tick_count) {
+            if (p->valid && p->next_timeout == next_timeout) {
                 /* Fire and remove the callback */
                 p->fun(p->id, p->data);
                 remove_timer(p->id);
