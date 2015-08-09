@@ -99,10 +99,12 @@ static void update_timeout() {
     if (updated) {
         update_outcmp2(closest_timeout);
         next_timeout = closest_timeout;
+        dprintf(0, "next timeout: %llu\n", next_timeout);
     }
-    else
+    else {
         disable_outcmp2();
-    //printf("next timeout: %llu\n", next_timeout);
+        dprintf(0, "no timer\n");
+    }
 
 }
 
