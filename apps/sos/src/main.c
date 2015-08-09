@@ -220,6 +220,7 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
+                printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
@@ -511,9 +512,9 @@ static void print_time(uint32_t id, void *data) {
 }
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
 static void setup_timers(void) {
-       register_timer(1000, print_time, NULL);
-       register_timer(10000, print_time, NULL);
-       register_timer(50000, print_time, NULL);
+       register_timer(1000000, print_time, NULL);
+       register_timer(5000000, print_time, NULL);
+       register_timer(10000000, print_time, NULL);
 }
 #define test_assert(tst)        \
     do {                        \

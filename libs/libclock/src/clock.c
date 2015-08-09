@@ -121,10 +121,9 @@ int start_timer(seL4_CPtr interrupt_ep) {
     if (!(callback_m = sync_create_mutex())) 
         return CLOCK_R_FAIL;
 
-    stop_timer();
-    enable_irq(GPT_IRQ, interrupt_ep);
 
     gpt_reg = gpt_clock_addr;
+    _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
     gpt_reg->cr = GPT_CR_OM1 | GPT_CR_FRR | GPT_CR_CLKSRC | GPT_CR_ENMOD;
     gpt_reg->sr = 0;
     gpt_reg->ir = GPT_IR_ROVIE | GPT_IR_OF1IE;
