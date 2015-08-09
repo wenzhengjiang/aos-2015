@@ -11,7 +11,7 @@
 
 #define MAX_CALLBACK_ID 20
 
-#define CLOCK_SUBTICK_CAP 100000ul
+#define CLOCK_SUBTICK_CAP 1000000ul
 
 #define BITS(n) (1ul<<(n))
 
@@ -40,7 +40,7 @@ void* gpt_clock_addr;
 struct callback {
     bool valid;
     uint32_t id;
-    uint32_t next_timeout;
+    timestamp_t next_timeout;
     uint64_t delay;
     timer_callback_t fun;
     void *data;
@@ -70,12 +70,13 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
-static void enable_outcmp2(timestamp_t t) {
+static void update_outcmp2(timestamp_t t) {
     gpt_reg->ocr2 = (uint32_t)t;
-    gpt_reg->cr |= GPT_CR_OM2;
-    gpt_reg->ir |= GPT_IR_OF2IE;
+    if (!(gpt_reg->ir & GPT_IR_OF2IE)) {
+        gpt_reg->cr |= GPT_CR_OM2;
+        gpt_reg->ir |= GPT_IR_OF2IE;
+    }
 
-    printf("output_compare_2: %u\n", gpt_reg->ocr2);
 } 
 
 static void disable_outcmp2(void) {
@@ -95,13 +96,13 @@ static void update_timeout() {
             updated = true;
         }
     }
-
     if (updated) {
-        enable_outcmp2(closest_timeout);
+        update_outcmp2(closest_timeout);
         next_timeout = closest_timeout;
     }
     else
         disable_outcmp2();
+    //printf("next timeout: %llu\n", next_timeout);
 
 }
 
@@ -117,6 +118,7 @@ void debug_bits(uint32_t i) {
     }
     putchar('\n');
 }
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (!(callback_m = sync_create_mutex())) 
         return CLOCK_R_FAIL;
@@ -160,6 +162,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
             cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
             cb->data = data;
+            //printf("add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
             break;
         }
     }
@@ -179,6 +182,7 @@ int remove_timer(uint32_t id) {
 }
 
 int timer_interrupt(void) {
+    //printf("enter timer_interrupt\n");
     int err;
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 += CLOCK_SUBTICK_CAP;
@@ -186,14 +190,16 @@ int timer_interrupt(void) {
     }
 
     if (gpt_reg->sr & GPT_SR_OF2) {
-        printf("output_compare_2_occurred\n");
         for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
             callback_t *p = &callback_arr[i];
             if (p->valid && p->next_timeout == next_timeout) {
                 p->fun(p->id, p->data);
-                remove_timer(p->id);
+                callback_arr[i].valid = false;
             }
         }
+        //printf("before update_timeout\n");
+        update_timeout();
+        //printf("after update_timeout\n");
         gpt_reg->sr &= ~GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
@@ -214,6 +220,7 @@ timestamp_t time_stamp(void) {
 }
 
 int stop_timer(void) {
+    //printf("stop_timer called\n");
     sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;
 
