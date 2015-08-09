@@ -17,8 +17,12 @@
 
 #define GPT_CR_OM1 BITS(22)
 #define GPT_CR_OM2 BITS(25)
+#define GPT_CR_SWR BITS(15)
 #define GPT_CR_FRR BITS(9)
 #define GPT_CR_CLKSRC BITS(6)
+#define GPT_CR_STOPEN BITS(5)
+#define GPT_CR_DOZEEN BITS(4)
+#define GPT_CR_WAITEN BITS(3)
 #define GPT_CR_ENMOD BITS(1)
 #define GPT_CR_EN BITS(0)
 
@@ -99,11 +103,11 @@ static void update_timeout() {
     if (updated) {
         update_outcmp2(closest_timeout);
         next_timeout = closest_timeout;
-        dprintf(0, "next timeout: %llu\n", next_timeout);
+        printf("next timeout: %llu\n", next_timeout);
     }
     else {
         disable_outcmp2();
-        dprintf(0, "no timer\n");
+        printf("no timer\n");
     }
 
 }
@@ -128,7 +132,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     gpt_reg = gpt_clock_addr;
     _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
-    gpt_reg->cr = GPT_CR_OM1 | GPT_CR_FRR | GPT_CR_CLKSRC | GPT_CR_ENMOD;
+    gpt_reg->cr = GPT_CR_OM1 | GPT_CR_FRR | GPT_CR_CLKSRC | GPT_CR_ENMOD ;
     gpt_reg->sr = 0;
     gpt_reg->ir = GPT_IR_ROVIE | GPT_IR_OF1IE;
     gpt_reg->pr = GPT_PRESCALER;
@@ -137,7 +141,12 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_reg->cr |= GPT_CR_EN;
     
     debug_bits(gpt_reg->cr);
-    assert(gpt_reg->cr == 0b00000000010000000000001001000011);
+    //assert(gpt_reg->cr == 0b00000000010000000000001001000011);
+    //printf("gpt_reg = %p\n", gpt_reg);
+    //printf("gpt_reg->ocr1 = %p\n", &(gpt_reg->ocr1));
+    //printf("gpt_reg->ocr2 = %p\n", &(gpt_reg->ocr2));
+    //assert(&(gpt_reg->ocr1) == 0x2098010);
+    //assert(&(gpt_reg->ocr2) == 0x2098014);
     initialized = true;
 
     return 0;
@@ -145,11 +154,11 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
-        dprintf(0, "invalid callback_fun\n");
+        printf("invalid callback_fun\n");
         return 0;
     }
     if (!initialized) {
-        dprintf(0, "timer hasn't been initialised \n");
+        printf("timer hasn't been initialised \n");
         return 0;
     }
     callback_t *cb = NULL;
@@ -164,7 +173,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
             cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
             cb->data = data;
-            //printf("add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
+            printf("add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
             break;
         }
     }
@@ -192,6 +201,7 @@ int timer_interrupt(void) {
     }
 
     if (gpt_reg->sr & GPT_SR_OF2) {
+        printf("GPT_SR_OF2 is on \n");
         for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
             callback_t *p = &callback_arr[i];
             if (p->valid && p->next_timeout == next_timeout) {
@@ -201,7 +211,7 @@ int timer_interrupt(void) {
         }
         //printf("before update_timeout\n");
         update_timeout();
-        //printf("after update_timeout\n");
+        printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= ~GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
