@@ -95,8 +95,16 @@ static void disable_outcmp2(void) {
 }
 
 int callback_cmp(const void *a, const void *b) {
-    callback_t *x = (callback_t*)a, *y = (callback_t*)b;
-    return (x->next_timeout - g_cur_time) - (y->next_timeout - g_cur_time);
+    callback_t *x = *(callback_t**)a, *y = *(callback_t**)b;
+    if (!x->valid && !y->valid) return 0;
+    if (!x->valid) return 1;
+    if (!y->valid) return -1;
+    if ((x->next_timeout - g_cur_time) < (y->next_timeout - g_cur_time))
+        return -1;
+    if ((x->next_timeout - g_cur_time) > (y->next_timeout - g_cur_time))
+        return 1;
+    if ((x->next_timeout - g_cur_time) == (y->next_timeout - g_cur_time))
+        return 0;
 }
 
 static void update_timeout() {
@@ -110,16 +118,12 @@ static void update_timeout() {
             closest_timeout = cb->next_timeout;
             updated = true;
         }
-        if (!cb->valid) callback_arr[i].next_timeout = cur_time - 1;
     }
     if (updated) {
         g_cur_time = cur_time;
         qsort(ordered_callbacks, MAX_CALLBACK_ID, sizeof(callback_t*), callback_cmp);
         next_cb = 0;
         update_outcmp2(closest_timeout);
-        for (int i = 0; i < 5; i++) {
-            dprintf(0, " %llu, %d, %lu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
-        }
         assert(closest_timeout == ordered_callbacks[0]->next_timeout);
         dprintf(5, "next timeout: %llu\n", next_timeout);
     }
@@ -229,8 +233,9 @@ int timer_interrupt(void) {
         dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
+        assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
         for (int i = 0; i < 5; i++) {
-            dprintf(0, " %llu, %d, %lu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
+            dprintf(0, " %llu, %d, %llu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
         }
         while (next_cb < MAX_CALLBACK_ID) {
             callback_t *c = ordered_callbacks[next_cb];
@@ -240,7 +245,7 @@ int timer_interrupt(void) {
             next_cb++;
         }
         if(next_cb < MAX_CALLBACK_ID) {
-            update_outcmp2(ordered_callbacks[next_cb+1]->next_timeout);
+            update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
             printf("id is %d", ordered_callbacks[next_cb]->id);
             //next_timeout = ordered_callbacks[next_cb]->next_timeout;
             //gpt_reg->ocr2 = next_timeout;
