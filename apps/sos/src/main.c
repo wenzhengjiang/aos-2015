@@ -428,7 +428,6 @@ static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     err = seL4_TCB_BindAEP(seL4_CapInitThreadTCB, *async_ep);
     conditional_panic(err, "Failed to bind ASync EP to TCB");
 
-
     /* Create an endpoint for user application IPC */
     ep_addr = ut_alloc(seL4_EndpointBits);
     conditional_panic(!ep_addr, "No memory for endpoint");
@@ -517,6 +516,8 @@ static void stop(uint32_t id, void *data) {
     printf("timer stopped at %llu\n", time_stamp());
     stop_timer();
     timer_stop = true;
+    // This should work!
+    start_timer(_sos_ipc_ep_cap);
 }
 
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
@@ -524,7 +525,11 @@ static void setup_timers(void) {
        register_timer(1000000, print_time, NULL);
        register_timer(5000000, print_time, NULL);
        register_timer(10000000, print_time, NULL);
+<<<<<<< HEAD
       register_timer(30000000, stop, NULL);
+=======
+       register_timer(30000000, stop, NULL);
+>>>>>>> a5eb2d4965b98cb1baa3327477e535abecd9e911
 }
 
 #define test_assert(tst)        \
