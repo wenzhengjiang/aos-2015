@@ -44,6 +44,8 @@ gpt_register_t *gpt_reg;
 static uint32_t high_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
 void* gpt_clock_addr;
+int valid_cb_pos = 0;
+int ncb = 0;
 
 struct callback {
     bool valid;
@@ -57,9 +59,68 @@ struct callback {
 typedef struct callback callback_t;
 
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
+
 static sync_mutex_t callback_m;
 
 static timestamp_t next_timeout;
+
+static void remove_callback(uint32_t id) {
+    int i;
+    for (i = 0; i < MAX_CALLBACK_ID; i++) {
+        if (callback_arr[i].id == id) {
+            callback_arr[i].valid = false;
+            break;
+        }
+    }
+}
+
+/**
+ * Pack the callback array
+ */
+static void pack(void) {
+    int i;
+    int j = 1;
+    for (i = 0; i <= MAX_CALLBACK_ID && j <= MAX_CALLBACK_ID; i++) {
+        if (callback_arr[i].valid == false) {
+            while(callback_arr[j].valid == false) {
+                j++;
+            }
+            callback_arr[i++] = callback_arr[j];
+            callback_arr[j].valid = false;
+            j++;
+        } else {
+            i++;
+        }
+        if (j == i) {
+            j++;
+        }
+    }
+    valid_cb_pos = 0;
+    update_ocr2();
+}
+
+/**
+ * Insert a value into the array of callback.
+ * Requires that at least one position in the array is available
+ * Does not update the index
+ * @param cb the callback to insert.
+ */
+static int insert(callback_t cb) {
+    int i;
+    if (ncb > MAX_CALLBACK_ID) {
+        return 0;
+    }
+    pack();
+    for (i = MAX_CALLBACK_ID; i >= 0; i--) {
+        while (cb.next_timeout > callback_arr[i].next_timeout) {
+            callback_arr[i+1] = callback_arr[i];
+        }
+        callback_arr[i] = cb;
+    }
+    valid_cb_pos = 0;
+    update_ocr2();
+    return 1;
+}
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -127,6 +188,10 @@ void debug_bits(uint32_t i) {
     putchar('\n');
 }
 
+/**
+ * Start the timer driver.  Must be called before other driver functions can be used.
+ * 
+ */
 int start_timer(seL4_CPtr interrupt_ep) {
     if (!(callback_m = sync_create_mutex())) {
         return CLOCK_R_FAIL;
@@ -146,6 +211,12 @@ int start_timer(seL4_CPtr interrupt_ep) {
     return 0;
 }
 
+/**
+ * Register a new timer
+ * @param delay the delay in us
+ * @param callback_fun the callback to invoke, which takes the callback ID and data
+ * @param data A pointer to the data to call callback_fun with.
+ */
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
         dprintf(1, "invalid callback_fun\n");
@@ -178,6 +249,10 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
     else return 0;
 }
 
+/**
+ * Remove a callback
+ * @param id The ID of the callback to remove
+ */
 int remove_timer(uint32_t id) {
     if (id == 0 && id > MAX_CALLBACK_ID)
         return CLOCK_R_FAIL;
@@ -254,6 +329,9 @@ timestamp_t time_stamp(void) {
     return time;
 }
 
+/**
+ * Stop the timer driver, including triggering of callbacks
+ */
 int stop_timer(void) {
     sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;
