@@ -22,11 +22,11 @@
 #include <clock/clock.h>
 
 #include "network.h"
-#include <device/elf.h>
-#include <device/mapping.h>
+#include "elf.h"
 
-#include <ut/ut.h>
-#include <device/vmem_layout.h>
+#include "ut_manager/ut.h"
+#include "vmem_layout.h"
+#include "mapping.h"
 
 #include <autoconf.h>
 
@@ -86,8 +86,6 @@ struct {
 
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
-
-bool timer_stop = false;
 
 /**
  * NFS mount point
@@ -201,7 +199,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         /* we don't want to reply to an unknown syscall */
 
     }
-    if (timer_stop) stop_timer();
+
     /* Free the saved reply cap */
     cspace_free_slot(cur_cspace, reply_cap);
 }
@@ -222,7 +220,6 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
-                printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
@@ -512,21 +509,12 @@ static void print_time(uint32_t id, void *data) {
     (void) data;
     printf("%d expired at %llu\n", id, time_stamp());
 }
-
-static void stop(uint32_t id, void *data) {
-    printf("timer stopped at %llu\n", time_stamp());
-    stop_timer();
-    timer_stop = true;
-}
-
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
 static void setup_timers(void) {
-       register_timer(1000000, print_time, NULL);
-       register_timer(5000000, print_time, NULL);
-       register_timer(10000000, print_time, NULL);
-      register_timer(30000000, stop, NULL);
+       register_timer(1000, print_time, NULL);
+       register_timer(10000, print_time, NULL);
+       register_timer(50000, print_time, NULL);
 }
-
 #define test_assert(tst)        \
     do {                        \
         if(!tst){               \
@@ -583,7 +571,7 @@ int main(void) {
     setup_timers();
 
     /* Start the user application */
-//    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     test_mutex();
     /* Wait on synchronous endpoint for IPC */
