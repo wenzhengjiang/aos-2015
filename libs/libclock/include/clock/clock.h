@@ -34,14 +34,12 @@ struct gpt_register {
     uint32_t ocr3;
     uint32_t icr1;
     uint32_t icr2;
-    uint32_t cnt;;
+    uint32_t cnt;
 };
 
 typedef struct gpt_register gpt_register_t;
 typedef uint64_t timestamp_t;
 typedef void (*timer_callback_t)(uint32_t id, void *data);
-
-void clock_set_device_address(void* mapping);
 
 /*
  * Initialise driver. Performs implicit stop_timer() if already initialised.

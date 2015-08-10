@@ -14,7 +14,7 @@
 #include <stdlib.h>
 
 #define MAX_CALLBACK_ID 20
-#define verbose 1
+#define verbose 5
 #define CLOCK_SUBTICK_CAP 100000ul
 
 #define BITS(n) (1ul<<(n))
@@ -44,7 +44,7 @@ static bool handling_interrupt = false;
 gpt_register_t *gpt_reg;
 static uint32_t high_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
-void* gpt_clock_addr;
+void* gpt_clock_addr = NULL;
 
 struct callback {
     bool valid;
@@ -125,35 +125,23 @@ static void update_timeout() {
         next_cb = 0;
         update_outcmp2(closest_timeout);
         assert(closest_timeout == ordered_callbacks[0]->next_timeout);
-        dprintf(5, "next timeout: %llu\n", next_timeout);
     }
     else {
         disable_outcmp2();
-        dprintf(5, "no timer\n");
     }
 
-}
-
-void clock_set_device_address(void* mapping) {
-    gpt_clock_addr = mapping;
-}
-
-void debug_bits(uint32_t i) {
-    for (int k = 31; k >= 0; k--) {
-        if (i & (1<<k))
-            putchar('1');
-        else putchar('0');
-    }
-    putchar('\n');
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
     if (!(callback_m = sync_create_mutex())) {
+        printf("FAILING\n");
         return CLOCK_R_FAIL;
     }
-
+    if (gpt_clock_addr == NULL) {
+        gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(gpt_register_t));
+        _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
+    }
     gpt_reg = gpt_clock_addr;
-    _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
     gpt_reg->cr = GPT_CR_OM1 | GPT_CR_FRR | GPT_CR_CLKSRC | GPT_CR_ENMOD ;
     gpt_reg->sr = 0;
     gpt_reg->ir = GPT_IR_ROVIE | GPT_IR_OF1IE;
@@ -161,14 +149,9 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     gpt_reg->ocr1 = CLOCK_SUBTICK_CAP;
     gpt_reg->cr |= GPT_CR_EN;
-    // Ensure the control register is configured as expected
     assert(gpt_reg->cr == 0b00000000010000000000001001000011);
-    //memset(callback_arr, 0, sizeof(callback_arr));
     for (int i = 0; i < MAX_CALLBACK_ID; i++)
         ordered_callbacks[i] = &callback_arr[i+1];
-    //handling_interrupt = false;
-    //high_count = 0;
-    //next_cb = 0;
 
     return 0;
 }
@@ -230,7 +213,6 @@ int timer_interrupt(void) {
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
         gpt_reg->sr &= GPT_SR_OF1;
-        dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
         assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
@@ -247,17 +229,13 @@ int timer_interrupt(void) {
         if(next_cb < MAX_CALLBACK_ID) {
             update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
             printf("id is %d", ordered_callbacks[next_cb]->id);
-            //next_timeout = ordered_callbacks[next_cb]->next_timeout;
-            //gpt_reg->ocr2 = next_timeout;
         }
         else
             disable_outcmp2();
 
-        printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
-        dprintf(5, "Rollover interrupt\n");
         high_count++;
         gpt_reg->sr &= GPT_SR_ROV;
     }
@@ -292,6 +270,10 @@ timestamp_t time_stamp(void) {
     return time;
 }
 
+/**
+ * Stop the timer
+ * If called from within timer_interrupt, timer_interrupt will clean up later.
+ */
 int stop_timer(void) {
     sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;

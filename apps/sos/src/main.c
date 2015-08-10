@@ -161,13 +161,6 @@ static size_t syscall_print(size_t num_args) {
     return send_len;
 }
 
-static int timer_init(seL4_CPtr interrupt_ep) {
-    void* gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(gpt_register_t));
-    clock_set_device_address(gpt_clock_addr);
-    start_timer(interrupt_ep);
-    return 0;
-}
-
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -517,7 +510,8 @@ static void stop(uint32_t id, void *data) {
     stop_timer();
     timer_stop = true;
     // This should work!
-    start_timer(_sos_ipc_ep_cap);
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
+    printf("attempted start\n");
 }
 
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
@@ -575,7 +569,7 @@ int main(void) {
 
     dprintf(0, "\ninit timer ...\n");
     /* Initialise and start the clock driver */
-    timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     dprintf(0, "\nafter init timer\n");
     /* Initialise the network hardware */
