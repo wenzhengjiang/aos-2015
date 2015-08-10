@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/debug.h>
 #include <sync/mutex.h>
+#include <stdlib.h>
 
 #define MAX_CALLBACK_ID 20
 #define verbose 1
@@ -58,8 +59,10 @@ typedef struct callback callback_t;
 
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
+static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
 
-static timestamp_t next_timeout;
+static timestamp_t g_cur_time, next_timeout;
+static int next_cb = 0;
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -78,6 +81,7 @@ enable_irq(int irq, seL4_CPtr aep) {
 }
 
 static void update_outcmp2(timestamp_t t) {
+    next_timeout = t;
     gpt_reg->ocr2 = (uint32_t)t;
     if (!(gpt_reg->ir & GPT_IR_OF2IE)) {
         gpt_reg->cr |= GPT_CR_OM2;
@@ -88,6 +92,11 @@ static void update_outcmp2(timestamp_t t) {
 static void disable_outcmp2(void) {
     gpt_reg->ir &= ~GPT_IR_OF2IE;
     gpt_reg->cr &= ~GPT_CR_OM2;
+}
+
+int callback_cmp(const void *a, const void *b) {
+    callback_t *x = (callback_t*)a, *y = (callback_t*)b;
+    return (x->next_timeout - g_cur_time) - (y->next_timeout - g_cur_time);
 }
 
 static void update_timeout() {
@@ -101,10 +110,13 @@ static void update_timeout() {
             closest_timeout = cb->next_timeout;
             updated = true;
         }
+        if (!cb->valid) callback_arr[i].next_timeout = cur_time - 1;
     }
     if (updated) {
+        g_cur_time = cur_time;
+        qsort(ordered_callbacks, MAX_CALLBACK_ID, sizeof(callback_t*), callback_cmp);
+        next_cb = 0;
         update_outcmp2(closest_timeout);
-        next_timeout = closest_timeout;
         dprintf(5, "next timeout: %llu\n", next_timeout);
     }
     else {
@@ -143,6 +155,8 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_reg->cr |= GPT_CR_EN;
     // Ensure the control register is configured as expected
     assert(gpt_reg->cr == 0b00000000010000000000001001000011);
+    for (int i = 0; i < MAX_CALLBACK_ID; i++)
+        ordered_callbacks[i] = callback_arr + i;
     return 0;
 }
 
@@ -207,14 +221,16 @@ int timer_interrupt(void) {
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
         dprintf(5, "OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
-        for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
-            callback_t *p = &callback_arr[i];
-            if (p->valid && p->next_timeout == next_timeout) {
-                p->fun(p->id, p->data);
-                callback_arr[i].valid = false;
-            }
+        while (next_cb < MAX_CALLBACK_ID) {
+            callback_t *c = ordered_callbacks[next_cb];
+            if (c->next_timeout != next_timeout) break;
+            c->fun(c->id, c->data);
+            c->valid = false;
+            next_cb++;
         }
-        update_timeout();
+        if(next_cb < MAX_CALLBACK_ID) 
+            update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
+
         printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= GPT_SR_OF2;
     }
