@@ -525,7 +525,7 @@ static void setup_timers(void) {
        register_timer(1000000, print_time, NULL);
        register_timer(5000000, print_time, NULL);
        register_timer(10000000, print_time, NULL);
-        register_timer(30000000, stop, NULL);
+       register_timer(30000000, stop, NULL);
 }
 
 #define test_assert(tst)        \
