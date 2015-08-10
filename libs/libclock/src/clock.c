@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/debug.h>
 #include <sync/mutex.h>
+#include <stdlib.h>
 
 #define MAX_CALLBACK_ID 20
 #define BAD_CALLBACK_ID 0
@@ -51,8 +52,10 @@ int ncb = 0;
 
 struct callback {
     uint32_t id;
-    timestamp_t timeout;
+    timestamp_t next_timeout;
     timer_callback_t fun;
+    bool valid;
+
     void *data;
 };
 
@@ -64,77 +67,10 @@ static int valid_cb_pos;
 static bool idtable[MAX_CALLBACK_ID+1];
 
 static sync_mutex_t callback_m;
+static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
 
-static timestamp_t timeout;
-
-static int get_uniq_id() {
-    memset(idtable, false, sizeof(idtable));
-    for (int i = 0; i < MAX_CALLBACK_ID; i++);
-        if (callback_arr[i].valid) idtable[callback_arr[i].id] = true;
-    for (int i = 1; i <= MAX_CALLBACK_ID; i++)
-        if (!idtable[i])
-            return i;
-    return BAD_CALLBACK_ID;
-}
-
-/**
- * Pack the callback array
- */
-static void pack(void) {
-    int i;
-    int j = 1;
-    sync_acquire(callback_m);
-    for (i = 0; i <= MAX_CALLBACK_ID && j <= MAX_CALLBACK_ID; i++) {
-        if (callback_arr[i].valid == false) {
-            while(callback_arr[j].valid == false) {
-                j++;
-            }
-            callback_arr[i++] = callback_arr[j];
-            callback_arr[j].valid = false;
-            j++;
-        } else {
-            i++;
-        }
-        if (j == i) {
-            j++;
-        }
-    }
-    if (callback_arr[0].valid)
-        valid_cb_pos = 0;
-    else
-        valid_cb_pos = MAX_CALLBACK_ID;
-    sync_release(callback_m);
-    update_ocr2();
-}
-
-/**
- * insert_callback a value into the array of callback.
- * Requires that at least one position in the array is available
- * Does not update the index
- * @param cb the callback to insert_callback.
- */
-static int insert_callback(callback_t cb) {
-    assert(cb.id < MAX_CALLBACK_ID);
-    pack();
-    cb.id = get_uniq_id();
-    if (cb.id == BAD_CALLBACK_ID)
-        return 0;
-    int i = 0; 
-    timestamp_t cur_time = time_stamp();
-
-    sync_acquire(callback_m);
-    while (callback_arr[i].valid && callback_arr[i].timeout - cur_time < cb.next_time - cur_time) 
-        i++;
-    for (int j = MAX_CALLBACK_ID-1; j > i; j--)
-        callback_arr[j] = callback_arr[j-1];
-    callback_arr[i] = cb; 
-    valid_cb_pos = 0;
-    sync_release(callback_m);
-
-    update_ocr2();
-
-    return cb.id;;
-}
+static timestamp_t g_cur_time, next_timeout;
+static int next_cb = 0;
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -153,6 +89,7 @@ enable_irq(int irq, seL4_CPtr aep) {
 }
 
 static void update_outcmp2(timestamp_t t) {
+    next_timeout = t;
     gpt_reg->ocr2 = (uint32_t)t;
     if (!(gpt_reg->ir & GPT_IR_OF2IE)) {
         gpt_reg->cr |= GPT_CR_OM2;
@@ -166,8 +103,40 @@ static void disable_outcmp2(void) {
 }
 
 
-void update_ocr2() {
-    if (valid_cb_pos >= MAX_CALLBACK_ID) {
+int callback_cmp(const void *a, const void *b) {
+    callback_t *x = *(callback_t**)a, *y = *(callback_t**)b;
+    if (!x->valid && !y->valid) return 0;
+    if (!x->valid) return 1;
+    if (!y->valid) return -1;
+    if ((x->next_timeout - g_cur_time) < (y->next_timeout - g_cur_time))
+        return -1;
+    if ((x->next_timeout - g_cur_time) > (y->next_timeout - g_cur_time))
+        return 1;
+    if ((x->next_timeout - g_cur_time) == (y->next_timeout - g_cur_time))
+        return 0;
+}
+
+static void update_timeout() {
+    timestamp_t cur_time = time_stamp();
+    timestamp_t closest_timeout = cur_time - 1;
+    callback_t *cb;
+    bool updated = false;
+    for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
+        cb = &callback_arr[i];
+        if (cb->valid && cb->next_timeout - cur_time <= closest_timeout - cur_time){
+            closest_timeout = cb->next_timeout;
+            updated = true;
+        }
+    }
+    if (updated) {
+        g_cur_time = cur_time;
+        qsort(ordered_callbacks, MAX_CALLBACK_ID, sizeof(callback_t*), callback_cmp);
+        next_cb = 0;
+        update_outcmp2(closest_timeout);
+        assert(closest_timeout == ordered_callbacks[0]->next_timeout);
+        dprintf(5, "next timeout: %llu\n", next_timeout);
+    }
+    else {
         disable_outcmp2();
         return;
     }
@@ -207,11 +176,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_reg->cr |= GPT_CR_EN;
     // Ensure the control register is configured as expected
     assert(gpt_reg->cr == 0b00000000010000000000001001000011);
+    //memset(callback_arr, 0, sizeof(callback_arr));
+    for (int i = 0; i < MAX_CALLBACK_ID; i++)
+        ordered_callbacks[i] = &callback_arr[i+1];
+    //handling_interrupt = false;
+    //high_count = 0;
+    //next_cb = 0;
 
-    // initialize internal data structures
-    memset(callback_arr, 0, MAX_CALLBACK_ID * sizeof(callback_t));
-    valid_cb_pos = MAX_CALLBACK_ID; // no callbacks
-    handling_interrupt = false;
     return 0;
 }
 
@@ -230,7 +201,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         WARN("timer hasn't been initialised \n");
         return 0;
     }
-
+    
     callback_t cb ;
     cb.timeout = cur + delay;
     cb.fun = callback_fun;
@@ -277,17 +248,27 @@ int timer_interrupt(void) {
         dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
-        dprintf(5, "OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
-        int i;
-        for (i = valid_cb_pos; i < MAX_CALLBACK_ID; i++) {
-            callback_t *p = &callback_arr[i];
-            if (p->timeout == timeout) {
-                p->fun(p->id, p->data);
-                p->valid = false;
-                valid_cb_pos++;
-            } else break;
+
+        assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
+        for (int i = 0; i < 5; i++) {
+            dprintf(0, " %llu, %d, %llu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
         }
-        update_ocr2();
+        while (next_cb < MAX_CALLBACK_ID) {
+            callback_t *c = ordered_callbacks[next_cb];
+            if (c->next_timeout != next_timeout) break;
+            c->fun(c->id, c->data);
+            c->valid = false;
+            next_cb++;
+        }
+        if(next_cb < MAX_CALLBACK_ID) {
+            update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
+            printf("id is %d", ordered_callbacks[next_cb]->id);
+            //next_timeout = ordered_callbacks[next_cb]->next_timeout;
+            //gpt_reg->ocr2 = next_timeout;
+        }
+        else
+            disable_outcmp2();
+
         printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= GPT_SR_OF2;
     }
