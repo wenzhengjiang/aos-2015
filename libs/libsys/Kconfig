@@ -8,13 +8,12 @@
 # @TAG(NICTA_BSD)
 #
 
-config LIB_CLOCK
-    bool "Build libclock"
+config LIB_SYS
+    bool "Build libsys"
     select LIB_SEL4 
     select LIB_SEL4_C
     select LIB_SEL4_SYNC
-    select LIB_DEVICE
     select HAVE_SEL4_LIBS
     default y
     help
-        "Basic clock interfaces for seL4 sos"
+        "System utilities for seL4 sos"

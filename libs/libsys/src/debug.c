@@ -8,7 +8,7 @@
  * @TAG(NICTA_BSD)
  */
 
-#include "debug.h"
+#include <sys/debug.h>
 #include <stdarg.h>
 
 void plogf(const char *msg, ...) {
@@ -18,3 +18,4 @@ void plogf(const char *msg, ...) {
     vprintf(msg, alist);
     va_end(alist);
 }
+

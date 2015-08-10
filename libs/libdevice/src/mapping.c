@@ -8,10 +8,10 @@
  * @TAG(NICTA_BSD)
  */
 
-#include "mapping.h"
+#include <device/mapping.h>
 
-#include <ut_manager/ut.h>
-#include "vmem_layout.h"
+#include <ut/ut.h>
+#include <device/vmem_layout.h>
 
 #define verbose 0
 #include <sys/panic.h>
@@ -90,19 +90,17 @@ map_device(void* paddr, int size){
                                     seL4_PageBits,
                                     cur_cspace,
                                     &frame_cap);
-        conditional_panic(err, "Unable to retype device memory");
+        assert(!err);
         /* Map in the page */
         err = map_page(frame_cap, 
                        seL4_CapInitThreadPD, 
                        virt, 
                        seL4_AllRights,
                        0);
-        conditional_panic(err, "Unable to map device");
+        assert(!err);
         /* Next address */
         phys += (1 << seL4_PageBits);
         virt += (1 << seL4_PageBits);
     }
     return (void*)vstart;
 }
-
-

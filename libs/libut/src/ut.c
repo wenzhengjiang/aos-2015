@@ -8,7 +8,7 @@
  * @TAG(NICTA_BSD)
  */
 
-#include "ut.h"
+#include "ut/ut.h"
 #include <cspace/cspace.h>
 #include <stdlib.h>
 #include <assert.h>

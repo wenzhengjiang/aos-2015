@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#include "panic.h"
-#include "debug.h"
+#include <sys/panic.h>
+#include <sys/debug.h>
 
 #include <stdio.h>
 #include <stdlib.h>

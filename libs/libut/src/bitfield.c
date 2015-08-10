@@ -8,7 +8,7 @@
  * @TAG(NICTA_BSD)
  */
 
-#include "bitfield.h"
+#include "ut/bitfield.h"
 
 #include <assert.h>
 #include <stdlib.h>

@@ -14,11 +14,11 @@
 #include <assert.h>
 #include <cspace/cspace.h>
 
-#include "elf.h"
+#include <device/elf.h>
 
-#include <vmem_layout.h>
-#include <ut_manager/ut.h>
-#include <mapping.h>
+#include <device/vmem_layout.h>
+#include <ut/ut.h>
+#include <device/mapping.h>
 
 #define verbose 0
 #include <sys/debug.h>

@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#ifndef _MAPPING_H_
-#define _MAPPING_H_
+#ifndef _LIBDEVICE_MAPPING_H_
+#define _LIBDEVICE_MAPPING_H_
 
 #include <sel4/sel4.h>
 
@@ -37,4 +37,4 @@ int map_page(seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd, seL4_Word vaddr,
  */
 void* map_device(void* paddr, int size);
 
-#endif /* _MAPPING_H_ */
+#endif

@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#ifndef _DEBUG_H_
-#define _DEBUG_H_
+#ifndef _LIBSYS_DEBUG_H_
+#define _LIBSYS_DEBUG_H_
 
 #include <stdio.h>
 
@@ -29,7 +29,7 @@ void plogf(const char *msg, ...);
 
 #define WARN(...) _dprintf(-1, "\033[1;33mWARNING: ", __VA_ARGS__)
 
-#define ERROR(...) _dprintf(-1, "\033[1;31mERROR: ", __VA_ARGS__)
+#define ERR(...) _dprintf(-1, "\033[1;31mERROR: ", __VA_ARGS__)
 
 #define NOT_IMPLEMENTED() printf("\033[22;34m %s:%d -> %s not implemented\n\033[;0m",\
                                   __FILE__, __LINE__, __func__);

@@ -11,8 +11,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "ut.h"
-#include "bitfield.h"
+#include "ut/ut.h"
+#include "ut/bitfield.h"
 
 
 #define verbose 1

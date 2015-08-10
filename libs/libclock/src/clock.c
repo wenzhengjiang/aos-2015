@@ -4,13 +4,16 @@
 #include <limits.h>
 #include <clock/clock.h>
 #include <cspace/cspace.h>
+#include <device/mapping.h>
+#include <device/mapping.h>
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
+#include <sys/debug.h>
 #include <sync/mutex.h>
 
 #define MAX_CALLBACK_ID 20
-
+#define verbose 1
 #define CLOCK_SUBTICK_CAP 100000ul
 
 #define BITS(n) (1ul<<(n))
@@ -102,11 +105,11 @@ static void update_timeout() {
     if (updated) {
         update_outcmp2(closest_timeout);
         next_timeout = closest_timeout;
-        printf("next timeout: %llu\n", next_timeout);
+        dprintf(5, "next timeout: %llu\n", next_timeout);
     }
     else {
         disable_outcmp2();
-        printf("no timer\n");
+        dprintf(5, "no timer\n");
     }
 
 }
@@ -145,11 +148,11 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
-        printf("invalid callback_fun\n");
+        dprintf(1, "invalid callback_fun\n");
         return 0;
     }
     if (!(gpt_reg->cr & GPT_CR_EN)) {
-        printf("timer hasn't been initialised \n");
+        WARN("timer hasn't been initialised \n");
         return 0;
     }
     sync_acquire(callback_m);
@@ -165,7 +168,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
             cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
             cb->data = data;
-            printf("add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
+            dprintf(5, "add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
             break;
         }
     }
@@ -200,10 +203,10 @@ int timer_interrupt(void) {
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
         gpt_reg->sr &= GPT_SR_OF1;
-        printf("OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
+        dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
-        printf("OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
+        dprintf(5, "OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
         for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
             callback_t *p = &callback_arr[i];
             if (p->valid && p->next_timeout == next_timeout) {
@@ -216,7 +219,7 @@ int timer_interrupt(void) {
         gpt_reg->sr &= GPT_SR_OF2;
     }
     if (gpt_reg->sr & GPT_SR_ROV) {
-        printf("Rollover interrupt\n");
+        dprintf(5, "Rollover interrupt\n");
         high_count++;
         gpt_reg->sr &= GPT_SR_ROV;
     }

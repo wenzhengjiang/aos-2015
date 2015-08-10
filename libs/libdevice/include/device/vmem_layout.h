@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#ifndef _MEM_LAYOUT_H_
-#define _MEM_LAYOUT_H_
+#ifndef _LIBDEVICE_MEM_LAYOUT_H_
+#define _LIBDEVICE_MEM_LAYOUT_H_
 
 /* Address where memory used for DMA starts getting mapped.
  * Do not use the address range between DMA_VSTART and DMA_VEND */

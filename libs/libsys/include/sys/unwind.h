@@ -35,8 +35,8 @@
 /* Language-independent unwinder header public defines.  This contains both
    ABI defined objects, and GNU support routines.  */
 
-#ifndef UNWIND_ARM_H
-#define UNWIND_ARM_H
+#ifndef _LIBSYS_UNWIND_ARM_H_
+#define _LIBSYS_UNWIND_ARM_H_
 
 #define __ARM_EABI_UNWINDER__ 1
 

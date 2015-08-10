@@ -9,9 +9,9 @@
 #
 
 # Targets
-TARGETS := libclock.a
+TARGETS := libut.a
 
-LIBS := sel4 sel4sync device
+LIBS := sel4 sel4sync sys
 
 # Source files required to build the target
 CFILES := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c)) 

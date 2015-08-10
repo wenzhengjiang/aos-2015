@@ -7,6 +7,6 @@
 #
 # @TAG(NICTA_BSD)
 #
-libs-$(CONFIG_LIB_CLOCK) += libclock
+libs-$(CONFIG_LIB_UT) += libut
 
-libclock: $(libc) libsel4 libsel4sync libsel4cspace libdevice common
+libut: $(libc) libsel4 libsel4sync libsel4cspace libsys common

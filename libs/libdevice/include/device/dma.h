@@ -8,6 +8,9 @@
  * @TAG(NICTA_BSD)
  */
 
+#ifndef _LIBDEVICE_DMA_H_
+#define _LIBDEVICE_DMA_H_
+
 #include <platsupport/io.h>
 
 void *sos_dma_malloc(void* cookie, size_t size, int align, int cached, ps_mem_flags_t flags);
@@ -16,3 +19,4 @@ uintptr_t sos_dma_pin(void *cookie, void *addr, size_t size);
 void sos_dma_unpin(void *cookie, void *addr, size_t size);
 void sos_dma_cache_op(void *cookie, void *addr, size_t size, dma_cache_op_t op);
 
+#endif

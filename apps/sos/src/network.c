@@ -33,9 +33,9 @@
 #include <ethdrivers/imx6.h>
 #include <cspace/cspace.h>
 
-#include "dma.h"
-#include "mapping.h"
-#include "ut_manager/ut.h"
+#include <device/dma.h>
+#include <device/mapping.h>
+#include <ut/ut.h>
 
 #define verbose 0
 #include <sys/debug.h>

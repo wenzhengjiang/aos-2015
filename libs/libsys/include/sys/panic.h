@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#ifndef PANIC_H
-#define PANIC_H
+#ifndef _LIBSYS_PANIC_H_
+#define _LIBSYS_PANIC_H_
 
 #include <stdio.h>
 /**

@@ -31,8 +31,8 @@
 //#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "unwind.h"
-#include "execinfo.h"
+#include <sys/unwind.h>
+#include <sys/execinfo.h>
 struct trace_arg
 {
   void **array;

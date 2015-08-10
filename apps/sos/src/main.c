@@ -22,11 +22,11 @@
 #include <clock/clock.h>
 
 #include "network.h"
-#include "elf.h"
+#include <device/elf.h>
+#include <device/mapping.h>
 
-#include "ut_manager/ut.h"
-#include "vmem_layout.h"
-#include "mapping.h"
+#include <ut/ut.h>
+#include <device/vmem_layout.h>
 
 #include <autoconf.h>
 

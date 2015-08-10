@@ -8,8 +8,8 @@
  * @TAG(NICTA_BSD)
  */
 
-#ifndef _EXECINFO_H
-#define _EXECINFO_H
+#ifndef _LIBSYS_EXECINFO_H
+#define _LIBSYS_EXECINFO_H
 //#include <debug/execinfo.h>
 
 extern int backtrace (void **__array, int __size);
