@@ -14,8 +14,6 @@
 #include <stdlib.h>
 
 #define MAX_CALLBACK_ID 20
-#define BAD_CALLBACK_ID 0
-
 #define verbose 1
 #define CLOCK_SUBTICK_CAP 100000ul
 
@@ -47,25 +45,19 @@ gpt_register_t *gpt_reg;
 static uint32_t high_count = 0;
 static seL4_CPtr _timer_cap = seL4_CapNull;
 void* gpt_clock_addr;
-int valid_cb_pos = 0;
-int ncb = 0;
 
 struct callback {
+    bool valid;
     uint32_t id;
     timestamp_t next_timeout;
+    uint64_t delay;
     timer_callback_t fun;
-    bool valid;
-
     void *data;
 };
 
 typedef struct callback callback_t;
 
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
-static int ncb = 0;
-static int valid_cb_pos;
-static bool idtable[MAX_CALLBACK_ID+1];
-
 static sync_mutex_t callback_m;
 static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
 
@@ -102,7 +94,6 @@ static void disable_outcmp2(void) {
     gpt_reg->cr &= ~GPT_CR_OM2;
 }
 
-
 int callback_cmp(const void *a, const void *b) {
     callback_t *x = *(callback_t**)a, *y = *(callback_t**)b;
     if (!x->valid && !y->valid) return 0;
@@ -138,9 +129,9 @@ static void update_timeout() {
     }
     else {
         disable_outcmp2();
-        return;
+        dprintf(5, "no timer\n");
     }
-    update_outcmp2(callback_arr[valid_cb_pos].timeout);
+
 }
 
 void clock_set_device_address(void* mapping) {
@@ -156,10 +147,6 @@ void debug_bits(uint32_t i) {
     putchar('\n');
 }
 
-/**
- * Start the timer driver.  Must be called before other driver functions can be used.
- * 
- */
 int start_timer(seL4_CPtr interrupt_ep) {
     if (!(callback_m = sync_create_mutex())) {
         return CLOCK_R_FAIL;
@@ -186,12 +173,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
     return 0;
 }
 
-/**
- * Register a new timer
- * @param delay the delay in us
- * @param callback_fun the callback to invoke, which takes the callback ID and data
- * @param data A pointer to the data to call callback_fun with.
- */
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
         dprintf(1, "invalid callback_fun\n");
@@ -201,38 +182,42 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         WARN("timer hasn't been initialised \n");
         return 0;
     }
-    
-    callback_t cb ;
-    cb.timeout = cur + delay;
-    cb.fun = callback_fun;
-    cb.data = data;
-    
-    return insert_callback(cb);
+    sync_acquire(callback_m);
+    callback_t *cb = NULL;
+    timestamp_t cur = time_stamp();
+
+    for (int i = 1; i <= MAX_CALLBACK_ID; i++) {
+        if (!callback_arr[i].valid) {
+            cb = &callback_arr[i];
+            cb->valid = true;
+            cb->id = i;
+            cb->delay = delay;
+            cb->next_timeout = cur + delay;
+            cb->fun = callback_fun;
+            cb->data = data;
+            dprintf(5, "add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
+            break;
+        }
+    }
+    update_timeout();
+    sync_release(callback_m);
+    if (cb) return cb->id;
+    else return 0;
 }
 
-/**
- * Remove a callback
- * @param id The ID of the callback to remove
- */
 int remove_timer(uint32_t id) {
     if (id == 0 && id > MAX_CALLBACK_ID)
+        return CLOCK_R_FAIL;
+    if (!callback_arr[id].valid)
         return CLOCK_R_FAIL;
     if (!(gpt_reg->cr & GPT_CR_EN)) {
         return CLOCK_R_UINT;
     }
     sync_acquire(callback_m);
-    for (int i = 0; i < MAX_CALLBACK_ID; i++)
-        if (callback_arr[i].id == id) {
-            callback_arr[i].valid = false;
-            found = true;
-            break;
-        }
+    callback_arr[id].valid = false;
+    update_timeout();
     sync_release(callback_m);
-    if (!found) return CLOCK_R_FAIL;
-    else {
-        pack();
-        return CLOCK_R_OK;
-    }
+    return CLOCK_R_OK;
 }
 
 /**
@@ -248,7 +233,6 @@ int timer_interrupt(void) {
         dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
-
         assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
         for (int i = 0; i < 5; i++) {
             dprintf(0, " %llu, %d, %llu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
@@ -308,9 +292,6 @@ timestamp_t time_stamp(void) {
     return time;
 }
 
-/**
- * Stop the timer driver, including triggering of callbacks
- */
 int stop_timer(void) {
     sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;
