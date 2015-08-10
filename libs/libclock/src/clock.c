@@ -117,6 +117,10 @@ static void update_timeout() {
         qsort(ordered_callbacks, MAX_CALLBACK_ID, sizeof(callback_t*), callback_cmp);
         next_cb = 0;
         update_outcmp2(closest_timeout);
+        for (int i = 0; i < 5; i++) {
+            dprintf(0, " %llu, %d, %lu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
+        }
+        assert(closest_timeout == ordered_callbacks[0]->next_timeout);
         dprintf(5, "next timeout: %llu\n", next_timeout);
     }
     else {
@@ -155,8 +159,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     gpt_reg->cr |= GPT_CR_EN;
     // Ensure the control register is configured as expected
     assert(gpt_reg->cr == 0b00000000010000000000001001000011);
+    //memset(callback_arr, 0, sizeof(callback_arr));
     for (int i = 0; i < MAX_CALLBACK_ID; i++)
-        ordered_callbacks[i] = callback_arr + i;
+        ordered_callbacks[i] = &callback_arr[i+1];
+    //handling_interrupt = false;
+    //high_count = 0;
+    //next_cb = 0;
+
     return 0;
 }
 
@@ -220,7 +229,9 @@ int timer_interrupt(void) {
         dprintf(5, "OF1 interrupt. ocr1 = %u\n", gpt_reg->ocr1);
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
-        dprintf(5, "OF2 interrupt. ocr2 = %u\n", gpt_reg->ocr2);
+        for (int i = 0; i < 5; i++) {
+            dprintf(0, " %llu, %d, %lu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
+        }
         while (next_cb < MAX_CALLBACK_ID) {
             callback_t *c = ordered_callbacks[next_cb];
             if (c->next_timeout != next_timeout) break;
@@ -228,8 +239,14 @@ int timer_interrupt(void) {
             c->valid = false;
             next_cb++;
         }
-        if(next_cb < MAX_CALLBACK_ID) 
-            update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
+        if(next_cb < MAX_CALLBACK_ID) {
+            update_outcmp2(ordered_callbacks[next_cb+1]->next_timeout);
+            printf("id is %d", ordered_callbacks[next_cb]->id);
+            //next_timeout = ordered_callbacks[next_cb]->next_timeout;
+            //gpt_reg->ocr2 = next_timeout;
+        }
+        else
+            disable_outcmp2();
 
         printf("ocr1 = %u\n", gpt_reg->ocr1);
         gpt_reg->sr &= GPT_SR_OF2;
