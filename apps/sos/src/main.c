@@ -87,7 +87,6 @@ struct {
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-bool timer_stop = false;
 
 /**
  * NFS mount point
@@ -194,7 +193,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
         /* we don't want to reply to an unknown syscall */
 
     }
-    if (timer_stop) stop_timer();
     /* Free the saved reply cap */
     cspace_free_slot(cur_cspace, reply_cap);
 }
@@ -505,10 +503,9 @@ static void print_time(uint32_t id, void *data) {
     printf("%d expired at %llu\n", id, time_stamp());
 }
 
-static void stop(uint32_t id, void *data) {
+static void stop_and_start(uint32_t id, void *data) {
     printf("timer stopped at %llu\n", time_stamp());
     stop_timer();
-    timer_stop = true;
     // This should work!
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
     printf("attempted start\n");
@@ -519,7 +516,8 @@ static void setup_timers(void) {
        register_timer(1000000, print_time, NULL);
        register_timer(5000000, print_time, NULL);
        register_timer(10000000, print_time, NULL);
-       register_timer(30000000, stop, NULL);
+       register_timer(20000000, stop_and_start, NULL);
+       register_timer(30000000, print_time, NULL);
 }
 
 #define test_assert(tst)        \

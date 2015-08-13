@@ -17,6 +17,12 @@
 #define DMA_SIZE_BITS       (22)
 #define DMA_VEND            (DMA_VSTART + (1ull << DMA_SIZE_BITS))
 
+/* Address where memory used as SOS physical frames.
+ * Do not use the address range between FRAME_VSTART and FRAME_VEND */
+#define FRAME_VSTART        (0x20000000)
+#define FRAME_SIZE_BITS     (30)
+#define FRAME_VEND          (FRAME_VSTART + (1ull << FRAME_SIZE_BITS))
+
 /* From this address onwards is where any devices will get mapped in
  * by the map_device function. You should not use any addresses beyond
  * here without first modifying map_device */
