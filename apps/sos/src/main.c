@@ -22,6 +22,7 @@
 #include <clock/clock.h>
 
 #include "network.h"
+#include "frametable.h"
 #include <device/elf.h>
 #include <device/mapping.h>
 
@@ -567,19 +568,19 @@ int main(void) {
 
     dprintf(0, "\ninit timer ...\n");
     /* Initialise and start the clock driver */
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
-
     dprintf(0, "\nafter init timer\n");
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
-
-
-    setup_timers();
 
     /* Start the user application */
 //    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     test_mutex();
+
+    frame_init();
+
+    run_frame_tests();
+
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
