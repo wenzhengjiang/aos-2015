@@ -617,7 +617,7 @@ static void frame_test_3(void) {
 
 void test_frametable(void) {
     frame_test_1();
-    frame_test_2();
+ //   frame_test_2();
     frame_test_3();
 }
 /*
