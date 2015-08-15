@@ -557,6 +557,69 @@ static void test_mutex(void){
     printf("PASSED\n");
 }
 
+static void frame_test_1(void) {
+    int i;
+    printf("Starting test 1\n");
+    /* Allocate 10 pages and make sure you can touch them all */
+    for (i = 0; i < 10; i++) {
+        /* Allocate a page */
+        seL4_Word vaddr;
+        frame_alloc(&vaddr);
+        assert(vaddr);
+
+        /* Test you can touch the page */
+        *((unsigned*)vaddr) = 0x37;
+        assert(*((unsigned*)vaddr) == 0x37);
+
+        printf("Page #%d allocated at %p\n",  i, (void *)vaddr);
+    }
+    printf("Test 1 complete\n");
+}
+
+static void frame_test_2(void) {
+    printf("Starting test 2\n");
+    /* Test that you eventually run out of memory gracefully, and doesn't crash */
+    for (;;) {
+        /* Allocate a page */
+        seL4_Word vaddr;
+        frame_alloc(&vaddr);
+        if (!vaddr) {
+            printf("Out of memory!\n");
+            break;
+        }
+
+        /* Test you can touch the page */
+        *((unsigned*)vaddr) = 0x37;
+        assert(*((unsigned*)vaddr) == 0x37);
+    }
+    printf("Test 2 complete\n");
+}
+
+static void frame_test_3(void) {
+    printf("Starting test 3\n");
+    /* Test that you never run out of memory if you always free frames. This loop should never finish */
+    for (int i = 0;; i++) {
+        /* Allocate a page */
+        seL4_Word vaddr;
+        seL4_Word page =  (seL4_Word)frame_alloc(&vaddr);
+        assert(vaddr != 0);
+
+        /* Test you can touch the page */
+        *((unsigned*)vaddr) = 0x37;
+        assert(*((unsigned*)vaddr) == 0x37);
+
+        printf("Page #%d allocated at %p\n",  i, vaddr);
+        assert(page > 0);
+        frame_free(page);
+    }
+    printf("Test 3 complete\n");
+}
+
+void test_frametable(void) {
+    frame_test_1();
+    frame_test_2();
+    frame_test_3();
+}
 /*
  * Main entry point - called by crt.
  */

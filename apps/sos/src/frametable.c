@@ -12,17 +12,14 @@
 
 #define verbose 5
 #define FRAME_REGION_SIZE   (1ull << FRAME_SIZE_BITS)
-#define NFRAMES             (FRAME_REGION_SIZE) / PAGE_SIZE
 #define FADDR_TO_VADDR(faddr) (faddr + FRAME_VSTART)
 #define VADDR_TO_FADDR(vaddr) (vaddr - FRAME_VSTART)
-#define FADDR_TO_IDX(faddr) (faddr >> 4)
 
 int nframes;
 
 struct frame_entry {
     seL4_CPtr cap;
     struct frame_entry * next_free;
-    int ref_count;
     seL4_Word paddr;
 };
 
@@ -37,19 +34,13 @@ static void set_num_frames(void) {
     nframes = (high - low) / PAGE_SIZE;
 }
 
-/**
- * Allocate a new frame
- * @param vaddr Pointer to the location the pointer will be provided
- * @return index of the frame in the table (faddr)
- */
-seL4_Word frame_alloc(seL4_Word *vaddr) {
+static int frame_map_page(int idx) {
     assert(frame_table);
+    assert(idx >= 0 && idx < nframes);
     // alloc a physical page
     seL4_Word paddr = ut_alloc(seL4_PageBits);
     if (paddr == 0) {
-        ERR("Out of memory\n");
-        *vaddr = 0;
-        return 0;
+        return ENOMEM;
     }
     seL4_CPtr cap;
     // retype it
@@ -62,26 +53,20 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     if (cerr != seL4_NoError) {
         ERR("Unable to retype address\n");
         ut_free(paddr, seL4_PageBits);
-        *vaddr = 0;
-        return 0;
+        return EINVAL;
     }
-    seL4_Word new_vaddr = VADDR_TO_FADDR((seL4_Word)free_list) * PAGE_SIZE;
-    int err = map_page(cap, seL4_CapInitThreadPD, new_vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
         ut_free(paddr, seL4_PageBits);
         cspace_delete_cap(cur_cspace, cap);
-        *vaddr = 0;
-        return 0;
+        return EINVAL;
     }
-    frame_entry_t *alloc_page = free_list;
-    alloc_page->cap = cap;
-    alloc_page->paddr = paddr;
-    free_list = free_list->next_free;
-    alloc_page->next_free = NULL;
-    *vaddr = new_vaddr;
-    seL4_Word faddr = FADDR_TO_IDX(VADDR_TO_FADDR((seL4_Word)alloc_page));
-     return faddr;
+    frame_table[idx].cap = cap; 
+    frame_table[idx].paddr = paddr;
+
+    return 0;
 }
 
 /**
@@ -90,99 +75,70 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
 void frame_init(void) {
     set_num_frames();
     size_t frametable_sz = nframes * sizeof(frame_entry_t);
-    seL4_Word discard;
     // allocate memory for storing frametable itself
     frame_table = (frame_entry_t *)FADDR_TO_VADDR(0);
     size_t i = 0;
     for (i = 0; i*PAGE_SIZE < frametable_sz; i++) {
-        frame_alloc(&discard);
-        assert(discard);
+        assert(frame_map_page(i) == 0);
         frame_table[i].next_free = NULL;
+    }
+    // Init next_free list
+    assert(i > 0 && i < nframes);
+    free_list = &frame_table[i];
+    for (; i < nframes; i++) {
+        if (i < nframes-1)
+            frame_table[i].next_free = &frame_table[i+1];
+        else 
+            frame_table[i].next_free = NULL;
     }
 }
 
 /**
+ * Allocate a new frame
+ * @param vaddr Pointer to the location the pointer will be provided
+ * @return index of the frame in the table (faddr); 0 if failed to allocate
+ */
+seL4_Word frame_alloc(seL4_Word *vaddr) {
+    assert(frame_table);
+    if (!vaddr) {
+        ERR("frame_alloc: passed null pointer\n");
+        return 0;
+    }
+    if (!free_list) {
+        *vaddr = 0;
+        return 0;
+    }
+    frame_entry_t * new_frame = free_list;
+    free_list = free_list->next_free;
+    int idx = (new_frame-frame_table);
+    int err = frame_map_page(idx);
+    if (err) {
+        *vaddr = 0;
+        return 0;
+    }
+    new_frame->next_free = NULL;
+    *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    return idx + 1;
+}
+/**
  * Free the frame
  * @param faddr Index of the frame to be removed
  */
-void frame_free(seL4_Word faddr) {
+int frame_free(seL4_Word idx) {
     assert(frame_table);
-    if (faddr < 0 || faddr > nframes) {
+    if (idx <= 0 || idx > nframes) {
         ERR("frame_free: illegal faddr received\n");
-        return;
+        return EINVAL;
     }
-    frame_entry_t *cur_frame = &frame_table[faddr];
+    frame_entry_t *cur_frame = &frame_table[idx-1];
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
         ERR("frame_free: failed to delete CAP\n");
-        return;
+        return EINVAL;
     }
     ut_free(cur_frame->paddr, seL4_PageBits);
     cur_frame->next_free = free_list;
     free_list = cur_frame;
-}
-
-static void frame_test_1(void) {
-    int i;
-    printf("Starting test 1\n");
-    /* Allocate 10 pages and make sure you can touch them all */
-    for (i = 0; i < 10; i++) {
-        /* Allocate a page */
-        seL4_Word vaddr;
-        frame_alloc(&vaddr);
-        assert(vaddr);
-
-        /* Test you can touch the page */
-        *((unsigned*)vaddr) = 0x37;
-        assert(*((unsigned*)vaddr) == 0x37);
-
-        printf("Page #%d allocated at %p\n",  i, (void *)vaddr);
-    }
-    printf("Test 1 complete\n");
-}
-
-static void frame_test_2(void) {
-    printf("Starting test 2\n");
-    /* Test that you eventually run out of memory gracefully, and doesn't crash */
-    for (;;) {
-        /* Allocate a page */
-        seL4_Word vaddr;
-        frame_alloc(&vaddr);
-        if (!vaddr) {
-            printf("Out of memory!\n");
-            break;
-        }
-
-        /* Test you can touch the page */
-        *((unsigned*)vaddr) = 0x37;
-        assert(*((unsigned*)vaddr) == 0x37);
-    }
-    printf("Test 2 complete\n");
-}
-
-static void frame_test_3(void) {
-    printf("Starting test 3\n");
-    /* Test that you never run out of memory if you always free frames. This loop should never finish */
-    for (int i = 0;; i++) {
-        /* Allocate a page */
-        seL4_Word vaddr;
-        seL4_Word page =  (seL4_Word)frame_alloc(&vaddr);
-        assert(vaddr != 0);
-
-        /* Test you can touch the page */
-        *((unsigned*)vaddr) = 0x37;
-        assert(*((unsigned*)vaddr) == 0x37);
-
-        printf("Page #%d allocated at %p\n",  i, vaddr);
-        assert(page > 0);
-        frame_free(page);
-    }
-    printf("Test 3 complete\n");
-}
-
-void test_frametable(void) {
-    frame_test_1();
-    //frame_test_2();
-    frame_test_3();
+    return 0;
 }

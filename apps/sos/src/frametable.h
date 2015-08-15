@@ -3,8 +3,6 @@
 
 int frame_init(void);
 seL4_Word frame_alloc(seL4_Word *vaddr);
-void frame_free(seL4_Word vaddr);
-
-void tests_frametable(void);
+int frame_free(seL4_Word vaddr);
 
 #endif
