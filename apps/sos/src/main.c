@@ -23,7 +23,7 @@
 
 #include "network.h"
 #include "frametable.h"
-#include <device/elf.h>
+#include "elf.h"
 #include <device/mapping.h>
 
 #include <ut/ut.h>

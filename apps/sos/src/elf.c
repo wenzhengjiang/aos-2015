@@ -117,14 +117,15 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         sos_cap = cspace_copy_cap(cur_cspace, cur_cspace, tty_cap, seL4_AllRights);
         conditional_panic(sos_cap == 0, "Failed to copy frame cap");
 
-        /* Map the frame into tty_test address spaces */
-        err = map_page(tty_cap, dest_as, vpage, permissions, 
-                       seL4_ARM_Default_VMAttributes);
-        conditional_panic(err, "Failed to map to tty address space");
         /* Map the frame into sos address spaces */
         err = map_page(sos_cap, seL4_CapInitThreadPD, kvpage, seL4_AllRights, 
                        seL4_ARM_Default_VMAttributes);
         conditional_panic(err, "Failed to map sos address space");
+
+        /* Map the frame into tty_test address spaces */
+        err = map_page(tty_cap, dest_as, vpage, permissions, 
+                       seL4_ARM_Default_VMAttributes);
+        conditional_panic(err, "Failed to map to tty address space");
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
