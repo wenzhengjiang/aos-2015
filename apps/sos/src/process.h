@@ -21,7 +21,7 @@ typedef struct page_directory_entry {
     // cap to in-kernel page table
     seL4_CPtr pt_cap;
     // ptr to page table
-    seL4_CPtr frame_cap[PT_SIZE];
+    seL4_Word faddr[PT_SIZE];
 } sos_pde_t;
 
 typedef struct address_space {
