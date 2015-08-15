@@ -19,14 +19,14 @@ typedef struct region {
 
 typedef struct page_directory_entry {
     // cap to in-kernel page table
-    seL4_CPtr pt_cap;
+    seL4_ARM_PageTable pt_cap;
     // ptr to page table
     seL4_Word faddr[PT_SIZE];
 } sos_pde_t;
 
 typedef struct address_space {
     sos_region_t *regions;
-    seL4_CPtr pd_cap;
+    seL4_ARM_PageDirectory pd;
     sos_pde_t pde[PD_SIZE];
 } sos_addrspace_t;
 
