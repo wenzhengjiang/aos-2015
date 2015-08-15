@@ -578,8 +578,7 @@ int main(void) {
     test_mutex();
 
     frame_init();
-
-    run_frame_tests();
+    test_frametable();
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
