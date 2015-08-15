@@ -15,6 +15,12 @@
 #define FADDR_TO_VADDR(faddr) (faddr + FRAME_VSTART)
 #define VADDR_TO_FADDR(vaddr) (vaddr - FRAME_VSTART)
 
+/* Minimum of two values. */
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
+/* Maximum number of frames which will fit in our region */
+#define MAX_FRAMES ((DEVICE_START - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
+
 int nframes;
 
 struct frame_entry {
@@ -74,7 +80,7 @@ static int frame_map_page(int idx) {
  */
 void frame_init(void) {
     set_num_frames();
-    size_t frametable_sz = nframes * sizeof(frame_entry_t);
+    size_t frametable_sz = MIN(nframes, MAX_FRAMES) * sizeof(frame_entry_t);
     // allocate memory for storing frametable itself
     frame_table = (frame_entry_t *)FADDR_TO_VADDR(0);
     size_t i = 0;
