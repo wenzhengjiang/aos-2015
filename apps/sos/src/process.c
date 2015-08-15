@@ -3,18 +3,122 @@
 #include <sel4/sel4.h>
 #include <stdlib.h>
 #include <device/vmem_layout.h>
-#include "process.h"
 #include <errno.h>
 #include <assert.h>
+#include <ut/ut.h>
+
+#include "process.h"
+#include "frametable.h"
+
+#define verbose 5
+#include <sys/debug.h>
+#include <sys/panic.h>
+
+/* This is the index where a clients syscall enpoint will
+ * be stored in the clients cspace. */
+#define USER_EP_CAP          (1)
+#define TEST_PRIORITY         (0)
+#define TEST_EP_BADGE         (101)
+
+#define PT_MASK (0x000ff000)
 
 sos_proc_t test_proc;
 sos_proc_t *curproc = &test_proc;
+
+static sos_region_t*
+_lookup_region(sos_proc_t *proc, seL4_Word vaddr) {
+    sos_region_t *region = proc->vspace.regions;
+    while (region && vaddr >= region->start && vaddr <= region->end) {
+        region = region->next;
+    }
+    return region;
+}
+
+static int
+_proc_map_pagetable(seL4_ARM_PageDirectory pd, sos_pde_t *pt, seL4_Word vaddr) {
+    seL4_Word pt_addr;
+    int err;
+
+    /* Allocate a PT object */
+    pt_addr = ut_alloc(seL4_PageTableBits);
+    if(pt_addr == 0){
+        ERR("PT ut_alloc failed\n");
+        return !0;
+    }
+    /* Create the frame cap */
+    err =  cspace_ut_retype_addr(pt_addr,
+                                 seL4_ARM_PageTableObject,
+                                 seL4_PageTableBits,
+                                 cur_cspace,
+                                 &pt->pt_cap);
+    if(err){
+        ERR("retype failed\n");
+        return !0;
+    }
+    /* Tell seL4 to map the PT in for us */
+    err = seL4_ARM_PageTable_Map(pt->pt_cap,
+                                 pd,
+                                 vaddr,
+                                 seL4_ARM_Default_VMAttributes);
+    if (err) {
+        ERR("Mapping PT failed\n");
+    }
+    return err;
+}
+
+int
+process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
+    int err = 0;
+    assert(proc);
+    assert(vaddr);
+    // Lookup the permissions of the given vaddr
+    sos_region_t *region = _lookup_region(proc, vaddr);
+    if (region == NULL) {
+        WARN("No Region found for %u\n", vaddr);
+        return EFAULT;
+    }
+
+    // Create a frame
+    seL4_Word faddr = frame_alloc(&vaddr);
+    if (faddr == 0) {
+        WARN("Frame alloc failed\n");
+        return ENOMEM;
+    }
+
+    seL4_CPtr fc = frame_cap(faddr);
+    // Copy the cap into the process' cspace
+    seL4_CPtr proc_fc = cspace_copy_cap(proc->cspace, cur_cspace, fc, region->perms);
+
+    // Get the PDE using the upper 12-bits for PT
+    seL4_Word pd_idx = (vaddr >> 20);
+    sos_pde_t *pde = &proc->vspace.pde[pd_idx];
+
+    if (pde->pt_cap == seL4_CapNull) {
+        seL4_Word pt_addr = ut_alloc(seL4_PageBits);
+        conditional_panic(!pt_addr, "No memory for new PT");
+        err =  cspace_ut_retype_addr(pt_addr,
+                                     seL4_ARM_SmallPageObject,
+                                     seL4_PageBits,
+                                     cur_cspace,
+                                     &pde->pt_cap);
+        conditional_panic(err, "Failed to create PT");
+        seL4_ARM_Page_Map(proc_fc, proc->vspace.pd, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+        pde->pt = (void*)pt_addr;
+    }
+
+    seL4_Word pt_idx = ((vaddr & PT_MASK) >> 12);
+    assert(PT_MASK == 0b00000000000011111111000000000000);
+    printf("pt_idx: %u\n", pt_idx);
+    pde->pt[pt_idx] = faddr;
+
+    return err;
+}
 
 /**
  * Create a region for the stack
  * @return pointer to the new stack region
  */
-static sos_region_t* init_stack(void) {
+static sos_region_t* init_stack_region(void) {
     sos_region_t* region;
     region = (sos_region_t*)malloc(sizeof(sos_region_t));
     if (region == NULL) {
@@ -30,7 +134,7 @@ static sos_region_t* init_stack(void) {
  * Create a region for the IPC buffer
  * @return pointer to the new IPC Buffer region
  */
-static sos_region_t* init_ipc_buf(void) {
+static sos_region_t* init_ipc_buf_region(void) {
     sos_region_t* region;
     region = (sos_region_t*)malloc(sizeof(sos_region_t));
     if (region == NULL) {
@@ -48,26 +152,117 @@ static sos_region_t* init_ipc_buf(void) {
  * Create statically positioned regions
  * @return error code or 0 for success
  */
-static int init_regions(void) {
-    sos_region_t* ipc_buf = init_ipc_buf();
-    sos_region_t* stack = init_stack();
-    if (stack || ipc_buf == NULL) {
+static int init_regions(sos_proc_t *proc) {
+    sos_region_t* ipc_buf = init_ipc_buf_region();
+    sos_region_t* stack = init_stack_region();
+    if (stack == NULL || ipc_buf == NULL) {
         return ENOMEM;
     }
     ipc_buf->next = stack;
-    curproc->vspace.regions = ipc_buf;
+    proc->vspace.regions = ipc_buf;
+    printf("Default regions initialised\n");
     return 0;
+}
+
+static void init_cspace(sos_proc_t *proc) {
+    /* Create a simple 1 level CSpace */
+    proc->cspace = cspace_create(1);
+    assert(proc->cspace != NULL);
+    printf("CSpace initialised\n");
+}
+
+static void init_vspace(sos_proc_t *proc) {
+    int err;
+    proc->vspace.pd_addr = ut_alloc(seL4_PageDirBits);
+    conditional_panic(!proc->vspace.pd_addr,
+                      "No memory for new Page Directory");
+    err = cspace_ut_retype_addr(proc->vspace.pd_addr,
+                                seL4_ARM_PageDirectoryObject,
+                                seL4_PageDirBits,
+                                cur_cspace,
+                                &proc->vspace.pd_addr);
+    conditional_panic(err, "Failed to allocate page directory cap for client");
+    printf("VSpace initialised\n");
+}
+
+static seL4_Word _lookup_faddr(sos_proc_t *proc, seL4_Word vaddr) {
+    seL4_Word pd_idx = (vaddr >> 20);
+    sos_pde_t pde = proc->vspace.pde[pd_idx];
+
+    // If the PT hasn't been created, set it up now.
+    if (pde.pt == NULL) {
+        return 0;
+    }
+
+    seL4_Word pt_idx = (vaddr & PT_MASK);
+    assert(PT_MASK == 0b00000000000011111111000000000000);
+    return pde.pt[pt_idx];
+}
+
+static void init_tcb(sos_proc_t *proc, seL4_CPtr user_ep_cap) {
+    int err;
+    printf("TCP Starting...\n");
+    seL4_Word ipc_faddr = _lookup_faddr(proc, PROCESS_IPC_BUFFER);
+    printf("PROCESS_IPC_BUFFER: %u => faddr: %u\n", PROCESS_IPC_BUFFER, ipc_faddr);
+    seL4_CPtr ipc_buffer_cap = frame_cap(ipc_faddr);
+    assert(ipc_buffer_cap != seL4_CapNull);
+
+    /* Create a new TCB object */
+    proc->tcb_addr = ut_alloc(seL4_TCBBits);
+    conditional_panic(!proc->tcb_addr, "No memory for new TCB");
+    err =  cspace_ut_retype_addr(proc->tcb_addr,
+                                 seL4_TCBObject,
+                                 seL4_TCBBits,
+                                 cur_cspace,
+                                 &proc->tcb_cap);
+    conditional_panic(err, "Failed to create TCB");
+
+    /* Configure the TCB */
+    err = seL4_TCB_Configure(proc->tcb_cap, user_ep_cap, TEST_PRIORITY,
+                             proc->cspace->root_cnode, seL4_NilData,
+                             proc->vspace.pd_addr, seL4_NilData, PROCESS_IPC_BUFFER,
+                             ipc_buffer_cap);
+    conditional_panic(err, "Unable to configure new TCB");
+    printf("TCB initialised\n");
+}
+
+/**
+ * Initialise the endpoint
+ */
+static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
+    seL4_CPtr user_ep_cap;
+
+    /* Copy the fault endpoint to the user app to enable IPC */
+    user_ep_cap = cspace_mint_cap(proc->cspace,
+                                  cur_cspace,
+                                  fault_ep,
+                                  seL4_AllRights,
+                                  seL4_CapData_Badge_new(TEST_EP_BADGE));
+    /* should be the first slot in the space, hack I know */
+    assert(user_ep_cap == 1);
+    assert(user_ep_cap == USER_EP_CAP);
+    printf("EP initialised\n");
+    return user_ep_cap;
 }
 
 /**
  * Create a new process
  * @return error code or 0 for success
  */
-int init_process(void) {
+int process_create(seL4_CPtr fault_ep) {
     int err;
-    err = init_regions();
+    seL4_CPtr user_ep_cap;
+    err = init_regions(curproc);
     if (err) {
+        WARN("CREATING REGIONS FAILED\n");
         return err;
     }
+    init_vspace(curproc);
+    init_cspace(curproc);
+    user_ep_cap = init_ep(curproc, fault_ep);
+    process_map_page(curproc, PROCESS_IPC_BUFFER);
+    init_tcb(curproc, user_ep_cap);
+    process_map_page(curproc, PROCESS_STACK_TOP - (1 << seL4_PageBits));
+    printf("Process created\n");
     return 0;
 }

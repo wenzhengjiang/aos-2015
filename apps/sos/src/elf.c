@@ -14,7 +14,7 @@
 #include <assert.h>
 #include <cspace/cspace.h>
 
-#include <device/elf.h>
+#include "elf.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>

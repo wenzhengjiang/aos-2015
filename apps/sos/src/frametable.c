@@ -148,3 +148,16 @@ int frame_free(seL4_Word idx) {
     free_list = cur_frame;
     return 0;
 }
+
+/**
+ * Retrieve the cap corresponding to a frame
+ */
+seL4_CPtr frame_cap(seL4_Word idx) {
+    assert(frame_table);
+    if (idx <= 0 || idx > nframes) {
+        ERR("frame_free: illegal faddr received\n");
+        return EINVAL;
+    }
+    frame_entry_t *cur_frame = &frame_table[idx-1];
+    return cur_frame->cap;
+}
