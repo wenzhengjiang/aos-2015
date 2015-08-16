@@ -22,10 +22,12 @@ typedef struct region {
 } sos_region_t;
 
 typedef struct page_directory_entry {
+    seL4_ARM_PageTable sos_pt_cap;
     // cap to in-kernel page table
     seL4_ARM_PageTable pt_cap;
     // ptr to page table
-    seL4_Word *pt;
+    // TODO: This should NOT be statically allocated
+    seL4_Word pt[PT_SIZE];
 } sos_pde_t;
 
 typedef struct address_space {
@@ -37,6 +39,8 @@ typedef struct address_space {
 
 typedef struct process {
     sos_addrspace_t vspace;
+    seL4_Word ipc_buf_addr;
+    seL4_CPtr ipc_buf_cap;
     seL4_Word tcb_addr;
     seL4_TCB tcb_cap;
     cspace_t *cspace;
@@ -44,5 +48,6 @@ typedef struct process {
 
 
 int process_create(seL4_CPtr fault_ep);
+int process_map_page(sos_proc_t *proc, seL4_Word vaddr);
 
 #endif

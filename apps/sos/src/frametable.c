@@ -1,7 +1,6 @@
 #include <sel4/sel4.h>
 #include <device/mapping.h>
 #include <device/vmem_layout.h>
-#include <sync/mutex.h>
 #include <cspace/cspace.h>
 #include <limits.h>
 #include <ut/ut.h>
@@ -155,7 +154,7 @@ int frame_free(seL4_Word idx) {
 seL4_CPtr frame_cap(seL4_Word idx) {
     assert(frame_table);
     if (idx <= 0 || idx > nframes) {
-        ERR("frame_free: illegal faddr received\n");
+        ERR("frame_cap: illegal faddr received\n");
         return EINVAL;
     }
     frame_entry_t *cur_frame = &frame_table[idx-1];

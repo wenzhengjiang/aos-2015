@@ -15,6 +15,7 @@
 #include <cspace/cspace.h>
 
 #include "elf.h"
+#include "process.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>
@@ -32,7 +33,7 @@
 #define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
 #define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
-
+extern sos_proc_t *curproc;
 extern seL4_ARM_PageDirectory dest_as;
 
 /*
@@ -123,8 +124,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         conditional_panic(err, "Failed to map sos address space");
 
         /* Map the frame into tty_test address spaces */
-        err = map_page(tty_cap, dest_as, vpage, permissions, 
-                       seL4_ARM_Default_VMAttributes);
+        err = process_map_page(curproc, vpage);
         conditional_panic(err, "Failed to map to tty address space");
 
         /* Now copy our data into the destination vspace. */
