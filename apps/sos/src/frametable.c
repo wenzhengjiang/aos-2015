@@ -39,7 +39,7 @@ static void set_num_frames(void) {
     nframes = (high - low) / PAGE_SIZE;
 }
 
-static int frame_map_page(int idx) {
+static int frame_map_page(int idx, bool map) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
     // alloc a physical page
@@ -60,13 +60,15 @@ static int frame_map_page(int idx) {
         ut_free(paddr, seL4_PageBits);
         return EINVAL;
     }
-    seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-    int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    if (err) {
-        ERR("Unable to map page\n");
-        ut_free(paddr, seL4_PageBits);
-        cspace_delete_cap(cur_cspace, cap);
-        return EINVAL;
+    if (map == true) {
+        seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+        int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+        if (err) {
+            ERR("Unable to map page\n");
+            ut_free(paddr, seL4_PageBits);
+            cspace_delete_cap(cur_cspace, cap);
+            return EINVAL;
+        }
     }
     frame_table[idx].cap = cap; 
     frame_table[idx].paddr = paddr;
@@ -84,7 +86,7 @@ void frame_init(void) {
     frame_table = (frame_entry_t *)FADDR_TO_VADDR(0);
     size_t i = 0;
     for (i = 0; i*PAGE_SIZE < frametable_sz; i++) {
-        assert(frame_map_page(i) == 0);
+        assert(frame_map_page(i, true) == 0);
         frame_table[i].next_free = NULL;
     }
     // Init next_free list
@@ -116,7 +118,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     frame_entry_t * new_frame = free_list;
     free_list = free_list->next_free;
     int idx = (new_frame-frame_table);
-    int err = frame_map_page(idx);
+    int err = frame_map_page(idx, false);
     if (err) {
         *vaddr = 0;
         return 0;

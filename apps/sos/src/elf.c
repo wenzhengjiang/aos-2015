@@ -105,23 +105,25 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         kvpage = PAGE_ALIGN(kdst);
 
         /* First we need to create a frame */
-        paddr = ut_alloc(seL4_PageBits);
-        conditional_panic(!paddr, "Out of memory - could not allocate frame");
-        err = cspace_ut_retype_addr(paddr,
-                                    seL4_ARM_SmallPageObject,
-                                    seL4_PageBits,
-                                    cur_cspace,
-                                    &tty_cap);
-        conditional_panic(err, "Failed to retype to a frame object");
+        //paddr = ut_alloc(seL4_PageBits);
+        //conditional_panic(!paddr, "Out of memory - could not allocate frame");
+        //err = cspace_ut_retype_addr(paddr,
+        //                            seL4_ARM_SmallPageObject,
+        //                            seL4_PageBits,
+        //                            cur_cspace,
+        //                            &tty_cap);
+        //conditional_panic(err, "Failed to retype to a frame object");
 
         /* Copy the frame cap as we need to map it into 2 address spaces */
-        sos_cap = cspace_copy_cap(cur_cspace, cur_cspace, tty_cap, seL4_AllRights);
-        conditional_panic(sos_cap == 0, "Failed to copy frame cap");
+        //sos_cap = cspace_copy_cap(cur_cspace, cur_cspace, tty_cap, seL4_AllRights);
+        //conditional_panic(sos_cap == 0, "Failed to copy frame cap");
 
         /* Map the frame into sos address spaces */
-        err = map_page(sos_cap, seL4_CapInitThreadPD, kvpage, seL4_AllRights, 
-                       seL4_ARM_Default_VMAttributes);
-        conditional_panic(err, "Failed to map sos address space");
+        //err = map_page(sos_cap, seL4_CapInitThreadPD, kvpage, seL4_AllRights, 
+        //               seL4_ARM_Default_VMAttributes);
+        //conditional_panic(err, "Failed to map sos address space");
+        //err = map_page(sos_cap, pd, vpage, seL4_AllRights, 
+        //               seL4_ARM_Default_VMAttributes);
 
         /* Map the frame into tty_test address spaces */
         err = process_map_page(curproc, vpage);

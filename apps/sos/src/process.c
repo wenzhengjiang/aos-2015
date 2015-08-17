@@ -68,6 +68,15 @@ _proc_map_pagetable(seL4_ARM_PageDirectory pd, sos_pde_t *pt, seL4_Word vaddr) {
     return err;
 }
 
+seL4_Word pt_lookup(sos_proc_t *proc, seL4_Word vaddr) {
+    seL4_Word pd_idx = (vaddr >> 20);
+    sos_pde_t *pde = &proc->vspace.pde[pd_idx];
+    printf("pde: %x\n", (int)pde);
+    seL4_Word pt_idx = ((vaddr & PT_MASK) >> 12);
+    printf("pt_idx: %u\n", pt_idx);
+    return pde->pt[pt_idx];
+}
+
 int
 process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
     int err = 0;
@@ -87,15 +96,16 @@ process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
         WARN("Frame alloc failed\n");
         return ENOMEM;
     }
-
+ 
+    printf("Mapping vaddr: %x\n", vaddr);
+    printf("Mapping vaddr: %u\n", vaddr);
     seL4_CPtr fc = frame_cap(faddr);
     assert(fc != seL4_CapNull);
     // Copy the cap into the process' cspace
-    seL4_CPtr proc_fc = cspace_mint_cap(proc->cspace,
+    seL4_CPtr proc_fc = cspace_copy_cap(cur_cspace,
                                         cur_cspace,
                                         fc,
-                                        seL4_AllRights,
-                                        seL4_CapData_Badge_new(TEST_EP_BADGE));
+                                        seL4_AllRights);
     assert(proc_fc != seL4_CapNull);
     // Get the PDE using the upper 12-bits for PT
     seL4_Word pd_idx = (vaddr >> 20);
@@ -119,7 +129,6 @@ process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
     }
     // TODO: Map in proc_fc
     seL4_Word pt_idx = ((vaddr & PT_MASK) >> 12);
-    assert(PT_MASK == 0b00000000000011111111000000000000);
     printf("pt_idx: %u\n", pt_idx);
     pde->pt[pt_idx] = faddr;
 
@@ -201,12 +210,7 @@ static seL4_Word _lookup_faddr(sos_proc_t *proc, seL4_Word vaddr) {
     seL4_Word pd_idx = (vaddr >> 20);
     sos_pde_t pde = proc->vspace.pde[pd_idx];
 
-    if (((seL4_Word*)pde.pt) == NULL) {
-        return 0;
-    }
-
     seL4_Word pt_idx = ((vaddr & PT_MASK) >> 12);
-    assert(PT_MASK == 0b00000000000011111111000000000000);
     printf("lookup idx: for %x => %u\n", vaddr, pt_idx);
     return ((seL4_Word*)pde.pt)[pt_idx];
 }

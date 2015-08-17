@@ -195,6 +195,10 @@ void syscall_loop(seL4_CPtr ep) {
                 printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
+            seL4_Word page = pt_lookup(cur_proc, vaddr);
+            seL4_CPtr cap = frame_cap(page);
+            map_page(cap, curproc->vspace.pd, vaddr, rights, attributes);
+
             /* Page fault */
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
