@@ -113,17 +113,15 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         //                            cur_cspace,
         //                            &tty_cap);
         //conditional_panic(err, "Failed to retype to a frame object");
-
-        /* Copy the frame cap as we need to map it into 2 address spaces */
+        ////
+        /////* Copy the frame cap as we need to map it into 2 address spaces */
         //sos_cap = cspace_copy_cap(cur_cspace, cur_cspace, tty_cap, seL4_AllRights);
         //conditional_panic(sos_cap == 0, "Failed to copy frame cap");
-
-        /* Map the frame into sos address spaces */
+        ////
+        /////* Map the frame into sos address spaces */
         //err = map_page(sos_cap, seL4_CapInitThreadPD, kvpage, seL4_AllRights, 
         //               seL4_ARM_Default_VMAttributes);
         //conditional_panic(err, "Failed to map sos address space");
-        //err = map_page(sos_cap, pd, vpage, seL4_AllRights, 
-        //               seL4_ARM_Default_VMAttributes);
 
         /* Map the frame into tty_test address spaces */
         err = process_map_page(curproc, vpage);
@@ -136,7 +134,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         }
 
         /* Not observable to I-cache yet so flush the frame */
-        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
+        //seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
         pos += nbytes;
         dst += nbytes;
