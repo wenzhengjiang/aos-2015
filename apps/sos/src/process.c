@@ -78,7 +78,7 @@ seL4_Word pt_lookup(sos_proc_t *proc, seL4_Word vaddr) {
 }
 
 int
-process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
+process_map_page(sos_proc_t *proc, seL4_Word vaddr, seL4_Word* sos_vaddr) {
     int err = 0;
     assert(proc);
     assert(vaddr);
@@ -92,6 +92,7 @@ process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
     // Create a frame
     seL4_Word temp_vaddr = vaddr;
     seL4_Word faddr = frame_alloc(&temp_vaddr);
+    *sos_vaddr = temp_vaddr;
     if (faddr == 0) {
         WARN("Frame alloc failed\n");
         return ENOMEM;
@@ -131,7 +132,7 @@ process_map_page(sos_proc_t *proc, seL4_Word vaddr) {
     seL4_Word pt_idx = ((vaddr & PT_MASK) >> 12);
     printf("pt_idx: %u\n", pt_idx);
     pde->pt[pt_idx] = faddr;
-
+    printf("DONE\n");
     return err;
 }
 
@@ -285,6 +286,7 @@ static void ipc_map_buf(sos_proc_t *proc) {
 int process_create(seL4_CPtr fault_ep) {
     int err;
     seL4_CPtr user_ep_cap;
+    seL4_Word temp;
     err = init_regions(curproc);
     if (err) {
         WARN("CREATING REGIONS FAILED\n");
@@ -295,7 +297,7 @@ int process_create(seL4_CPtr fault_ep) {
     init_ipc_buf(curproc);
     user_ep_cap = init_ep(curproc, fault_ep);
     init_tcb(curproc, user_ep_cap);
-    process_map_page(curproc, PROCESS_STACK_TOP - (1 << seL4_PageBits));
+    process_map_page(curproc, PROCESS_STACK_TOP - (1 << seL4_PageBits), &temp);
     ipc_map_buf(curproc);
     printf("Process created\n");
     return 0;

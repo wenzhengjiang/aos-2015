@@ -48,7 +48,7 @@ typedef struct process {
 
 
 int process_create(seL4_CPtr fault_ep);
-int process_map_page(sos_proc_t *proc, seL4_Word vaddr);
+int process_map_page(sos_proc_t *proc, seL4_Word vaddr, seL4_Word *fidx);
 seL4_Word pt_lookup(sos_proc_t *proc, seL4_Word vaddr);
 
 #endif
