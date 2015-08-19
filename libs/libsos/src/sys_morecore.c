@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
+#include <addrspace.h>
 
 /*
  * Statically allocated morecore area.
@@ -40,11 +41,13 @@ sys_brk(va_list ap)
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
 
+    addrspace_t* as = proc_as();
+    assert(as);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {
-        ret = morecore_base;
-    } else if (newbrk < morecore_top && newbrk > (uintptr_t)&morecore_area[0]) {
-        ret = morecore_base = newbrk;
+        ret = as->heap->end;;
+    } else if (newbrk < as->stack->start && newbrk > as->heap->start) {
+        ret = as->heap->end = newbrk;
     } else {
         ret = 0;
     }
