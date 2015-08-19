@@ -67,6 +67,42 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
+bool is_read_fault(seL4_Word faulttype)
+{
+    return (faulttype & (1 << 11)) == 0;
+}
+
+sos_region_t* region_probe(addrspace_t as, seL4_Word addr) {
+    assert(as->regions);
+    for (int i = 0; i < as->nregions; i++) {
+        if (addr >= as->regions[i].start && addr < as->regions[i].end)
+            return &(as->regions[i]);
+    }
+    return NULL;
+}
+
+int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
+    addrspace_t *as = proc_getas();
+    if (as == NULL) {
+        return EFAULT;
+    }
+
+    sos_region_t* reg = region_probe(as, faultaddr);
+    if (!reg) return EFAULT;
+    if(reg != NULL){
+        if (is_read_fault(faulttype) && !PERM_READ(reg->perm)) {
+            return EACCES;
+        }
+        if (!is_read_fault && !PERM_WRITE(reg->perm)) {
+            return EACCES;
+        }
+        int err = as_map_page(as, faultaddr, reg->perm);  //TODO not sure whether the interface is right.
+        if (err) {
+            return err;
+        }
+    }
+    return 0;
+}
 
 /**
  * NFS mount point
@@ -154,23 +190,23 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
     /* Process system call */
     switch (syscall_number) {
-    case SOS_SYSCALL0:
-        dprintf(0, "syscall: thread made syscall 0!\n");
+        case SOS_SYSCALL0:
+            dprintf(0, "syscall: thread made syscall 0!\n");
 
-        reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, 0);
-        seL4_Send(reply_cap, reply);
-        break;
-    case SOS_SYSCALL_PRINT:
-        reply_msg = syscall_print(num_args);
-        reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, 0);
-        seL4_SetMR(1, reply_msg);
-        seL4_Send(reply_cap, reply);
-        break;
-    default:
-        printf("Unknown syscall %d\n", syscall_number);
-        /* we don't want to reply to an unknown syscall */
+            reply = seL4_MessageInfo_new(0, 0, 0, 1);
+            seL4_SetMR(0, 0);
+            seL4_Send(reply_cap, reply);
+            break;
+        case SOS_SYSCALL_PRINT:
+            reply_msg = syscall_print(num_args);
+            reply = seL4_MessageInfo_new(0, 0, 0, 1);
+            seL4_SetMR(0, 0);
+            seL4_SetMR(1, reply_msg);
+            seL4_Send(reply_cap, reply);
+            break;
+        default:
+            printf("Unknown syscall %d\n", syscall_number);
+            /* we don't want to reply to an unknown syscall */
 
     }
     /* Free the saved reply cap */
@@ -200,8 +236,16 @@ void syscall_loop(seL4_CPtr ep) {
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-
-            assert(!"Unable to handle vm faults");
+            int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
+            if (err) {
+                dprintf(0, "vm_fault couldn't be handled, process is killed\n");
+            } else {
+                seL4_CPtr reply_cap = cspace_save_reply_cap(cur_cspace);
+                assert(reply_cap != CSPACE_NULL);
+                seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+                seL4_Send(reply_cap, reply);
+            }
+            //assert(!"Unable to handle vm faults");
         }else if(label == seL4_NoFault) {
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
@@ -228,11 +272,11 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"Type              Start      End\n");
     dprintf(1,"Empty             0x%08x 0x%08x\n", info->empty.start, info->empty.end);
     dprintf(1,"Shared frames     0x%08x 0x%08x\n", info->sharedFrames.start, 
-                                                   info->sharedFrames.end);
+            info->sharedFrames.end);
     dprintf(1,"User image frames 0x%08x 0x%08x\n", info->userImageFrames.start, 
-                                                   info->userImageFrames.end);
+            info->userImageFrames.end);
     dprintf(1,"User image PTs    0x%08x 0x%08x\n", info->userImagePTs.start, 
-                                                   info->userImagePTs.end);
+            info->userImagePTs.end);
     dprintf(1,"Untypeds          0x%08x 0x%08x\n", info->untyped.start, info->untyped.end);
 
     /* Untyped details */
@@ -240,8 +284,8 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"Untyped Slot       Paddr      Bits\n");
     for (i = 0; i < info->untyped.end-info->untyped.start; i++) {
         dprintf(1,"%3d     0x%08x 0x%08x %d\n", i, info->untyped.start + i,
-                                                   info->untypedPaddrList[i],
-                                                   info->untypedSizeBitsList[i]);
+                info->untypedPaddrList[i],
+                info->untypedSizeBitsList[i]);
     }
 
     /* Device untyped details */
@@ -249,8 +293,8 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"Untyped Slot       Paddr      Bits\n");
     for (i = 0; i < info->deviceUntyped.end-info->deviceUntyped.start; i++) {
         dprintf(1,"%3d     0x%08x 0x%08x %d\n", i, info->deviceUntyped.start + i,
-                                                   info->untypedPaddrList[i + (info->untyped.end - info->untyped.start)],
-                                                   info->untypedSizeBitsList[i + (info->untyped.end-info->untyped.start)]);
+                info->untypedPaddrList[i + (info->untyped.end - info->untyped.start)],
+                info->untypedSizeBitsList[i + (info->untyped.end-info->untyped.start)]);
     }
 
     dprintf(1,"-----------------------------------------\n\n");
@@ -319,10 +363,10 @@ static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     aep_addr = ut_alloc(seL4_EndpointBits);
     conditional_panic(!aep_addr, "No memory for async endpoint");
     err = cspace_ut_retype_addr(aep_addr,
-                                seL4_AsyncEndpointObject,
-                                seL4_EndpointBits,
-                                cur_cspace,
-                                async_ep);
+            seL4_AsyncEndpointObject,
+            seL4_EndpointBits,
+            cur_cspace,
+            async_ep);
     conditional_panic(err, "Failed to allocate c-slot for Interrupt endpoint");
 
     /* Bind the Async endpoint to our TCB */
@@ -333,10 +377,10 @@ static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     ep_addr = ut_alloc(seL4_EndpointBits);
     conditional_panic(!ep_addr, "No memory for endpoint");
     err = cspace_ut_retype_addr(ep_addr, 
-                                seL4_EndpointObject,
-                                seL4_EndpointBits,
-                                cur_cspace,
-                                ipc_ep);
+            seL4_EndpointObject,
+            seL4_EndpointBits,
+            cur_cspace,
+            ipc_ep);
     conditional_panic(err, "Failed to allocate c-slot for IPC endpoint");
 }
 
@@ -368,7 +412,7 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 
     /* Initialise the cspace manager */
     err = cspace_root_task_bootstrap(ut_alloc, ut_free, ut_translate,
-                                     malloc, free);
+            malloc, free);
     conditional_panic(err, "Failed to initialise the c space\n");
 
     /* Initialise DMA memory */
@@ -391,10 +435,10 @@ void* sync_new_ep(seL4_CPtr* ep, int badge) {
     seL4_Word aep_addr = ut_alloc(seL4_EndpointBits);
     conditional_panic(!aep_addr, "No memory for mutex async endpoint");
     int err = cspace_ut_retype_addr(aep_addr,
-                                seL4_AsyncEndpointObject,
-                                seL4_EndpointBits,
-                                cur_cspace,
-                                ep);
+            seL4_AsyncEndpointObject,
+            seL4_EndpointBits,
+            cur_cspace,
+            ep);
     conditional_panic(err, "Failed to allocate c-slot for Interrupt endpoint");
 
     ///* Bind the Async endpoint to our TCB */
@@ -423,11 +467,11 @@ static void stop_and_start(uint32_t id, void *data) {
 
 //uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
 static void setup_timers(void) {
-       register_timer(1000000, print_time, NULL);
-       register_timer(5000000, print_time, NULL);
-       register_timer(10000000, print_time, NULL);
-       register_timer(20000000, stop_and_start, NULL);
-       register_timer(30000000, print_time, NULL);
+    register_timer(1000000, print_time, NULL);
+    register_timer(5000000, print_time, NULL);
+    register_timer(10000000, print_time, NULL);
+    register_timer(20000000, stop_and_start, NULL);
+    register_timer(30000000, print_time, NULL);
 }
 
 #define test_assert(tst)        \
@@ -526,7 +570,7 @@ static void frame_test_3(void) {
 
 void test_frametable(void) {
     frame_test_1();
- //   frame_test_2();
+    //   frame_test_2();
     frame_test_3();
 }
 /*
