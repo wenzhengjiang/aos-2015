@@ -81,9 +81,12 @@ struct {
  */
 #define SOS_SYSCALL0 0
 
-/* syscall for printing */
-#define SOS_SYSCALL_PRINT 2
 #define PRINT_MESSAGE_START 2
+/* syscall for printing */
+
+#define SOS_SYSCALL_PRINT 2
+#define SOS_SYSCALL_TIMESTAMP 3
+#define SOS_SYSCALL_USLEEP 4
 
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
@@ -161,11 +164,19 @@ static size_t syscall_print(size_t num_args) {
     return send_len;
 }
 
+void notify_client(uint32_t id, void *data) {
+    seL4_CPtr reply_cap = (seL4_CPtr)data;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+}
+
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
     seL4_MessageInfo_t reply;
     seL4_Word reply_msg;
+    bool keep_reply_cap = false;
 
     syscall_number = seL4_GetMR(0);
 
@@ -184,10 +195,25 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_PRINT:
         reply_msg = syscall_print(num_args);
-        reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
         seL4_SetMR(0, 0);
         seL4_SetMR(1, reply_msg);
         seL4_Send(reply_cap, reply);
+        break;
+    case SOS_SYSCALL_TIMESTAMP:
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
+        uint64_t tick = time_stamp();
+        seL4_SetMR(0, tick & 0xffffffff);
+        seL4_SetMR(1, tick>>32);
+        seL4_Send(reply_cap, reply);
+        break;
+    case SOS_SYSCALL_USLEEP:
+        if(!register_timer(seL4_GetMR(1)*1000, notify_client, (void*)reply_cap)) {
+            reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
+            seL4_Send(reply_cap, reply);
+        } else {
+            keep_reply_cap = true;
+        }
         break;
     default:
         printf("Unknown syscall %d\n", syscall_number);
@@ -195,7 +221,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
     }
     /* Free the saved reply cap */
-    cspace_free_slot(cur_cspace, reply_cap);
+    if(!keep_reply_cap) cspace_free_slot(cur_cspace, reply_cap);
 }
 
 void syscall_loop(seL4_CPtr ep) {
@@ -214,7 +240,7 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
-                printf("current tick is %llu\n", time_stamp());
+            //    printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
@@ -488,9 +514,6 @@ void* sync_new_ep(seL4_CPtr* ep, int badge) {
                                 ep);
     conditional_panic(err, "Failed to allocate c-slot for Interrupt endpoint");
 
-    ///* Bind the Async endpoint to our TCB */
-    //err = seL4_TCB_BindAEP(seL4_CapInitThreadTCB, *ep);
-    //conditional_panic(err, "Failed to bind ASync EP to TCB");
     *ep = cspace_mint_cap(cur_cspace, cur_cspace, *ep, seL4_AllRights, seL4_CapData_Badge_new(badge));
     return (void*)ep;
 }
@@ -499,63 +522,6 @@ void sync_free_ep(void* ep){
     (void)ep;
 }
 
-static void print_time(uint32_t id, void *data) {
-    (void) data;
-    printf("%d expired at %llu\n", id, time_stamp());
-}
-
-static void stop_and_start(uint32_t id, void *data) {
-    printf("timer stopped at %llu\n", time_stamp());
-    stop_timer();
-    // This should work!
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
-    printf("attempted start\n");
-}
-
-//uint32_t register_timer(uint64_t delay, void (*callback)(uint32_t id, void *data), void *data)
-static void setup_timers(void) {
-       register_timer(1000000, print_time, NULL);
-       register_timer(5000000, print_time, NULL);
-       register_timer(10000000, print_time, NULL);
-       register_timer(20000000, stop_and_start, NULL);
-       register_timer(30000000, print_time, NULL);
-}
-
-#define test_assert(tst)        \
-    do {                        \
-        if(!tst){               \
-            printf("FAILED\n"); \
-            assert(tst);        \
-        }                       \
-    }while(0)
-
-static void test_mutex(void){
-    sync_mutex_t m1, m2;
-    printf("UNIT TEST | sync/mutex: ");
-    m1 = sync_create_mutex();
-    test_assert(m1);
-    m2 = sync_create_mutex();
-    test_assert(m2);
-    /* Test simple operations */
-    test_assert(sync_try_acquire(m1));
-    test_assert(!sync_try_acquire(m1));
-    sync_release(m1);
-    test_assert(sync_try_acquire(m1));
-    sync_release(m1);
-    sync_acquire(m1);
-    sync_release(m1);
-    sync_acquire(m1);
-    sync_release(m1);
-    /* Test independance */
-    test_assert(sync_try_acquire(m1));
-    test_assert(sync_try_acquire(m2));
-    sync_release(m1);
-    sync_release(m2);
-    /* Clean up */
-    sync_destroy_mutex(m1);
-    sync_destroy_mutex(m2);
-    printf("PASSED\n");
-}
 
 static void frame_test_1(void) {
     int i;
@@ -608,7 +574,7 @@ static void frame_test_3(void) {
         *((unsigned*)vaddr) = 0x37;
         assert(*((unsigned*)vaddr) == 0x37);
 
-        printf("Page #%d allocated at %p\n",  i, vaddr);
+        printf("Page #%d allocated at %p\n",  i, (void*)vaddr);
         assert(page > 0);
         frame_free(page);
     }
@@ -617,7 +583,7 @@ static void frame_test_3(void) {
 
 void test_frametable(void) {
     frame_test_1();
- //   frame_test_2();
+    frame_test_2();
     frame_test_3();
 }
 /*
@@ -634,14 +600,12 @@ int main(void) {
     dprintf(0, "\nafter init timer\n");
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     /* Start the user application */
-//    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
-
-    test_mutex();
+    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     frame_init();
-    test_frametable();
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
