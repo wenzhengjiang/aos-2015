@@ -124,19 +124,20 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-    return idx + 1;
+    return *vaddr;
 }
 /**
  * Free the frame
  * @param faddr Index of the frame to be removed
  */
-int frame_free(seL4_Word idx) {
+int frame_free(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
     if (idx <= 0 || idx > nframes) {
         ERR("frame_free: illegal faddr received\n");
         return EINVAL;
     }
-    frame_entry_t *cur_frame = &frame_table[idx-1];
+    frame_entry_t *cur_frame = &frame_table[idx];
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
@@ -152,12 +153,13 @@ int frame_free(seL4_Word idx) {
 /**
  * Retrieve the cap corresponding to a frame
  */
-seL4_CPtr frame_cap(seL4_Word idx) {
+seL4_CPtr frame_cap(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
     if (idx <= 0 || idx > nframes) {
         ERR("frame_cap: illegal faddr received\n");
         return EINVAL;
     }
-    frame_entry_t *cur_frame = &frame_table[idx-1];
+    frame_entry_t *cur_frame = &frame_table[idx];
     return cur_frame->cap;
 }

@@ -25,6 +25,7 @@
 #include "frametable.h"
 #include "elf.h"
 #include "process.h"
+#include "addrspace.h"
 #include <device/mapping.h>
 
 #include <ut/ut.h>
@@ -292,13 +293,21 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
     /* load the elf image */
-    err = elf_load(curproc->vspace.pd_addr, elf_base);
+    printf("LOADING\n");
+    err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
     /* Start the new process */
+    printf("CLEAR\n");
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
     context.sp = PROCESS_STACK_TOP;
+
+    printf("ADDR SPACE\n");
+    sos_addrspace_t *as = proc_as(curproc);
+    printf("INIT REGIONS\n");
+    init_essential_regions(as);
+    printf("REGION START\n");
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
 

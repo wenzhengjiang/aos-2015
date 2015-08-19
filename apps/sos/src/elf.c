@@ -16,6 +16,7 @@
 
 #include "elf.h"
 #include "process.h"
+#include "addrspace.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>
@@ -92,21 +93,20 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
 
     /* We work a page at a time in the destination vspace. */
     pos = 0;
+    sos_addrspace_t *as = proc_as(curproc);
+    as_region_create(as, (seL4_Word)src, ((seL4_Word)src + segment_size), (int)permissions);
     while(pos < segment_size) {
         seL4_Word paddr;
-        seL4_CPtr sos_cap, tty_cap;
-        seL4_Word vpage, kvpage;
-        unsigned long kdst;
+        seL4_Word vpage;
         int nbytes;
         int err;
 
         vpage  = PAGE_ALIGN(dst);
-        kvpage = PAGE_ALIGN(kdst);
 
         /* Map the frame into tty_test address spaces */
         seL4_Word sos_vaddr;
-        err = process_map_page(curproc, vpage, &sos_vaddr);
-        
+
+        err = as_map_page(as, vpage, &sos_vaddr);
         conditional_panic(err, "Failed to map to tty address space");
 
         /* Now copy our data into the destination vspace. */
@@ -114,9 +114,6 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         if (pos < file_size){
             memcpy((void*)sos_vaddr, (void*)src, MIN(nbytes, file_size - pos));
         }
-
-        /* Not observable to I-cache yet so flush the frame */
-        //seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
         pos += nbytes;
         dst += nbytes;
