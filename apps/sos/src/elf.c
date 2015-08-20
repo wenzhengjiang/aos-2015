@@ -34,8 +34,6 @@
 #define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
 #define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
-extern seL4_ARM_PageDirectory dest_as;
-
 /*
  * Convert ELF permissions into seL4 permissions.
  */
@@ -93,7 +91,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
     /* We work a page at a time in the destination vspace. */
     pos = 0;
     sos_addrspace_t *as = proc_as(current_process());
-    as_region_create(as, (seL4_Word)src, ((seL4_Word)src + segment_size), (int)permissions);
+    as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
     while(pos < segment_size) {
         seL4_Word paddr;
         seL4_Word vpage;

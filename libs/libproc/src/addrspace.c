@@ -51,10 +51,13 @@ seL4_Word as_page_lookup(sos_addrspace_t *as, seL4_Word vaddr) {
 sos_region_t* as_vaddr_region(sos_addrspace_t *as, seL4_Word vaddr) {
     assert(as);
     sos_region_t *region = as->regions;
-    while (region && vaddr >= region->start && vaddr <= region->end) {
+    while (region) {
+        if (vaddr >= region->start && vaddr <= region->end) {
+            return region;
+        }
         region = region->next;
     }
-    return region;
+    return NULL;
 }
 
 /**  ---  PAGE TABLE MAPPING  --- **/
@@ -133,14 +136,14 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
         rights = region->perms;
     }
     // TODO: set permissions from region
-    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, seL4_AllRights,
+    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, rights,
                             seL4_ARM_Default_VMAttributes);
 
     if (err == seL4_FailedLookup) {
         printf("Creating SOS PT\n");
         err = _proc_map_pagetable(as, pd_idx, vaddr);
         conditional_panic(err, "Failed to map page table into PD");
-        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, region->perms,
+        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, rights,
                                 seL4_ARM_Default_VMAttributes);
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
@@ -175,7 +178,6 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     assert(perms);
     assert(start);
     assert(end);
-    sos_region_t *last_region;
     sos_region_t *new_region;
     new_region = malloc(sizeof(sos_region_t));
     new_region->start = start;
@@ -188,6 +190,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
         return new_region;
     }
 
+    sos_region_t *last_region;
     for(last_region = as->regions; last_region->next != NULL; last_region = last_region->next);
 
     last_region->next = new_region;
