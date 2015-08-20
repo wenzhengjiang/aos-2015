@@ -9,7 +9,7 @@
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
-#include <sys/debug.h>
+#include <log/debug.h>
 #include <sync/mutex.h>
 #include <stdlib.h>
 

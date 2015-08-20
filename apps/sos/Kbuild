@@ -19,6 +19,6 @@ sos: export COMPONENTS=${sos-components}
 sos: ${sos-components-y} \
      libsel4 libelf $(libc) libcpio \
      libsel4cspace libserial libclock \
-     liblwip libnfs libethdrivers \
+     liblwip libnfs libethdrivers liblog libproc \
      libsos libplatsupport libdevice libut libsys
 

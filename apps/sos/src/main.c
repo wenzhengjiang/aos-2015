@@ -21,21 +21,23 @@
 #include <serial/serial.h>
 #include <clock/clock.h>
 
+#include <proc/frametable.h>
+#include <proc/process.h>
+#include <proc/addrspace.h>
+
 #include "network.h"
-#include "frametable.h"
 #include "elf.h"
-#include "process.h"
-#include "addrspace.h"
 #include <device/mapping.h>
 
 #include <ut/ut.h>
 #include <device/vmem_layout.h>
 
 #include <autoconf.h>
+#include <errno.h>
 
 #define verbose 5
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 #include <sync/mutex.h>
 
@@ -52,7 +54,6 @@
 /* The linker will link this symbol to the start address  *
  * of an archive of attached applications.                */
 extern char _cpio_archive[];
-extern sos_proc_t *curproc;
 const seL4_BootInfo* _boot_info;
 
 /*
@@ -67,22 +68,22 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-bool is_read_fault(seL4_Word faulttype)
+static bool is_read_fault(seL4_Word faulttype)
 {
-    return (faulttype & (1 << 11)) == 0;
+    return (faulttype & (1ul << 11)) == 0;
 }
 
-sos_region_t* region_probe(addrspace_t as, seL4_Word addr) {
+static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
     assert(as->regions);
-    for (int i = 0; i < as->nregions; i++) {
+    for (size_t i = 0; i < as->nregions; i++) {
         if (addr >= as->regions[i].start && addr < as->regions[i].end)
             return &(as->regions[i]);
     }
     return NULL;
 }
 
-int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
-    addrspace_t *as = proc_getas();
+static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
+    sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
         return EFAULT;
     }
@@ -90,13 +91,14 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     sos_region_t* reg = region_probe(as, faultaddr);
     if (!reg) return EFAULT;
     if(reg != NULL){
-        if (is_read_fault(faulttype) && !PERM_READ(reg->perm)) {
+        if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
             return EACCES;
         }
-        if (!is_read_fault && !PERM_WRITE(reg->perm)) {
+        if (is_read_fault(faulttype) && !PERM_WRITE(reg->perms)) {
             return EACCES;
         }
-        int err = as_map_page(as, faultaddr, reg->perm);  //TODO not sure whether the interface is right.
+        seL4_Word discard;
+        int err = as_map_page(as, faultaddr, &discard);
         if (err) {
             return err;
         }
@@ -328,8 +330,10 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     char* elf_base;
     unsigned long elf_size;
+    sos_proc_t *curproc = current_process();
 
     process_create(fault_ep);
+    sos_addrspace_t *as = proc_as(curproc);
 
     /* parse the cpio image */
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
@@ -341,6 +345,8 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
+    init_essential_regions(as);
+
     /* Start the new process */
     printf("CLEAR\n");
     memset(&context, 0, sizeof(context));
@@ -348,9 +354,9 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     context.sp = PROCESS_STACK_TOP;
 
     printf("ADDR SPACE\n");
-    sos_addrspace_t *as = proc_as(curproc);
+
     printf("INIT REGIONS\n");
-    init_essential_regions(as);
+
     printf("REGION START\n");
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }

@@ -8,13 +8,6 @@
 
 #define TEST_PROCESS_NAME             CONFIG_SOS_STARTUP_APP
 
-#define PT_SIZE (1ul << 8)
-#define PD_SIZE (1ul << 12)
-
-#define PERM_READ(a) (a & 0b1)
-#define PERM_WRITE(a) (a & 0b10)
-#define PERM_EXEC(a) (a & 0b100)
-
 typedef struct process {
     sos_addrspace_t *vspace;
     seL4_Word tcb_addr;
@@ -26,5 +19,6 @@ typedef struct process {
 
 int process_create(seL4_CPtr fault_ep);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
+sos_proc_t *current_process(void);
 
 #endif

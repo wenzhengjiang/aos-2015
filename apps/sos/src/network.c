@@ -38,8 +38,8 @@
 #include <ut/ut.h>
 
 #define verbose 0
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 
 #ifndef SOS_NFS_DIR

@@ -15,7 +15,11 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
-#include <addrspace.h>
+
+#include <proc/addrspace.h>
+#include <proc/process.h>
+
+extern sos_proc_t *curproc;
 
 /*
  * Statically allocated morecore area.
@@ -41,13 +45,13 @@ sys_brk(va_list ap)
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
 
-    addrspace_t* as = proc_as();
+    sos_addrspace_t* as = proc_as(curproc);
     assert(as);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {
-        ret = as->heap->end;;
-    } else if (newbrk < as->stack->start && newbrk > as->heap->start) {
-        ret = as->heap->end = newbrk;
+        ret = as->heap_region->end;
+    } else if (newbrk < as->stack_region->start && newbrk > as->heap_region->start) {
+        ret = as->heap_region->end = newbrk;
     } else {
         ret = 0;
     }

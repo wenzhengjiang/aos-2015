@@ -27,8 +27,8 @@
 #include <device/vmem_layout.h>
 
 #define verbose 5
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 #define DMA_SIZE     (_dma_pend - _dma_pstart)
 #define DMA_PAGES    (DMA_SIZE >> seL4_PageBits)

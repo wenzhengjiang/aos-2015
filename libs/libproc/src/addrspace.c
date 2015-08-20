@@ -7,27 +7,23 @@
 #include <ut/ut.h>
 
 #include <device/mapping.h>
-#include "frametable.h"
-#include "addrspace.h"
+#include <proc/frametable.h>
+#include <proc/addrspace.h>
 #include <assert.h>
 
 #define verbose 5
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 #define PT_BITS 10
 #define PD_BITS 10
 
 #define PT_SIZE (1ul << PT_BITS)
 #define PD_SIZE (1ul << PD_BITS)
+#define PAGE_ALIGN(a) ((a + PAGE_SIZE - 1) & 0xfffff000)
 
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
-
-#define PERM_READ(a) (a & 0b1)
-#define PERM_WRITE(a) (a & 0b10)
-#define PERM_EXEC(a) (a & 0b100)
-
 
 // TODO: Use me, or remove me
 static seL4_Word _lookup_faddr(sos_addrspace_t *as, seL4_Word vaddr) {
@@ -97,10 +93,8 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
     return err;
 }
 
-int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
-    int err;
+static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
-    assert(vaddr);
 
     // Create a frame
     frame_alloc(sos_vaddr);
@@ -108,12 +102,14 @@ int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
         WARN("Frame alloc failed\n");
         return ENOMEM;
     }
-
-    printf("Mapping vaddr: %x\n", vaddr);
-
     // Retrieve the Cap for the newly created frame
     seL4_CPtr fc = frame_cap(*sos_vaddr);
     assert(fc != seL4_CapNull);
+    return fc;
+}
+
+static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, seL4_CPtr fc) {
+    int err;
 
     // Copy the cap so we can map it into the process' PD
     seL4_CPtr proc_fc = cspace_copy_cap(cur_cspace,
@@ -123,17 +119,18 @@ int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
     assert(proc_fc != seL4_CapNull);
 
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
-    printf("pd_idx: %u\n", pd_idx);
     if (as->pd[pd_idx] == NULL) {
-        printf("creating PT!\n");
         as->pd[pd_idx] = malloc(sizeof(sos_pde_t));
     }
 
     // Lookup the permissions of the given vaddr
     sos_region_t *region = as_vaddr_region(as, vaddr);
+    int rights;
     if (region == NULL) {
         WARN("No Region found for %u\n", vaddr);
-        return EFAULT;
+        rights = seL4_AllRights;
+    } else {
+        rights = region->perms;
     }
     // TODO: set permissions from region
     err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, seL4_AllRights,
@@ -151,13 +148,18 @@ int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
 
     printf("mapping vaddr %x into pt...\n", vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
-    printf("pt_idx: %u\n", pt_idx);
-    if (as->pd[pd_idx]->pt) {
+    if (as->pd[pd_idx]->pt == NULL) {
         frame_alloc(as->pd[pd_idx]->pt);
     }
     as->pd[pd_idx]->pt[pt_idx] = *sos_vaddr;
     memset((void*)*sos_vaddr, 0, PAGE_SIZE);
     return err;
+}
+
+int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
+    seL4_CPtr cap;
+    cap = as_alloc_page(as, sos_vaddr);
+    return as_map(as, vaddr, sos_vaddr, cap);
 }
 
 /**  ---  REGION HANDLING  --- **/
@@ -198,12 +200,28 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
  */
 static int init_regions(sos_addrspace_t *as) {
     assert(as);
-    sos_region_t* ipc_buf = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), seL4_AllRights);
-    sos_region_t* stack = as_region_create(as, PROCESS_STACK_TOP - (1 << seL4_PageBits), PROCESS_STACK_TOP, seL4_AllRights);
-    if (stack == NULL || ipc_buf == NULL) {
+
+    seL4_Word heap_start = 0;
+    sos_region_t* cur_region;
+
+    for(cur_region = as->regions; cur_region != NULL;
+        cur_region = cur_region->next) {
+        if (cur_region->end > heap_start) {
+            heap_start = cur_region->end;
+        }
+    }
+
+    heap_start = PAGE_ALIGN(heap_start);
+
+    as->heap_region = as_region_create(as, heap_start, heap_start, seL4_AllRights);
+    as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), seL4_AllRights);
+    as->stack_region = as_region_create(as, PROCESS_STACK_TOP - (1 << seL4_PageBits), PROCESS_STACK_TOP, seL4_AllRights);
+
+    if (as->stack_region == NULL || as->ipc_region == NULL || as->heap_region == NULL) {
         printf("Default regions setup failed\n");
         return ENOMEM;
     }
+
     return 0;
 }
 
@@ -217,10 +235,8 @@ void init_essential_regions(sos_addrspace_t* as) {
     err = init_regions(as);
     printf("Regions initialised\n");
     conditional_panic(err, "CREATING REGIONS FAILED\n");
-}
-
-static void map_essential_regions(sos_addrspace_t* as) {
-    as_map_page(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr);
+    seL4_CPtr ipc_cap = frame_cap(as->sos_ipc_buf_addr);
+    as_map(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr, ipc_cap);
     as_map_page(as, PROCESS_STACK_TOP - (1 << seL4_PageBits), &as->sos_stack_addr);
 }
 
@@ -245,6 +261,6 @@ sos_addrspace_t* as_create(void) {
     // Create the page directory
     frame_alloc((seL4_Word*)&as->pd);
     printf("PD frame allocated at address: %x\n", (unsigned)as->pd);
-    map_essential_regions(as);
+    as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;
 }

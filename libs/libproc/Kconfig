@@ -8,13 +8,16 @@
 # @TAG(NICTA_BSD)
 #
 
-config LIB_SYS
-    bool "Build libsys"
+config LIB_PROC
+    bool "Build proc library"
+    select HAVE_SEL4_LIBS
     select LIB_SEL4 
     select LIB_SEL4_C
-    select LIB_LOG
     select LIB_SEL4_SYNC
-    select HAVE_SEL4_LIBS
+    select LIB_DEVICE
+    select LIB_UT
+    select LIB_LOG
+    select LIB_UTILS
     default y
     help
-        "System utilities for seL4 sos"
+        "SOS processes"

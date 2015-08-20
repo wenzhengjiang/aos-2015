@@ -9,9 +9,9 @@
 #
 
 # Targets
-TARGETS := libsys.a
+TARGETS := liblog.a
 
-LIBS := sel4 sel4sync log
+LIBS := sel4
 
 # Source files required to build the target
 CFILES := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c)) 

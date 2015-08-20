@@ -9,13 +9,13 @@
 #include <ut/ut.h>
 #include <device/mapping.h>
 
-#include "process.h"
-#include "addrspace.h"
-#include "frametable.h"
+#include <proc/process.h>
+#include <proc/addrspace.h>
+#include <proc/frametable.h>
 
 #define verbose 5
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 /* This is the index where a clients syscall enpoint will
  * be stored in the clients cspace. */
@@ -25,7 +25,6 @@
 
 sos_proc_t test_proc;
 sos_proc_t *curproc = &test_proc;
-
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
@@ -92,4 +91,8 @@ int process_create(seL4_CPtr fault_ep) {
     init_tcb(curproc);
     printf("Process created\n");
     return 0;
+}
+
+sos_proc_t *current_process(void) {
+    return curproc;
 }

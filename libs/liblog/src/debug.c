@@ -8,7 +8,7 @@
  * @TAG(NICTA_BSD)
  */
 
-#include <sys/debug.h>
+#include <log/debug.h>
 #include <stdarg.h>
 
 void plogf(const char *msg, ...) {

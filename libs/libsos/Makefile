@@ -11,6 +11,8 @@
 # Targets
 TARGETS := libsos.a
 
+LIBS := sel4 sel4cspace log proc ut device
+
 # Source files required to build the target
 CFILES := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c))
 
