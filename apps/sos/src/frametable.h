@@ -4,5 +4,6 @@
 int frame_init(void);
 seL4_Word frame_alloc(seL4_Word *vaddr);
 int frame_free(seL4_Word vaddr);
+seL4_CPtr frame_cap(seL4_Word idx);
 
 #endif

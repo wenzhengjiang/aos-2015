@@ -15,8 +15,8 @@
 #include <string.h>
 
 #define verbose 0
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 #define BITS_PER_BYTE 8
 #define FLOOR(x)      ((x) & ~(BITS_PER_BYTE - 1))

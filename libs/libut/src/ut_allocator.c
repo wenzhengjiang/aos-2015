@@ -16,8 +16,8 @@
 
 
 #define verbose 1
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
  
 #define FLOOR14(x) ((x) & ~((1 << 14) - 1))
 #define CEILING14(x) FLOOR14((x) + (1 << 14) - 1)

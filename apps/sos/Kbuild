@@ -12,12 +12,13 @@ apps-$(CONFIG_APP_SOS) += sos
 
 sos-components-$(CONFIG_APP_SOSH) += sosh
 sos-components-$(CONFIG_APP_TTY_TEST) += tty_test
+sos-components-$(CONFIG_APP_M3_TEST) += m3_test
 sos-components=$(addprefix $(STAGE_BASE)/bin/, $(sos-components-y))
 
 sos: export COMPONENTS=${sos-components}
 sos: ${sos-components-y} \
      libsel4 libelf $(libc) libcpio \
      libsel4cspace libserial libclock \
-     liblwip libnfs libethdrivers \
+     liblwip libnfs libethdrivers liblog \
      libsos libplatsupport libdevice libut libsys
 

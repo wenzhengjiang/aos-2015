@@ -9,13 +9,15 @@
 #
 
 # Targets
-TARGETS := tty_test.bin
+TARGETS := liblog.a
+
+LIBS := sel4
 
 # Source files required to build the target
-CFILES   := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c))
-CFILES   += $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/crt/arch-${ARCH}/*.c))
+CFILES := $(patsubst $(SOURCE_DIR)/%,%,$(wildcard $(SOURCE_DIR)/src/*.c)) 
 
-# Libraries required to build the target
-LIBS := muslc sel4 sel4cspace log ut device sos 
-#export DEBUG=1
+HDRFILES := $(wildcard $(SOURCE_DIR)/include/*)
+
+CFLAGS := -g -O0
 include $(SEL4_COMMON)/common.mk
+

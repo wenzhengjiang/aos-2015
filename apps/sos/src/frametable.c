@@ -1,11 +1,10 @@
 #include <sel4/sel4.h>
 #include <device/mapping.h>
 #include <device/vmem_layout.h>
-#include <sync/mutex.h>
 #include <cspace/cspace.h>
 #include <limits.h>
 #include <ut/ut.h>
-#include <sys/debug.h>
+#include <log/debug.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,7 +18,7 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 /* Maximum number of frames which will fit in our region */
-#define MAX_FRAMES ((DEVICE_START - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
+#define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 
 int nframes;
 
@@ -61,6 +60,7 @@ static int frame_map_page(int idx) {
         ut_free(paddr, seL4_PageBits);
         return EINVAL;
     }
+
     seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
@@ -124,19 +124,20 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-    return idx + 1;
+    return *vaddr;
 }
 /**
  * Free the frame
  * @param faddr Index of the frame to be removed
  */
-int frame_free(seL4_Word idx) {
+int frame_free(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
     if (idx <= 0 || idx > nframes) {
         ERR("frame_free: illegal faddr received\n");
         return EINVAL;
     }
-    frame_entry_t *cur_frame = &frame_table[idx-1];
+    frame_entry_t *cur_frame = &frame_table[idx];
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
@@ -147,4 +148,19 @@ int frame_free(seL4_Word idx) {
     cur_frame->next_free = free_list;
     free_list = cur_frame;
     return 0;
+}
+
+/**
+ * Retrieve the cap corresponding to a frame
+ */
+seL4_CPtr frame_cap(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    assert(frame_table);
+    if (idx <= 0 || idx > nframes) {
+        ERR("frame_cap: illegal faddr received\n");
+        return EINVAL;
+    }
+    printf("getting cap at %d for %x\n", idx, vaddr);
+    frame_entry_t *cur_frame = &frame_table[idx];
+    return cur_frame->cap;
 }

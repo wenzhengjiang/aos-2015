@@ -14,8 +14,8 @@
 #include <device/vmem_layout.h>
 
 #define verbose 0
-#include <sys/panic.h>
-#include <sys/debug.h>
+#include <log/panic.h>
+#include <log/debug.h>
 #include <cspace/cspace.h>
 
 extern const seL4_BootInfo* _boot_info;

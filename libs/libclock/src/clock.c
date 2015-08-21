@@ -9,12 +9,15 @@
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
-#include <sys/debug.h>
 #include <sync/mutex.h>
 #include <stdlib.h>
 
-#define MAX_CALLBACK_ID 20
 #define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
+
+#define MAX_CALLBACK_ID 20
+
 #define CLOCK_SUBTICK_CAP 100000ul
 
 #define BITS(n) (1ul<<(n))
@@ -105,6 +108,8 @@ int callback_cmp(const void *a, const void *b) {
         return 1;
     if ((x->next_timeout - g_cur_time) == (y->next_timeout - g_cur_time))
         return 0;
+    conditional_panic(true, "The impossible has happened");
+    return 0;
 }
 
 static void update_timeout() {

@@ -8,13 +8,10 @@
 # @TAG(NICTA_BSD)
 #
 
-config LIB_SYS
-    bool "Build libsys"
-    select LIB_SEL4 
-    select LIB_SEL4_C
-    select LIB_LOG
-    select LIB_SEL4_SYNC
-    select HAVE_SEL4_LIBS
+config APP_M3_TEST
+    bool "M3 test"
+    depends on LIB_SEL4 && HAVE_LIBC && LIB_SOS
     default y
+    select HAVE_SEL4_APPS
     help
-        "System utilities for seL4 sos"
+        A test program for printing over serial for AOS

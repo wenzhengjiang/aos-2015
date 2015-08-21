@@ -21,6 +21,7 @@ menuconfig APP_SOS
     select LIB_LWIP 
     select LIB_DEVICE
     select LIB_SYS
+    select LIB_PROC
     select LIB_UT
     select LIB_NFS 
     select LIB_SERIAL 

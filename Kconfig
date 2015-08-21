@@ -28,6 +28,7 @@ menu "seL4 Libraries"
     source "libs/libclock/Kconfig"
     source "libs/libdevice/Kconfig"
     source "libs/libut/Kconfig"
+    source "libs/liblog/Kconfig"
     source "libs/libsys/Kconfig"
     source "libs/libelf/Kconfig"
     source "libs/libcpio/Kconfig"
@@ -41,6 +42,7 @@ endmenu
 menu "seL4 Applications"
     source "apps/sos/Kconfig"
     source "apps/sosh/Kconfig"
+    source "apps/m3_test/Kconfig"
     source "apps/tty_test/Kconfig"
 endmenu
 

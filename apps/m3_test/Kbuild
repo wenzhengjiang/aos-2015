@@ -8,13 +8,7 @@
 # @TAG(NICTA_BSD)
 #
 
-config LIB_SYS
-    bool "Build libsys"
-    select LIB_SEL4 
-    select LIB_SEL4_C
-    select LIB_LOG
-    select LIB_SEL4_SYNC
-    select HAVE_SEL4_LIBS
-    default y
-    help
-        "System utilities for seL4 sos"
+components-$(CONFIG_APP_M3_TEST) += m3_test
+
+m3_test: $(libc) libdevice libut libsel4cspace liblog libsel4 libsos
+
