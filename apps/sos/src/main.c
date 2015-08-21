@@ -35,7 +35,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 2
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -208,18 +208,20 @@ void handle_syscall(seL4_Word badge, int num_args) {
             break;
         case SOS_SYSCALL_PRINT:
             reply_msg = syscall_print(num_args);
-            reply = seL4_MessageInfo_new(0, 0, 0, 1);
+            reply = seL4_MessageInfo_new(0, 0, 0, 2);
             seL4_SetMR(0, 0);
             seL4_SetMR(1, reply_msg);
             seL4_Send(reply_cap, reply);
             break;
-        case SOS_SYSCALL_BRK:
-            addrspace_a as = proc_as(current_process());
+        case SOS_SYSCALL_BRK:;
+            sos_addrspace_t* as = proc_as(current_process());
             assert(as);
-            seL4_Word reply_msg = brk(as, seL4_GetMR(1));
+            reply_msg = brk(as, seL4_GetMR(1));
             reply = seL4_MessageInfo_new(0, 0, 0, 1);
             seL4_SetMR(0, reply_msg);
+            seL4_SetTag(reply);
             seL4_Send(reply_cap, reply);
+            break;
         default:
             printf("Unknown syscall %d\n", syscall_number);
             /* we don't want to reply to an unknown syscall */
@@ -249,7 +251,7 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
+            dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
             int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
@@ -353,25 +355,19 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
-
+    printf("doing elf load\n");
     /* load the elf image */
-    printf("LOADING\n");
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
-
+    printf("finished elf load\n");
     init_essential_regions(as);
 
     /* Start the new process */
-    printf("CLEAR\n");
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
     context.sp = PROCESS_STACK_TOP;
 
-    printf("ADDR SPACE\n");
-
-    printf("INIT REGIONS\n");
-
-    printf("REGION START\n");
+    printf("writing registers\n");
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
 

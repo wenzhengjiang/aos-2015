@@ -22,12 +22,12 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <syscall.h>
 #include "m3_test.h"
 
 #include <sel4/sel4.h>
 
 #define NPAGES 27
-#define SOS_SYSCALL_PRINT 2
 #define PRINT_MESSAGE_START 2
 
 /**

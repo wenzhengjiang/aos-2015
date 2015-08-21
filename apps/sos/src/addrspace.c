@@ -210,7 +210,6 @@ static int init_regions(sos_addrspace_t *as) {
     }
 
     heap_start = PAGE_ALIGN(heap_start);
-
     as->heap_region = as_region_create(as, heap_start, heap_start, seL4_AllRights);
     as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), seL4_AllRights);
     as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, seL4_AllRights);
@@ -227,7 +226,7 @@ seL4_Word brk(sos_addrspace_t *as, uintptr_t newbrk) {
     if (!newbrk) {
         return as->heap_region->end;
     } else if (newbrk < as->stack_region->start && newbrk > as->heap_region->start) {
-        return as->heap_region->end = newbrk;
+        return (as->heap_region->end = newbrk);
     }
     return 0;
 }

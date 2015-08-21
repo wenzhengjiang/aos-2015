@@ -30,12 +30,10 @@ static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
     proc->cspace = cspace_create(1);
     assert(proc->cspace != NULL);
-    printf("CSpace initialised\n");
 }
 
 static void init_tcb(sos_proc_t *proc) {
     int err;
-    printf("TCP Starting...\n");
 
     /* Create a new TCB object */
     proc->tcb_addr = ut_alloc(seL4_TCBBits);
@@ -54,7 +52,6 @@ static void init_tcb(sos_proc_t *proc) {
                              proc->vspace->sos_pd_cap, seL4_NilData,
                              PROCESS_IPC_BUFFER, ipc_cap);
     conditional_panic(err, "Unable to configure new TCB");
-    printf("TCB initialised\n");
 }
 
 sos_addrspace_t *proc_as(sos_proc_t *proc) {
@@ -76,7 +73,6 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
     assert(user_ep_cap == USER_EP_CAP);
-    printf("EP initialised\n");
     return user_ep_cap;
 }
 
@@ -89,7 +85,6 @@ int process_create(seL4_CPtr fault_ep) {
     init_cspace(curproc);
     curproc->user_ep_cap = init_ep(curproc, fault_ep);
     init_tcb(curproc);
-    printf("Process created\n");
     return 0;
 }
 

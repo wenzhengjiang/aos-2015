@@ -160,7 +160,6 @@ seL4_CPtr frame_cap(seL4_Word vaddr) {
         ERR("frame_cap: illegal faddr received\n");
         return EINVAL;
     }
-    printf("getting cap at %d for %x\n", idx, vaddr);
     frame_entry_t *cur_frame = &frame_table[idx];
     return cur_frame->cap;
 }
