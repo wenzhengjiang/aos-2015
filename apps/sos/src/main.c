@@ -41,6 +41,8 @@
 
 #include <sync/mutex.h>
 
+#include <syscall.h>
+
 /* To differencient between async and and sync IPC, we assign a
  * badge to the async endpoint. The badge that we receive will
  * be the bitwise 'OR' of the async endpoint badge and the badges
@@ -62,7 +64,6 @@ const seL4_BootInfo* _boot_info;
 #define SOS_SYSCALL0 0
 
 /* syscall for printing */
-#define SOS_SYSCALL_PRINT 2
 #define PRINT_MESSAGE_START 2
 
 seL4_CPtr _sos_ipc_ep_cap;
@@ -212,6 +213,13 @@ void handle_syscall(seL4_Word badge, int num_args) {
             seL4_SetMR(1, reply_msg);
             seL4_Send(reply_cap, reply);
             break;
+        case SOS_SYSCALL_BRK:
+            addrspace_a as = proc_as(current_process());
+            assert(as);
+            seL4_Word reply_msg = brk(as, seL4_GetMR(1));
+            reply = seL4_MessageInfo_new(0, 0, 0, 1);
+            seL4_SetMR(0, reply_msg);
+            seL4_Send(reply_cap, reply);
         default:
             printf("Unknown syscall %d\n", syscall_number);
             /* we don't want to reply to an unknown syscall */

@@ -1,0 +1,11 @@
+#ifndef _SYSCALL_H_
+#define _SYSCALL_H_
+
+#define SYSCALL_ENDPOINT_SLOT (1)
+
+#define SOS_SYSCALL_PRINT 1
+#define SOS_SYSCALL_BRK 2
+#define SOS_SYSCALL_USLEEP 3
+#define SOS_SYSCALL_TIMESTAMP 4
+
+#endif
