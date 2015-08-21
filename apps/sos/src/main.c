@@ -21,9 +21,9 @@
 #include <serial/serial.h>
 #include <clock/clock.h>
 
-#include <proc/frametable.h>
-#include <proc/process.h>
-#include <proc/addrspace.h>
+#include "frametable.h"
+#include "process.h"
+#include "addrspace.h"
 
 #include "network.h"
 #include "elf.h"
@@ -573,7 +573,7 @@ static void frame_test_3(void) {
         *((unsigned*)vaddr) = 0x37;
         assert(*((unsigned*)vaddr) == 0x37);
 
-        printf("Page #%d allocated at %p\n",  i, vaddr);
+        printf("Page #%d allocated at %p\n",  i, (void*)vaddr);
         assert(page > 0);
         frame_free(page);
     }

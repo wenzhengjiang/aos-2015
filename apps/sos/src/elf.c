@@ -15,8 +15,8 @@
 #include <cspace/cspace.h>
 
 #include "elf.h"
-#include <proc/process.h>
-#include <proc/addrspace.h>
+#include "process.h"
+#include "addrspace.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>

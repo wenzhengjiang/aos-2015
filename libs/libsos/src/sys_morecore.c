@@ -16,9 +16,6 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <proc/addrspace.h>
-#include <proc/process.h>
-
 /*
  * Statically allocated morecore area.
  *

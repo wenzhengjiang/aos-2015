@@ -10,5 +10,5 @@
 
 components-$(CONFIG_APP_M3_TEST) += m3_test
 
-m3_test: $(libc) libdevice libut libsel4cspace liblog libproc libsel4 libsos
+m3_test: $(libc) libdevice libut libsel4cspace liblog libsel4 libsos
 

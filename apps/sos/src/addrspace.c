@@ -7,8 +7,8 @@
 #include <ut/ut.h>
 
 #include <device/mapping.h>
-#include <proc/frametable.h>
-#include <proc/addrspace.h>
+#include "frametable.h"
+#include "addrspace.h"
 #include <assert.h>
 
 #define verbose 5

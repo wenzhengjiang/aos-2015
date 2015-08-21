@@ -17,7 +17,6 @@ config LIB_SOS
     select LIB_DEVICE
     select LIB_UT
     select LIB_LOG
-    select LIB_PROC
     select LIB_UTILS
     default y
     help

@@ -9,9 +9,9 @@
 #include <ut/ut.h>
 #include <device/mapping.h>
 
-#include <proc/process.h>
-#include <proc/addrspace.h>
-#include <proc/frametable.h>
+#include "process.h"
+#include "addrspace.h"
+#include "frametable.h"
 
 #define verbose 5
 #include <log/debug.h>
