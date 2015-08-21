@@ -130,24 +130,21 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     // Lookup the permissions of the given vaddr
     sos_region_t *region = as_vaddr_region(as, vaddr);
     if (region == NULL) {
-        WARN("No Region found for %u\n", vaddr);
+        ERR("No Region found for %u\n", vaddr);
         return EFAULT;
     }
     err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
                             seL4_ARM_Default_VMAttributes);
 
     if (err == seL4_FailedLookup) {
-        printf("Creating SOS PT\n");
         err = _proc_map_pagetable(as, pd_idx, vaddr);
         conditional_panic(err, "Failed to map page table into PD");
         err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
                                 seL4_ARM_Default_VMAttributes);
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
-    printf("%d\n", err);
     assert(!err);
 
-    printf("mapping vaddr %x into pt...\n", vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     if (as->pd[pd_idx]->pt == NULL) {
         frame_alloc(as->pd[pd_idx]->pt);
@@ -219,7 +216,7 @@ static int init_regions(sos_addrspace_t *as) {
     as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, seL4_AllRights);
 
     if (as->stack_region == NULL || as->ipc_region == NULL || as->heap_region == NULL) {
-        printf("Default regions setup failed\n");
+        ERR("Default regions setup failed\n");
         return ENOMEM;
     }
 
@@ -234,7 +231,6 @@ static int init_regions(sos_addrspace_t *as) {
 void init_essential_regions(sos_addrspace_t* as) {
     int err;
     err = init_regions(as);
-    printf("Regions initialised\n");
     conditional_panic(err, "CREATING REGIONS FAILED\n");
     seL4_CPtr ipc_cap = frame_cap(as->sos_ipc_buf_addr);
     as_map(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr, ipc_cap);
@@ -256,12 +252,10 @@ sos_addrspace_t* as_create(void) {
                                 cur_cspace,
                                 &as->sos_pd_cap);
     conditional_panic(err, "Failed to allocate page directory cap for client");
-    printf("VSpace initialised\n");
 
     as->regions = NULL;
     // Create the page directory
     frame_alloc((seL4_Word*)&as->pd);
-    printf("PD frame allocated at address: %x\n", (unsigned)as->pd);
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;
 }
