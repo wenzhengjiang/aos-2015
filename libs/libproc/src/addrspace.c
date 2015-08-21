@@ -177,7 +177,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     new_region = malloc(sizeof(sos_region_t));
     new_region->start = start;
     new_region->end = end;
-    new_region->perms = perms;
+    new_region->perms = (unsigned)perms;
     new_region->next = NULL;
 
     if (as->regions == NULL) {
@@ -220,6 +220,15 @@ static int init_regions(sos_addrspace_t *as) {
         return ENOMEM;
     }
 
+    return 0;
+}
+
+seL4_Word brk(sos_addrspace_t *as, uintptr_t newbrk) {
+    if (!newbrk) {
+        return as->heap_region->end;
+    } else if (newbrk < as->stack_region->start && newbrk > as->heap_region->start) {
+        return as->heap_region->end = newbrk;
+    }
     return 0;
 }
 
