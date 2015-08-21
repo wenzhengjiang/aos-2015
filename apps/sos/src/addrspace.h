@@ -51,5 +51,6 @@ sos_addrspace_t* as_create(void);
 seL4_Word as_page_lookup(sos_addrspace_t *as, seL4_Word vaddr);
 void init_essential_regions(sos_addrspace_t* as);
 void map_essential_regions(sos_addrspace_t* as);
+seL4_Word brk(sos_addrspace_t *as, uintptr_t newbrk);
 
 #endif

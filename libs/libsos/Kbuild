@@ -9,4 +9,4 @@
 #
 libs-$(CONFIG_LIB_SOS) += libsos
 
-libsos: $(libc) libutils common libsel4cspace libproc liblog libut libdevice
+libsos: $(libc) libutils common libsel4cspace liblog libut libdevice

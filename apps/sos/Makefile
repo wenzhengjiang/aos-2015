@@ -22,7 +22,7 @@ OFILES   := archive.o
 INCLUDE_DIRS  += $(SOURCE_DIR)/src 
 
 # Libraries required to build the target
-LIBS := sel4 elf muslc cpio lwip ethdrivers log proc \
+LIBS := sel4 elf muslc cpio lwip ethdrivers log \
 	 serial nfs clock sel4cspace platsupport sel4sync device sys ut
 
 include $(SEL4_COMMON)/common.mk

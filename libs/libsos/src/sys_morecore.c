@@ -17,9 +17,6 @@
 #include <assert.h>
 #include <sel4/sel4.h>
 
-#include <proc/addrspace.h>
-#include <proc/process.h>
-
 #include <syscall.h>
 
 /*

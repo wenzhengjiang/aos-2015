@@ -15,8 +15,8 @@
 #include <cspace/cspace.h>
 
 #include "elf.h"
-#include <proc/process.h>
-#include <proc/addrspace.h>
+#include "process.h"
+#include "addrspace.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>
@@ -93,7 +93,6 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
     sos_addrspace_t *as = proc_as(current_process());
     as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
     while(pos < segment_size) {
-        seL4_Word paddr;
         seL4_Word vpage;
         int nbytes;
         int err;
