@@ -129,6 +129,9 @@ void sos_sys_usleep(int msec);
 /* Sleeps for the specified number of milliseconds.
  */
 
+size_t sos_write(void *data, size_t count);
+size_t sos_read(void *data, size_t count);
+
 
 /*************************************************************************/
 /*                                   */
