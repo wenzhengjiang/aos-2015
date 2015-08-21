@@ -21,6 +21,7 @@
 #define PT_SIZE (1ul << PT_BITS)
 #define PD_SIZE (1ul << PD_BITS)
 #define PAGE_ALIGN(a) ((a + PAGE_SIZE - 1) & 0xfffff000)
+#define PAGE_ALIGN_DOWN(a) (a & 0xfffff000)
 
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
@@ -128,25 +129,22 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
 
     // Lookup the permissions of the given vaddr
     sos_region_t *region = as_vaddr_region(as, vaddr);
-    int rights;
     if (region == NULL) {
         WARN("No Region found for %u\n", vaddr);
-        rights = seL4_AllRights;
-    } else {
-        rights = region->perms;
+        return EFAULT;
     }
-    // TODO: set permissions from region
-    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, rights,
+    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
                             seL4_ARM_Default_VMAttributes);
 
     if (err == seL4_FailedLookup) {
         printf("Creating SOS PT\n");
         err = _proc_map_pagetable(as, pd_idx, vaddr);
         conditional_panic(err, "Failed to map page table into PD");
-        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, vaddr, rights,
+        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
                                 seL4_ARM_Default_VMAttributes);
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
+    printf("%d\n", err);
     assert(!err);
 
     printf("mapping vaddr %x into pt...\n", vaddr);
@@ -218,7 +216,7 @@ static int init_regions(sos_addrspace_t *as) {
 
     as->heap_region = as_region_create(as, heap_start, heap_start, seL4_AllRights);
     as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), seL4_AllRights);
-    as->stack_region = as_region_create(as, PROCESS_STACK_TOP - (1 << seL4_PageBits), PROCESS_STACK_TOP, seL4_AllRights);
+    as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, seL4_AllRights);
 
     if (as->stack_region == NULL || as->ipc_region == NULL || as->heap_region == NULL) {
         printf("Default regions setup failed\n");

@@ -19,8 +19,6 @@
 #include <proc/addrspace.h>
 #include <proc/process.h>
 
-extern sos_proc_t *curproc;
-
 /*
  * Statically allocated morecore area.
  *
@@ -45,7 +43,9 @@ sys_brk(va_list ap)
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
 
-    sos_addrspace_t* as = proc_as(curproc);
+    sos_proc_t* proc = current_process();
+    assert(proc);
+    sos_addrspace_t* as = proc_as(proc);
     assert(as);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {

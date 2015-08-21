@@ -68,6 +68,12 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
+// TODO: This implementation is not correct!
+static bool is_write_fault(seL4_Word faulttype)
+{
+    return (faulttype & (1ul << 11)) == 0;
+}
+
 static bool is_read_fault(seL4_Word faulttype)
 {
     return (faulttype & (1ul << 11)) == 0;
@@ -94,7 +100,7 @@ static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
             return EACCES;
         }
-        if (is_read_fault(faulttype) && !PERM_WRITE(reg->perms)) {
+        if (is_write_fault(faulttype) && !PERM_WRITE(reg->perms)) {
             return EACCES;
         }
         seL4_Word discard;

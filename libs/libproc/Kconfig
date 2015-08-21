@@ -11,7 +11,7 @@
 config LIB_PROC
     bool "Build proc library"
     select HAVE_SEL4_LIBS
-    select LIB_SEL4 
+    select LIB_SEL4
     select LIB_SEL4_C
     select LIB_SEL4_SYNC
     select LIB_DEVICE
