@@ -71,15 +71,19 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
+static struct serial* serial;
+static char buf[1024];
+static int buflen = 0;
+
 // TODO: This implementation is not correct!
-static bool is_write_fault(seL4_Word faulttype)
+static bool is_read_fault(seL4_Word faulttype)
 {
     return (faulttype & (1ul << 11)) == 0;
 }
 
-static bool is_read_fault(seL4_Word faulttype)
+static bool is_write_fault(seL4_Word faulttype)
 {
-    return (faulttype & (1ul << 11)) == 0;
+    return !is_read_fault(1ul << 11);
 }
 
 static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
@@ -125,19 +129,6 @@ static inline int CONST min(int a, int b)
     return (a < b) ? a : b;
 }
 
-/**
- * Use syscall_print_sendbuf to send the buffer
- * @param msgBuf message buffer
- * @param length of content to send
- */
-static size_t
-syscall_print_sendbuf(char* msgBuf, size_t length) {
-    struct serial* serial = serial_init();
-    // Length should be no more than standard MTU
-    assert(length <= 1500);
-    serial_send(serial, msgBuf, length);
-    return length;
-}
 
 /**
  * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
@@ -182,7 +173,8 @@ static size_t syscall_print(size_t num_args) {
             break;
         }
     }
-    send_len = syscall_print_sendbuf(msgBuf, min(req_count, total_unpack));
+    int len = min(req_count,total_unpack);
+    send_len = serial_send(serial, msgBuf, len);
     free(msgBuf);
     return send_len;
 }
@@ -194,6 +186,9 @@ void notify_client(uint32_t id, void *data) {
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
+void serial_handler(struct serial *serial, char c) {
+    buf[buflen++] = c;
+}
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -217,6 +212,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_Send(reply_cap, reply);
         break;
     case SOS_SYSCALL_PRINT:
+        dprintf(0, "syscall:print\n");
         reply_msg = syscall_print(num_args);
         reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
         seL4_SetMR(0, 0);
@@ -225,6 +221,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_BRK:
         {
+        dprintf(0, "syscall:brk \n");
         sos_addrspace_t *as = proc_as(current_process());
         assert(as);
         seL4_Word reply_msg = brk(as, seL4_GetMR(1));
@@ -234,6 +231,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         }
         break;
     case SOS_SYSCALL_TIMESTAMP:
+        dprintf(0, "syscall: timestamp\n");
         reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
         uint64_t tick = time_stamp();
         seL4_SetMR(0, tick & 0xffffffff);
@@ -241,12 +239,31 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_Send(reply_cap, reply);
         break;
     case SOS_SYSCALL_USLEEP:
+        dprintf(0, "syscall: usleep\n");
         if(!register_timer(seL4_GetMR(1)*1000, notify_client, (void*)reply_cap)) {
             reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
             seL4_Send(reply_cap, reply);
         } else {
             keep_reply_cap = true;
         }
+        break;
+    case SOS_SYSCALL_OPEN:
+        dprintf(0, "syscall: open\n");
+        serial = serial_init();
+        //serial_register_handler(serial, serial_handler);
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
+        seL4_Send(reply_cap, reply);
+        dprintf(0, "syscall: open finished\n");
+        break;
+    case SOS_SYSCALL_READ:
+        dprintf(0, "syscall: read\n");
+        buflen = 5;
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,buflen);
+        sprintf(buf, "time");
+        for (int i = 0; i < buflen; i++)
+            seL4_SetMR(i, buf[i]);
+        buflen = 0;
+        seL4_Send(reply_cap, reply);
         break;
     default:
         printf("Unknown syscall %d\n", syscall_number);
