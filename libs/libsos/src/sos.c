@@ -19,7 +19,6 @@
 
 #define PRINT_MESSAGE_START 2
 
-char buf[1024];
 static size_t sos_debug_print(char *data) {
     int count = strlen(data);
     for (int i = 0; i < count; i++) {
@@ -29,8 +28,6 @@ static size_t sos_debug_print(char *data) {
 }
 int sos_sys_open(const char *path, fmode_t mode) {
     (void)mode;
-    sprintf(buf, "open %s\n", path);
-    sos_debug_print(buf);
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_OPEN); 
@@ -40,12 +37,10 @@ int sos_sys_open(const char *path, fmode_t mode) {
 }
 
 int sos_sys_read(int file, char *buf, size_t nbyte) {
-    sos_read(buf, nbyte);
+    return sos_read(buf, nbyte);
 }
 
 int sos_sys_write(int file, const char *buf, size_t nbyte) {
-    sprintf(buf, "write %d\n", file);
-    sos_debug_print(buf);
     return sos_write(buf, nbyte);
 }
 
@@ -73,9 +68,9 @@ int64_t sos_sys_time_stamp(void) {
     seL4_SetMR(0, SOS_SYSCALL_TIMESTAMP); 
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) != seL4_NoFault) return -1;
-    int64_t ret = seL4_GetMR(0);
+    int64_t ret = seL4_GetMR(1);
     ret <<= 32;
-    ret += seL4_GetMR(1);
+    ret += seL4_GetMR(0);
 
     return ret;
 }
@@ -156,7 +151,7 @@ size_t sos_read(void *vData, size_t count) {
     
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
    
-    seL4_Word len = seL4_MessageInfo_get_label(reply);
+    seL4_Word len = seL4_MessageInfo_get_length(reply);
     for (int i = 0; i < len ; i++) {
         data[i] = seL4_GetMR(i);
     }

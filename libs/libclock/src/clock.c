@@ -178,7 +178,6 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
             cb->next_timeout = cur + delay;
             cb->fun = callback_fun;
             cb->data = data;
-            dprintf(5, "add new timer %llu, %llu, %llu\n", cur, delay, cb->next_timeout);
             break;
         }
     }
@@ -217,7 +216,6 @@ int timer_interrupt(void) {
     if (gpt_reg->sr & GPT_SR_OF2) {
         assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
         for (int i = 0; i < 5; i++) {
-            dprintf(0, " %llu, %d, %llu\n", ordered_callbacks[i]->next_timeout, ordered_callbacks[i]->id, next_timeout);
         }
         while (next_cb < MAX_CALLBACK_ID) {
             callback_t *c = ordered_callbacks[next_cb];
@@ -228,7 +226,6 @@ int timer_interrupt(void) {
         }
         if(next_cb < MAX_CALLBACK_ID) {
             update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
-            printf("id is %d", ordered_callbacks[next_cb]->id);
         }
         else
             disable_outcmp2();
