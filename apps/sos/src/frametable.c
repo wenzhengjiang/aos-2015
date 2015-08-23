@@ -44,9 +44,11 @@ static void set_num_frames(void) {
 static int frame_map_page(int idx) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
+
     // alloc a physical page
     seL4_Word paddr = ut_alloc(seL4_PageBits);
     if (paddr == 0) {
+        ERR("[frametable] Out of memory\n");
         return ENOMEM;
     }
     seL4_CPtr cap;
@@ -95,10 +97,12 @@ void frame_init(void) {
     assert(i > 0 && i < nframes);
     free_list = &frame_table[i];
     for (; i < nframes; i++) {
-        if (i < nframes-1)
+        if (i < nframes-1) {
             frame_table[i].next_free = &frame_table[i+1];
-        else 
+        }
+        else {
             frame_table[i].next_free = NULL;
+        }
     }
 }
 
@@ -114,6 +118,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         return 0;
     }
     if (!free_list) {
+        ERR("[frametable] Free list empty\n");
         *vaddr = 0;
         return 0;
     }
@@ -122,6 +127,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     int idx = (new_frame-frame_table);
     int err = frame_map_page(idx);
     if (err) {
+        ERR("[frametable] Failed to map page due: err %d\n", err);
         *vaddr = 0;
         return 0;
     }
@@ -129,6 +135,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
     return *vaddr;
 }
+
 /**
  * Free the frame
  * @param faddr Index of the frame to be removed

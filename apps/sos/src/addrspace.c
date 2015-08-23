@@ -11,7 +11,7 @@
 #include "addrspace.h"
 #include <assert.h>
 
-#define verbose 5
+#define verbose 2
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -115,6 +115,7 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     assert(pd_idx < PD_SIZE && pd_idx >= 0);
     if (as->pd[pd_idx] == NULL) {
         as->pd[pd_idx] = malloc(sizeof(sos_pde_t));
+        as->pd[pd_idx]->pt = NULL;
     }
     conditional_panic(!as->pd[pd_idx], "Failed to allocate for PDE structure\n");
 
@@ -139,14 +140,14 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     assert(pt_idx < PT_SIZE && pt_idx >= 0);
     if (as->pd[pd_idx]->pt == NULL) {
-        err = (int)frame_alloc(as->pd[pd_idx]->pt);
+        err = (int)frame_alloc((seL4_Word*)&as->pd[pd_idx]->pt);
         if (err == 0) {
             return ENOMEM;
         }
     }
     as->pd[pd_idx]->pt[pt_idx] = *sos_vaddr;
     memset((void*)*sos_vaddr, 0, PAGE_SIZE);
-    return err;
+    return 0;
 }
 
 int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr) {
@@ -195,7 +196,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
 static int init_regions(sos_addrspace_t *as) {
     assert(as);
 
-    seL4_Word heap_start = 0;
+    seL4_Word heap_start = 0 + PAGE_SIZE;
     sos_region_t* cur_region;
 
     for(cur_region = as->regions; cur_region != NULL;
@@ -220,11 +221,14 @@ static int init_regions(sos_addrspace_t *as) {
 }
 
 seL4_Word brk(sos_addrspace_t *as, uintptr_t newbrk) {
+    printf("brk was %x\n", as->heap_region->end);
     if (!newbrk) {
         return as->heap_region->end;
-    } else if (newbrk < as->stack_region->start && newbrk > as->heap_region->start) {
+    } else if (newbrk < as->stack_region->start && newbrk >= as->heap_region->start) {
+        ERR("brk is now: %x\n", newbrk);
         return (as->heap_region->end = newbrk);
     }
+    ERR("BAD BRK\n");
     return 0;
 }
 
