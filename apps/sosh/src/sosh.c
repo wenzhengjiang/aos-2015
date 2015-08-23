@@ -206,7 +206,7 @@ static int second_sleep(int argc,char *argv[]) {
         printf("Usage %s seconds\n", argv[0]);
         return 1;
     }
-    sleep(atoi(argv[0]));
+    sleep(atoi(argv[1]));
     return 0;
 }
 

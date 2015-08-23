@@ -43,6 +43,7 @@
 
 #include <syscall.h>
 
+
 /* To differencient between async and and sync IPC, we assign a
  * badge to the async endpoint. The badge that we receive will
  * be the bitwise 'OR' of the async endpoint badge and the badges
@@ -62,9 +63,6 @@ const seL4_BootInfo* _boot_info;
  * A dummy starting syscall
  */
 #define SOS_SYSCALL0 0
-
-#define PRINT_MESSAGE_START 2
-/* syscall for printing */
 
 #define PRINT_MESSAGE_START 2
 
@@ -118,6 +116,7 @@ static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
     return 0;
 }
+static bool keep_reply_cap = false;
 
 /**
  * NFS mount point
@@ -173,8 +172,7 @@ static size_t syscall_print(size_t num_args) {
             break;
         }
     }
-    int len = min(req_count,total_unpack);
-    send_len = serial_send(serial, msgBuf, len);
+    send_len = serial_send(serial, msgBuf, min(req_count, total_unpack));
     free(msgBuf);
     return send_len;
 }
@@ -183,12 +181,15 @@ void notify_client(uint32_t id, void *data) {
     seL4_CPtr reply_cap = (seL4_CPtr)data;
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
     seL4_Send(reply_cap, reply);
+    dprintf(0, "notify_client\n");
     cspace_free_slot(cur_cspace, reply_cap);
+    keep_reply_cap = false;
 }
 
 void serial_handler(struct serial *serial, char c) {
     buf[buflen++] = c;
 }
+
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -231,35 +232,38 @@ void handle_syscall(seL4_Word badge, int num_args) {
         }
         break;
     case SOS_SYSCALL_TIMESTAMP:
-        dprintf(0, "syscall: timestamp\n");
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
+        {
         uint64_t tick = time_stamp();
+        dprintf(0, "syscall: timestamp %llu\n", tick);
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
         seL4_SetMR(0, tick & 0xffffffff);
         seL4_SetMR(1, tick>>32);
         seL4_Send(reply_cap, reply);
+        }
         break;
     case SOS_SYSCALL_USLEEP:
-        dprintf(0, "syscall: usleep\n");
-        if(!register_timer(seL4_GetMR(1)*1000, notify_client, (void*)reply_cap)) {
+        {
+        uint64_t delay = 1000ULL * seL4_GetMR(1);
+        dprintf(0, "syscall: usleep %u ms\n", seL4_GetMR(1));
+        if(!register_timer(delay, notify_client, (void*)reply_cap)) {
             reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
             seL4_Send(reply_cap, reply);
         } else {
             keep_reply_cap = true;
         }
+        }
         break;
     case SOS_SYSCALL_OPEN:
         dprintf(0, "syscall: open\n");
         serial = serial_init();
-        //serial_register_handler(serial, serial_handler);
+        serial_register_handler(serial, serial_handler);
         reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
         seL4_Send(reply_cap, reply);
         dprintf(0, "syscall: open finished\n");
         break;
     case SOS_SYSCALL_READ:
         dprintf(0, "syscall: read\n");
-        buflen = 5;
         reply = seL4_MessageInfo_new(seL4_NoFault,0,0,buflen);
-        sprintf(buf, "time");
         for (int i = 0; i < buflen; i++)
             seL4_SetMR(i, buf[i]);
         buflen = 0;
@@ -269,8 +273,10 @@ void handle_syscall(seL4_Word badge, int num_args) {
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
     }
+    
     /* Free the saved reply cap */
-    if(!keep_reply_cap) cspace_free_slot(cur_cspace, reply_cap);
+    if (!keep_reply_cap)
+        cspace_free_slot(cur_cspace, reply_cap);
 }
 
 void syscall_loop(seL4_CPtr ep) {
@@ -289,7 +295,6 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
-            //    printf("current tick is %llu\n", time_stamp());
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
@@ -403,19 +408,15 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
+    printf("INIT REGIONS\n");
     init_essential_regions(as);
 
     /* Start the new process */
-    printf("CLEAR\n");
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
     context.sp = PROCESS_STACK_TOP;
 
-    printf("ADDR SPACE\n");
 
-    printf("INIT REGIONS\n");
-
-    printf("REGION START\n");
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
 
@@ -525,19 +526,14 @@ int main(void) {
 
     dprintf(0, "\ninit timer ...\n");
     /* Initialise and start the clock driver */
-    dprintf(0, "\nafter init timer\n");
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
-
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     frame_init();
     
     /* Start the user application */
     start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
-
-    //test_mutex();
-    //test_frametable();
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
