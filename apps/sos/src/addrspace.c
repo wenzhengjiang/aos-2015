@@ -111,7 +111,6 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
                                         fc,
                                         seL4_AllRights);
     assert(proc_fc != seL4_CapNull);
-
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     assert(pd_idx < PD_SIZE && pd_idx >= 0);
     if (as->pd[pd_idx] == NULL) {
@@ -138,11 +137,11 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
     assert(!err);
-
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     assert(pt_idx < PT_SIZE && pt_idx >= 0);
     if (as->pd[pd_idx]->pt == NULL) {
         err = (int)frame_alloc((seL4_Word*)&as->pd[pd_idx]->pt);
+        sos_map_frame((seL4_Word)as->pd[pd_idx]->pt);
         if (err == 0) {
             return ENOMEM;
         }
@@ -263,6 +262,7 @@ sos_addrspace_t* as_create(void) {
     // Create the page directory
     err = (int)frame_alloc((seL4_Word*)&as->pd);
     conditional_panic(!err, "Unable to get frame for PD!\n");
+    sos_map_frame((seL4_Word)as->pd);
 
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;

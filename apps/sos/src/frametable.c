@@ -42,6 +42,44 @@ static void set_num_frames(void) {
     nframes = (high - low) / PAGE_SIZE;
 }
 
+/**
+ * Retrieve the cap corresponding to a frame
+ */
+seL4_CPtr frame_cap(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    assert(frame_table);
+    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
+    frame_entry_t *cur_frame = &frame_table[idx];
+    return cur_frame->cap;
+}
+
+seL4_Word frame_paddr(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    assert(frame_table);
+    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
+    frame_entry_t *cur_frame = &frame_table[idx];
+    return cur_frame->paddr;
+}
+
+int sos_map_frame(seL4_Word vaddr) {
+    seL4_CPtr cap = frame_cap(vaddr);
+    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
+    int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    if (err) {
+        ERR("Unable to map page\n");
+        ut_free(frame_paddr(vaddr), seL4_PageBits);
+        cspace_delete_cap(cur_cspace, cap);
+        return EINVAL;
+    }
+    return 0;
+ }
+
+int sos_unmap_frame(seL4_Word vaddr) {
+    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
+    seL4_CPtr cap = frame_cap(vaddr);
+    return seL4_ARM_Page_Unmap(cap);
+}
+
 static int frame_map_page(int idx) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
@@ -135,6 +173,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    assert(!seL4_ARM_Page_Unmap(frame_cap(*vaddr)));
     return *vaddr;
 }
 
@@ -160,15 +199,4 @@ int frame_free(seL4_Word vaddr) {
     cur_frame->next_free = free_list;
     free_list = cur_frame;
     return 0;
-}
-
-/**
- * Retrieve the cap corresponding to a frame
- */
-seL4_CPtr frame_cap(seL4_Word vaddr) {
-    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
-    assert(frame_table);
-    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
-    frame_entry_t *cur_frame = &frame_table[idx];
-    return cur_frame->cap;
 }
