@@ -29,6 +29,7 @@
 /* Minimum of two values. */
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
+#define ELF_MAX_SEGMENTS  (6)
 #define PAGESIZE              (1 << (seL4_PageBits))
 #define PAGEMASK              ((PAGESIZE) - 1)
 #define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
@@ -123,6 +124,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
     int num_headers;
     int err;
     int i;
+    int loaded = 0;
 
     /* Ensure that the ELF file looks sane. */
     if (elf_checkFile(elf_file)){
@@ -130,6 +132,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
     }
 
     num_headers = elf_getNumProgramHeaders(elf_file);
+
     for (i = 0; i < num_headers; i++) {
         char *source_addr;
         unsigned long flags, file_size, segment_size, vaddr;
@@ -137,6 +140,8 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
         /* Skip non-loadable segments (such as debugging data). */
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD)
             continue;
+        loaded++;
+        conditional_panic(loaded > ELF_MAX_SEGMENTS, "Elf loading failed!\n");
 
         /* Fetch information about this segment. */
         source_addr = elf_file + elf_getProgramHeaderOffset(elf_file, i);
@@ -144,7 +149,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
-
+        // Limit number of segments
         /* Copy it across into the vspace. */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
         err = load_segment_into_vspace(dest_as, source_addr, segment_size, file_size, vaddr,

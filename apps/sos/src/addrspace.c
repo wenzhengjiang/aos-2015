@@ -20,33 +20,22 @@
 
 #define PT_SIZE (1ul << PT_BITS)
 #define PD_SIZE (1ul << PD_BITS)
-#define PAGE_ALIGN(a) ((a + PAGE_SIZE - 1) & 0xfffff000)
-#define PAGE_ALIGN_DOWN(a) (a & 0xfffff000)
+#define PAGE_ALIGN(a) (a & 0xfffff000)
+
+#define RW_PAGE 0x3
 
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
-
-// TODO: Use me, or remove me
-static seL4_Word _lookup_faddr(sos_addrspace_t *as, seL4_Word vaddr) {
-    assert(as);
-    seL4_Word pd_idx = PD_LOOKUP(vaddr);
-    if (as->pd == NULL) {
-        return 0;
-    }
-    sos_pde_t* pde = as->pd[pd_idx];
-    if (pde == NULL) {
-        return 0;
-    }
-    seL4_Word pt_idx = PT_LOOKUP(vaddr);
-    return ((seL4_Word*)pde->pt)[pt_idx];
-}
 
 seL4_Word as_page_lookup(sos_addrspace_t *as, seL4_Word vaddr) {
     assert(as);
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     sos_pde_t *pde = as->pd[pd_idx];
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
-    return pde->pt[pt_idx];
+    if (pde) {
+        return pde->pt[pt_idx];
+    }
+    return 0;
 }
 
 sos_region_t* as_vaddr_region(sos_addrspace_t *as, seL4_Word vaddr) {
@@ -72,7 +61,7 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
     pde->sos_pt_addr = ut_alloc(seL4_PageTableBits);
     if(pde->sos_pt_addr == 0){
         ERR("PT ut_alloc failed\n");
-        return !0;
+        return 1;
     }
 
     /* Create the frame cap */
@@ -83,7 +72,7 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
                                  &pde->sos_pt_cap);
     if(err){
         ERR("retype failed\n");
-        return !0;
+        return 1;
     }
 
     /* Tell seL4 to map the PT in for us */
@@ -94,7 +83,7 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
     if (err) {
         ERR("Mapping PT failed\n");
     }
-    return err;
+    return 0;
 }
 
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
@@ -102,10 +91,8 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
 
     // Create a frame
     frame_alloc(sos_vaddr);
-    if (*sos_vaddr == 0) {
-        WARN("Frame alloc failed\n");
-        return ENOMEM;
-    }
+    conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
+
     // Retrieve the Cap for the newly created frame
     seL4_CPtr fc = frame_cap(*sos_vaddr);
     assert(fc != seL4_CapNull);
@@ -114,7 +101,8 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
 
 static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, seL4_CPtr fc) {
     int err;
-
+    assert(PT_SIZE == 1024);
+    assert(PD_SIZE == 1024);
     // Copy the cap so we can map it into the process' PD
     seL4_CPtr proc_fc = cspace_copy_cap(cur_cspace,
                                         cur_cspace,
@@ -125,6 +113,7 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     if (as->pd[pd_idx] == NULL) {
         as->pd[pd_idx] = malloc(sizeof(sos_pde_t));
+        conditional_panic(!as->pd[pd_idx], "Failed to allocate for PDE structure\n");
     }
 
     // Lookup the permissions of the given vaddr
@@ -133,13 +122,13 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
         ERR("No Region found for %u\n", vaddr);
         return EFAULT;
     }
-    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
+    err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN(vaddr), region->perms,
                             seL4_ARM_Default_VMAttributes);
 
     if (err == seL4_FailedLookup) {
         err = _proc_map_pagetable(as, pd_idx, vaddr);
         conditional_panic(err, "Failed to map page table into PD");
-        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN_DOWN(vaddr), region->perms,
+        err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN(vaddr), region->perms,
                                 seL4_ARM_Default_VMAttributes);
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
@@ -147,7 +136,10 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
 
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     if (as->pd[pd_idx]->pt == NULL) {
-        frame_alloc(as->pd[pd_idx]->pt);
+        err = (int)frame_alloc(as->pd[pd_idx]->pt);
+        if (err == 0) {
+            return ENOMEM;
+        }
     }
     as->pd[pd_idx]->pt[pt_idx] = *sos_vaddr;
     memset((void*)*sos_vaddr, 0, PAGE_SIZE);
@@ -175,6 +167,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     assert(end);
     sos_region_t *new_region;
     new_region = malloc(sizeof(sos_region_t));
+    conditional_panic(!new_region, "Unable to create new region for process\n");
     new_region->start = start;
     new_region->end = end;
     new_region->perms = (unsigned)perms;
@@ -205,14 +198,15 @@ static int init_regions(sos_addrspace_t *as) {
     for(cur_region = as->regions; cur_region != NULL;
         cur_region = cur_region->next) {
         if (cur_region->end > heap_start) {
-            heap_start = cur_region->end;
+            heap_start = cur_region->end + PAGE_SIZE;
         }
     }
 
     heap_start = PAGE_ALIGN(heap_start);
-    as->heap_region = as_region_create(as, heap_start, heap_start, seL4_AllRights);
-    as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), seL4_AllRights);
-    as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, seL4_AllRights);
+    // Map stack as non-exec
+    as->heap_region = as_region_create(as, heap_start, heap_start, RW_PAGE);
+    as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), RW_PAGE);
+    as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, RW_PAGE);
 
     if (as->stack_region == NULL || as->ipc_region == NULL || as->heap_region == NULL) {
         ERR("Default regions setup failed\n");

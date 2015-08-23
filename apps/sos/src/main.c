@@ -69,12 +69,6 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-// TODO: This implementation is not correct!
-static bool is_write_fault(seL4_Word faulttype)
-{
-    return (faulttype & (1ul << 11)) == 0;
-}
-
 static bool is_read_fault(seL4_Word faulttype)
 {
     return (faulttype & (1ul << 11)) == 0;
@@ -96,19 +90,19 @@ static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
 
     sos_region_t* reg = region_probe(as, faultaddr);
-    if (!reg) return EFAULT;
-    if(reg != NULL){
-        if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
-            return EACCES;
-        }
-        if (is_write_fault(faulttype) && !PERM_WRITE(reg->perms)) {
-            return EACCES;
-        }
-        seL4_Word discard;
-        int err = as_map_page(as, faultaddr, &discard);
-        if (err) {
-            return err;
-        }
+    if (!reg) {
+        return EFAULT;
+    }
+    if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
+        return EACCES;
+    }
+    if (!is_read_fault(faulttype) && !PERM_WRITE(reg->perms)) {
+        return EACCES;
+    }
+    seL4_Word discard;
+    int err = as_map_page(as, faultaddr, &discard);
+    if (err) {
+        return err;
     }
     return 0;
 }
@@ -355,11 +349,9 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
-    printf("doing elf load\n");
     /* load the elf image */
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
-    printf("finished elf load\n");
     init_essential_regions(as);
 
     /* Start the new process */
@@ -367,7 +359,6 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     context.pc = elf_getEntryPoint(elf_base);
     context.sp = PROCESS_STACK_TOP;
 
-    printf("writing registers\n");
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
 

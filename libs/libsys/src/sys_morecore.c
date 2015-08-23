@@ -39,7 +39,7 @@ sys_brk(va_list ap)
 
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
-
+    assert(newbrk <= (uintptr_t)&morecore_area[MORECORE_AREA_BYTE_SIZE - 1]);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {
         ret = morecore_base;

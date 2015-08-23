@@ -4,12 +4,14 @@
 #include <cspace/cspace.h>
 #include <limits.h>
 #include <ut/ut.h>
-#include <log/debug.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 #define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
+
 #define FRAME_REGION_SIZE   (1ull << FRAME_SIZE_BITS)
 #define FADDR_TO_VADDR(faddr) (faddr + FRAME_VSTART)
 #define VADDR_TO_FADDR(vaddr) (vaddr - FRAME_VSTART)
@@ -62,6 +64,7 @@ static int frame_map_page(int idx) {
     }
 
     seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -156,10 +159,7 @@ int frame_free(seL4_Word vaddr) {
 seL4_CPtr frame_cap(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
-    if (idx <= 0 || idx > nframes) {
-        ERR("frame_cap: illegal faddr received\n");
-        return EINVAL;
-    }
+    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
     frame_entry_t *cur_frame = &frame_table[idx];
     return cur_frame->cap;
 }
