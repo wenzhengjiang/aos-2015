@@ -6,6 +6,7 @@
 #include <ut/ut.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 #define verbose 5
@@ -74,7 +75,8 @@ static int frame_map_page(int idx) {
         cspace_delete_cap(cur_cspace, cap);
         return EINVAL;
     }
-    frame_table[idx].cap = cap; 
+    memset((void*)vaddr, 0, PAGE_SIZE);
+    frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
 
     return 0;
@@ -127,7 +129,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     int idx = (new_frame-frame_table);
     int err = frame_map_page(idx);
     if (err) {
-        ERR("[frametable] Failed to map page due: err %d\n", err);
+        ERR("[frametable] Failed to map page: err %d\n", err);
         *vaddr = 0;
         return 0;
     }

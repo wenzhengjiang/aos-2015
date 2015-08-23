@@ -34,7 +34,6 @@ typedef struct address_space {
     sos_region_t *stack_region;
     sos_region_t *ipc_region;
 
-    size_t nregions;
     // Allocated using frame_alloc
     sos_pd_t *pd;
     seL4_ARM_PageDirectory sos_pd_cap;

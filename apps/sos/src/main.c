@@ -35,7 +35,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 2
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -76,9 +76,12 @@ static bool is_read_fault(seL4_Word faulttype)
 
 static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
     assert(as->regions);
-    for (size_t i = 0; i < as->nregions; i++) {
-        if (addr >= as->regions[i].start && addr < as->regions[i].end)
-            return &(as->regions[i]);
+    sos_region_t* region = as->regions;
+    while(region != NULL) {
+        if (addr >= region->start && addr < region->end) {
+            return region;
+        }
+        region = region->next;
     }
     return NULL;
 }

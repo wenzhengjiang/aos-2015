@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ut/ut.h>
 #include <device/mapping.h>
+#include <string.h>
 
 #include "process.h"
 #include "addrspace.h"
