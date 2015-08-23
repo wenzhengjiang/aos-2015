@@ -141,7 +141,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD)
             continue;
         loaded++;
-        conditional_panic(loaded > ELF_MAX_SEGMENTS, "Elf loading failed!\n");
+        conditional_panic(loaded > ELF_MAX_SEGMENTS, "Elf cannot be loaded\n");
 
         /* Fetch information about this segment. */
         source_addr = elf_file + elf_getProgramHeaderOffset(elf_file, i);

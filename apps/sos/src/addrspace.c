@@ -55,6 +55,7 @@ sos_region_t* as_vaddr_region(sos_addrspace_t *as, seL4_Word vaddr) {
 static int
 _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
     int err;
+    assert(pd_idx < PD_SIZE && pd_idx >= 0);
     sos_pde_t *pde = as->pd[pd_idx];
 
     /* Allocate a PT object */
@@ -111,10 +112,11 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     assert(proc_fc != seL4_CapNull);
 
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
+    assert(pd_idx < PD_SIZE && pd_idx >= 0);
     if (as->pd[pd_idx] == NULL) {
         as->pd[pd_idx] = malloc(sizeof(sos_pde_t));
-        conditional_panic(!as->pd[pd_idx], "Failed to allocate for PDE structure\n");
     }
+    conditional_panic(!as->pd[pd_idx], "Failed to allocate for PDE structure\n");
 
     // Lookup the permissions of the given vaddr
     sos_region_t *region = as_vaddr_region(as, vaddr);
@@ -135,6 +137,7 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     assert(!err);
 
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
+    assert(pt_idx < PT_SIZE && pt_idx >= 0);
     if (as->pd[pd_idx]->pt == NULL) {
         err = (int)frame_alloc(as->pd[pd_idx]->pt);
         if (err == 0) {
