@@ -102,7 +102,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         vpage  = PAGE_ALIGN(dst);
 
         /* Map the frame into tty_test address spaces */
-        seL4_Word sos_vaddr;
+        seL4_Word sos_vaddr = 0;
 
         err = as_map_page(as, vpage, &sos_vaddr);
         conditional_panic(err, "Failed to map to tty address space");

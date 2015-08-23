@@ -166,7 +166,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
-    unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t*);
+    unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t);
     int err = frame_map_page(idx);
     if (err) {
         ERR("[frametable] Failed to map page: err %d\n", err);
