@@ -20,6 +20,7 @@
 #include <elf/elf.h>
 #include <serial/serial.h>
 #include <clock/clock.h>
+#include <limits.h>
 
 #include "frametable.h"
 #include "process.h"
@@ -69,11 +70,6 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-static bool is_read_fault(seL4_Word faulttype)
-{
-    return (faulttype & (1ul << 11)) == 0;
-}
-
 static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
     assert(as->regions);
     sos_region_t* region = as->regions;
@@ -86,7 +82,7 @@ static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
     return NULL;
 }
 
-static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
+static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
         return EFAULT;
@@ -96,10 +92,10 @@ static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     if (!reg) {
         return EFAULT;
     }
-    if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
+    if (read_fault && !PERM_READ(reg->perms)) {
         return EACCES;
     }
-    if (!is_read_fault(faulttype) && !PERM_WRITE(reg->perms)) {
+    if (!read_fault && !PERM_WRITE(reg->perms)) {
         return EACCES;
     }
     seL4_Word discard;
@@ -251,13 +247,14 @@ void syscall_loop(seL4_CPtr ep) {
             dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-            int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
+            int err = sos_vm_fault(seL4_GetMR(2), seL4_GetMR(1));
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed\n");
             } else {
                 seL4_CPtr reply_cap = cspace_save_reply_cap(cur_cspace);
                 assert(reply_cap != CSPACE_NULL);
                 seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+                seL4_SetTag(reply);
                 seL4_Send(reply_cap, reply);
             }
             //assert(!"Unable to handle vm faults");

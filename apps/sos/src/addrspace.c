@@ -22,7 +22,7 @@
 #define PD_SIZE (1ul << PD_BITS)
 #define PAGE_ALIGN(a) (a & 0xfffff000)
 
-#define RW_PAGE 0x3
+#define RW_PAGE (0x3)
 
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
@@ -57,27 +57,29 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, seL4_Word vaddr) {
     int err;
     assert(pd_idx < PD_SIZE && pd_idx >= 0);
     sos_pde_t *pde = as->pd[pd_idx];
-
+    int ct = ((vaddr << 10) >> 30);
     /* Allocate a PT object */
-    pde->sos_pt_addr = ut_alloc(seL4_PageTableBits);
-    if(pde->sos_pt_addr == 0){
+    assert(ct >= 0 && ct < SOS_PTS_PER_PDE);
+    assert(pde->sos_pt_addr[ct] == 0);
+    pde->sos_pt_addr[ct] = ut_alloc(seL4_PageTableBits);
+    if(pde->sos_pt_addr[ct] == 0){
         ERR("PT ut_alloc failed\n");
         return 1;
     }
 
     /* Create the frame cap */
-    err =  cspace_ut_retype_addr(pde->sos_pt_addr,
+    err =  cspace_ut_retype_addr(pde->sos_pt_addr[ct],
                                  seL4_ARM_PageTableObject,
                                  seL4_PageTableBits,
                                  cur_cspace,
-                                 &pde->sos_pt_cap);
+                                 &pde->sos_pt_cap[ct]);
     if(err){
         ERR("retype failed\n");
         return 1;
     }
 
     /* Tell seL4 to map the PT in for us */
-    err = seL4_ARM_PageTable_Map(pde->sos_pt_cap,
+    err = seL4_ARM_PageTable_Map(pde->sos_pt_cap[ct],
                                  as->sos_pd_cap,
                                  vaddr,
                                  seL4_ARM_Default_VMAttributes);
@@ -116,7 +118,12 @@ static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, se
     if (as->pd[pd_idx] == NULL) {
         as->pd[pd_idx] = malloc(sizeof(sos_pde_t));
         conditional_panic(!as->pd[pd_idx], "Couldn't allocate for PT\n");
+        // Initialise the PT
         as->pd[pd_idx]->pt = NULL;
+        for (int i = 0; i < SOS_PTS_PER_PDE; i++) {
+            as->pd[pd_idx]->sos_pt_addr[i] = 0;
+            as->pd[pd_idx]->sos_pt_cap[i] = 0;
+        }
     }
     conditional_panic(!as->pd[pd_idx], "Failed to allocate for PDE structure\n");
 
@@ -175,17 +182,8 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     new_region->start = start;
     new_region->end = end;
     new_region->perms = (unsigned)perms;
-    new_region->next = NULL;
-
-    if (as->regions == NULL) {
-        as->regions = new_region;
-        return new_region;
-    }
-
-    sos_region_t *last_region;
-    for(last_region = as->regions; last_region->next != NULL; last_region = last_region->next);
-
-    last_region->next = new_region;
+    new_region->next = as->regions;
+    as->regions = new_region;
     return new_region;
 }
 
@@ -207,9 +205,8 @@ static int init_regions(sos_addrspace_t *as) {
     }
 
     heap_start = PAGE_ALIGN(heap_start);
-    // Map stack as non-exec
     as->heap_region = as_region_create(as, heap_start, heap_start, RW_PAGE);
-    as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + (1 << seL4_PageBits), RW_PAGE);
+    as->ipc_region = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + PAGE_SIZE, RW_PAGE);
     as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, RW_PAGE);
 
     if (as->stack_region == NULL || as->ipc_region == NULL || as->heap_region == NULL) {
@@ -240,7 +237,7 @@ void init_essential_regions(sos_addrspace_t* as) {
     conditional_panic(err, "CREATING REGIONS FAILED\n");
     seL4_CPtr ipc_cap = frame_cap(as->sos_ipc_buf_addr);
     as_map(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr, ipc_cap);
-    as_map_page(as, PROCESS_STACK_TOP - (1 << seL4_PageBits), &as->sos_stack_addr);
+    as_map_page(as, PROCESS_STACK_TOP - PAGE_SIZE, &as->sos_stack_addr);
 }
 
 /**

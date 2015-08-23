@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "frametable.h"
+
 #define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
@@ -23,7 +25,7 @@
 /* Maximum number of frames which will fit in our region */
 #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 
-int nframes;
+static unsigned nframes;
 
 struct frame_entry {
     seL4_CPtr cap;
@@ -63,7 +65,7 @@ seL4_Word frame_paddr(seL4_Word vaddr) {
 
 int sos_map_frame(seL4_Word vaddr) {
     seL4_CPtr cap = frame_cap(vaddr);
-    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
+    assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -80,7 +82,7 @@ int sos_unmap_frame(seL4_Word vaddr) {
     return seL4_ARM_Page_Unmap(cap);
 }
 
-static int frame_map_page(int idx) {
+static int frame_map_page(unsigned idx) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
 
@@ -105,7 +107,7 @@ static int frame_map_page(int idx) {
     }
 
     seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
+    assert((unsigned)vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -162,9 +164,9 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         *vaddr = 0;
         return 0;
     }
-    frame_entry_t * new_frame = free_list;
+    frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
-    int idx = (new_frame-frame_table);
+    unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t*);
     int err = frame_map_page(idx);
     if (err) {
         ERR("[frametable] Failed to map page: err %d\n", err);
@@ -179,7 +181,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
 
 /**
  * Free the frame
- * @param faddr Index of the frame to be removed
+ * @param vaddr Index of the frame to be removed
  */
 int frame_free(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;

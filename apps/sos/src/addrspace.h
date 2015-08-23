@@ -5,6 +5,7 @@
 
 #include <cspace/cspace.h>
 
+#define SOS_PTS_PER_PDE (4)
 #define PERM_READ(a) (a & 1ul)
 #define PERM_WRITE(a) (a & (1ul << 1))
 #define PERM_EXEC(a) (a & (1ul << 2))
@@ -21,8 +22,8 @@ typedef struct region {
 typedef struct page_directory_entry {
     // Allocated using frame_alloc
     seL4_Word *pt;
-    seL4_Word sos_pt_addr;
-    seL4_ARM_PageTable sos_pt_cap;
+    seL4_Word sos_pt_addr[SOS_PTS_PER_PDE];
+    seL4_ARM_PageTable sos_pt_cap[SOS_PTS_PER_PDE];
 } sos_pde_t;
 
 typedef sos_pde_t *sos_pd_t;
