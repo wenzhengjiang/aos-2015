@@ -31,6 +31,7 @@ struct frame_entry {
     seL4_CPtr cap;
     struct frame_entry * next_free;
     seL4_Word paddr;
+    bool mapped;
 };
 
 typedef struct frame_entry frame_entry_t;
@@ -63,9 +64,18 @@ seL4_Word frame_paddr(seL4_Word vaddr) {
     return cur_frame->paddr;
 }
 
+/**
+ * Map the frame at vaddr into SOS
+ * @param vaddr the virtual address of the frame upon which to act
+ * @return 0 on success, non-zero on failure
+ */
 int sos_map_frame(seL4_Word vaddr) {
     seL4_CPtr cap = frame_cap(vaddr);
+
     assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    frame_entry_t *cur_frame = &frame_table[idx];
+    cur_frame->mapped = true;
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -76,10 +86,17 @@ int sos_map_frame(seL4_Word vaddr) {
     return 0;
  }
 
+/**
+ * Unmap the frame at vaddr from SOS
+ * @param vaddr the virtual address of the frame upon which to act
+ * @return 0 on success, non-zero on failure
+ */
 int sos_unmap_frame(seL4_Word vaddr) {
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
-    seL4_CPtr cap = frame_cap(vaddr);
-    return seL4_ARM_Page_Unmap(cap);
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    frame_entry_t *cur_frame = &frame_table[idx];
+    cur_frame->mapped = false;
+    return seL4_ARM_Page_Unmap(cur_frame->cap);
 }
 
 static int frame_map_page(unsigned idx) {
@@ -105,7 +122,6 @@ static int frame_map_page(unsigned idx) {
         ut_free(paddr, seL4_PageBits);
         return EINVAL;
     }
-
     seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
     assert((unsigned)vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
@@ -118,7 +134,6 @@ static int frame_map_page(unsigned idx) {
     memset((void*)vaddr, 0, PAGE_SIZE);
     frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
-
     return 0;
 }
 
@@ -175,13 +190,13 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-    assert(!seL4_ARM_Page_Unmap(frame_cap(*vaddr)));
     return *vaddr;
 }
 
 /**
  * Free the frame
  * @param vaddr Index of the frame to be removed
+ * @return 0 on success, non-zero on failure
  */
 int frame_free(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
@@ -191,7 +206,9 @@ int frame_free(seL4_Word vaddr) {
         return EINVAL;
     }
     frame_entry_t *cur_frame = &frame_table[idx];
-    seL4_ARM_Page_Unmap(cur_frame->cap);
+    if (cur_frame->mapped) {
+        seL4_ARM_Page_Unmap(cur_frame->cap);
+    }
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
         ERR("frame_free: failed to delete CAP\n");

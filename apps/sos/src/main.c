@@ -21,6 +21,7 @@
 #include <serial/serial.h>
 #include <clock/clock.h>
 #include <limits.h>
+#include <sel4/sel4.h>
 
 #include "frametable.h"
 #include "process.h"
@@ -70,36 +71,23 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
-    assert(as->regions);
-    sos_region_t* region = as->regions;
-    while(region != NULL) {
-        if (addr >= region->start && addr < region->end) {
-            return region;
-        }
-        region = region->next;
-    }
-    return NULL;
-}
-
 static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
         return EFAULT;
     }
 
-    sos_region_t* reg = region_probe(as, faultaddr);
+    sos_region_t* reg = as_vaddr_region(as, faultaddr);
     if (!reg) {
         return EFAULT;
     }
-    if (read_fault && !PERM_READ(reg->perms)) {
+    if (read_fault && !(reg->rights & seL4_CanRead)) {
         return EACCES;
     }
-    if (!read_fault && !PERM_WRITE(reg->perms)) {
+    if (!read_fault && !(reg->rights & seL4_CanWrite)) {
         return EACCES;
     }
-    seL4_Word discard;
-    int err = as_map_page(as, faultaddr, &discard);
+    int err = as_create_page(as, faultaddr, reg->rights);
     if (err) {
         return err;
     }
@@ -209,7 +197,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         case SOS_SYSCALL_BRK:;
             sos_addrspace_t* as = proc_as(current_process());
             assert(as);
-            reply_msg = brk(as, seL4_GetMR(1));
+            reply_msg = sos_brk(as, seL4_GetMR(1));
             reply = seL4_MessageInfo_new(0, 0, 0, 1);
             seL4_SetMR(0, reply_msg);
             seL4_SetTag(reply);
@@ -352,7 +340,7 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     /* load the elf image */
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
-    init_essential_regions(as);
+    as_activate(as);
 
     /* Start the new process */
     memset(&context, 0, sizeof(context));

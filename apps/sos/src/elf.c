@@ -84,16 +84,17 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
 
     */
 
-
-
     assert(file_size <= segment_size);
-
     unsigned long pos;
-
     /* We work a page at a time in the destination vspace. */
     pos = 0;
+
     sos_addrspace_t *as = proc_as(current_process());
-    as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+    sos_region_t *reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+    if (reg == NULL) {
+        // failed to create a region
+        return 1;
+    }
     while(pos < segment_size) {
         seL4_Word vpage;
         int nbytes;
@@ -101,10 +102,8 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
 
         vpage  = PAGE_ALIGN(dst);
 
-        /* Map the frame into tty_test address spaces */
-        seL4_Word sos_vaddr = 0;
-
-        err = as_map_page(as, vpage, &sos_vaddr);
+        err = as_create_page(as, vpage, permissions);
+        seL4_Word sos_vaddr = as_lookup_sos_vaddr(as, vpage);
         conditional_panic(err, "Failed to map to tty address space");
 
         /* Now copy our data into the destination vspace. */

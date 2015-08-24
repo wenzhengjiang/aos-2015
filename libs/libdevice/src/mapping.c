@@ -56,7 +56,7 @@ _map_page_table(seL4_ARM_PageDirectory pd, seL4_Word vaddr){
 
 int 
 map_page(seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd, seL4_Word vaddr, 
-                seL4_CapRights rights, seL4_ARM_VMAttributes attr){
+         seL4_CapRights rights, seL4_ARM_VMAttributes attr){
     int err;
 
     /* Attempt the mapping */
