@@ -104,9 +104,6 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
 
 static int as_map(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, seL4_CPtr fc) {
     int err;
-    assert(PT_SIZE == 1024);
-    assert(PD_SIZE == 1024);
-    assert(PAGE_SIZE == 4096);
     // Copy the cap so we can map it into the process' PD
     seL4_CPtr proc_fc = cspace_copy_cap(cur_cspace,
                                         cur_cspace,
@@ -194,7 +191,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
 static int init_regions(sos_addrspace_t *as) {
     assert(as);
 
-    seL4_Word heap_start = 0 + PAGE_SIZE;
+    seL4_Word heap_start = 0;
     sos_region_t* cur_region;
 
     for(cur_region = as->regions; cur_region != NULL;
@@ -235,9 +232,10 @@ void init_essential_regions(sos_addrspace_t* as) {
     int err;
     err = init_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
+    seL4_Word discard;
     seL4_CPtr ipc_cap = frame_cap(as->sos_ipc_buf_addr);
     as_map(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr, ipc_cap);
-    as_map_page(as, PROCESS_STACK_TOP - PAGE_SIZE, &as->sos_stack_addr);
+    as_map_page(as, PROCESS_STACK_TOP - PAGE_SIZE, &discard);
 }
 
 /**

@@ -40,8 +40,6 @@ typedef struct address_space {
     seL4_ARM_PageDirectory sos_pd_cap;
     seL4_Word sos_pd_addr;
     seL4_Word sos_ipc_buf_addr;
-    seL4_Word sos_stack_addr;
-    seL4_Word sos_heap_addr;
 } sos_addrspace_t;
 
 sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word end, int rights);
