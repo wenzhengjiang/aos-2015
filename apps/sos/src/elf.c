@@ -112,6 +112,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         if (pos < file_size){
             sos_map_frame(sos_vaddr);
             memcpy((void*)sos_vaddr, (void*)src, MIN(nbytes, file_size - pos));
+            seL4_CPtr cap = frame_cap(sos_vaddr);
             seL4_ARM_Page_Unify_Instruction(cap, 0, PAGESIZE);
             sos_unmap_frame(sos_vaddr);
         }
