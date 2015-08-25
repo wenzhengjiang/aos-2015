@@ -17,6 +17,7 @@
 #include "elf.h"
 #include "process.h"
 #include "addrspace.h"
+#include "frametable.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>
@@ -29,6 +30,7 @@
 /* Minimum of two values. */
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
+#define ELF_MAX_SEGMENTS  (6)
 #define PAGESIZE              (1 << (seL4_PageBits))
 #define PAGEMASK              ((PAGESIZE) - 1)
 #define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
@@ -82,16 +84,17 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
 
     */
 
-
-
     assert(file_size <= segment_size);
-
     unsigned long pos;
-
     /* We work a page at a time in the destination vspace. */
     pos = 0;
+
     sos_addrspace_t *as = proc_as(current_process());
-    as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+    sos_region_t *reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+    if (reg == NULL) {
+        // failed to create a region
+        return 1;
+    }
     while(pos < segment_size) {
         seL4_Word vpage;
         int nbytes;
@@ -99,18 +102,19 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
 
         vpage  = PAGE_ALIGN(dst);
 
-        /* Map the frame into tty_test address spaces */
-        seL4_Word sos_vaddr;
-
-        err = as_map_page(as, vpage, &sos_vaddr);
+        err = as_create_page(as, vpage, permissions);
+        seL4_Word sos_vaddr = as_lookup_sos_vaddr(as, vpage);
         conditional_panic(err, "Failed to map to tty address space");
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
         if (pos < file_size){
+            sos_map_frame(sos_vaddr);
             memcpy((void*)sos_vaddr, (void*)src, MIN(nbytes, file_size - pos));
+            seL4_CPtr cap = frame_cap(sos_vaddr);
+            seL4_ARM_Page_Unify_Instruction(cap, 0, PAGESIZE);
+            sos_unmap_frame(sos_vaddr);
         }
-
         pos += nbytes;
         dst += nbytes;
         src += nbytes;
@@ -123,6 +127,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
     int num_headers;
     int err;
     int i;
+    int loaded = 0;
 
     /* Ensure that the ELF file looks sane. */
     if (elf_checkFile(elf_file)){
@@ -130,6 +135,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
     }
 
     num_headers = elf_getNumProgramHeaders(elf_file);
+
     for (i = 0; i < num_headers; i++) {
         char *source_addr;
         unsigned long flags, file_size, segment_size, vaddr;
@@ -137,6 +143,8 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
         /* Skip non-loadable segments (such as debugging data). */
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD)
             continue;
+        loaded++;
+        conditional_panic(loaded > ELF_MAX_SEGMENTS, "Elf cannot be loaded\n");
 
         /* Fetch information about this segment. */
         source_addr = elf_file + elf_getProgramHeaderOffset(elf_file, i);
@@ -144,7 +152,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
-
+        // Limit number of segments
         /* Copy it across into the vspace. */
         dprintf(0, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
         err = load_segment_into_vspace(dest_as, source_addr, segment_size, file_size, vaddr,

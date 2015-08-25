@@ -80,7 +80,7 @@ int sos_sys_read(int file, char *buf, size_t nbyte);
  * available. Returns -1 on error (invalid file).
  */
 
-int sos_sys_write(int file, const char *buf, size_t nbyte);
+int sos_sys_write(int file, char *buf, size_t nbyte);
 /* Write to an open file, from "buf", max "nbyte" bytes.
  * Returns the number of bytes written. <nbyte disk is full.
  * Returns -1 on error (invalid file).

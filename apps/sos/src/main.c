@@ -20,6 +20,8 @@
 #include <elf/elf.h>
 #include <serial/serial.h>
 #include <clock/clock.h>
+#include <limits.h>
+#include <sel4/sel4.h>
 
 #include "frametable.h"
 #include "process.h"
@@ -28,6 +30,7 @@
 #include "network.h"
 #include "elf.h"
 #include <device/mapping.h>
+#include <syscall.h>
 
 #include <ut/ut.h>
 #include <device/vmem_layout.h>
@@ -40,9 +43,6 @@
 #include <log/panic.h>
 
 #include <sync/mutex.h>
-
-#include <syscall.h>
-
 
 /* To differencient between async and and sync IPC, we assign a
  * badge to the async endpoint. The badge that we receive will
@@ -73,46 +73,25 @@ static struct serial* serial;
 static char buf[1024];
 static int buflen = 0;
 
-// TODO: This implementation is not correct!
-static bool is_read_fault(seL4_Word faulttype)
-{
-    return (faulttype & (1ul << 11)) == 0;
-}
-
-static bool is_write_fault(seL4_Word faulttype)
-{
-    return !is_read_fault(1ul << 11);
-}
-
-static sos_region_t* region_probe(sos_addrspace_t *as, seL4_Word addr) {
-    assert(as->regions);
-    for (size_t i = 0; i < as->nregions; i++) {
-        if (addr >= as->regions[i].start && addr < as->regions[i].end)
-            return &(as->regions[i]);
-    }
-    return NULL;
-}
-
-static int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
+static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
         return EFAULT;
     }
 
-    sos_region_t* reg = region_probe(as, faultaddr);
-    if (!reg) return EFAULT;
-    if(reg != NULL){
-        if (is_read_fault(faulttype) && !PERM_READ(reg->perms)) {
-            return EACCES;
-        }
-        if (is_write_fault(faulttype) && !PERM_WRITE(reg->perms)) {
-            return EACCES;
-        }
-        seL4_Word discard;
-        int err = as_map_page(as, faultaddr, &discard);
-        if (err) {
-            return err;
-        }
+    sos_region_t* reg = as_vaddr_region(as, faultaddr);
+    if (!reg) {
+        return EFAULT;
+    }
+    if (read_fault && !(reg->rights & seL4_CanRead)) {
+        return EACCES;
+    }
+    if (!read_fault && !(reg->rights & seL4_CanWrite)) {
+        return EACCES;
+    }
+    int err = as_create_page(as, faultaddr, reg->rights);
+    if (err) {
+        return err;
     }
     return 0;
 }
@@ -220,16 +199,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_SetMR(1, reply_msg);
         seL4_Send(reply_cap, reply);
         break;
-    case SOS_SYSCALL_BRK:
-        {
-        dprintf(0, "syscall:brk \n");
-        sos_addrspace_t *as = proc_as(current_process());
+    case SOS_SYSCALL_BRK:;
+        sos_addrspace_t* as = proc_as(current_process());
         assert(as);
-        seL4_Word reply_msg = brk(as, seL4_GetMR(1));
+        reply_msg = sos_brk(as, seL4_GetMR(1));
         reply = seL4_MessageInfo_new(0, 0, 0, 1);
         seL4_SetMR(0, reply_msg);
+        seL4_SetTag(reply);
         seL4_Send(reply_cap, reply);
-        }
         break;
     case SOS_SYSCALL_TIMESTAMP:
         {
@@ -273,7 +250,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
     }
-    
     /* Free the saved reply cap */
     if (!keep_reply_cap)
         cspace_free_slot(cur_cspace, reply_cap);
@@ -298,16 +274,17 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
+            dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-            int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
+            int err = sos_vm_fault(seL4_GetMR(2), seL4_GetMR(1));
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed\n");
             } else {
                 seL4_CPtr reply_cap = cspace_save_reply_cap(cur_cspace);
                 assert(reply_cap != CSPACE_NULL);
                 seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+                seL4_SetTag(reply);
                 seL4_Send(reply_cap, reply);
             }
             //assert(!"Unable to handle vm faults");
@@ -402,21 +379,15 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
-
     /* load the elf image */
-    printf("LOADING\n");
     err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
-
-    printf("INIT REGIONS\n");
-    init_essential_regions(as);
+    as_activate(as);
 
     /* Start the new process */
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
     context.sp = PROCESS_STACK_TOP;
-
-
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
 
@@ -531,7 +502,7 @@ int main(void) {
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     frame_init();
-    
+
     /* Start the user application */
     start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
 

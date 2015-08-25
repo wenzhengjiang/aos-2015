@@ -39,7 +39,7 @@ thread_block(void){
 }
 
 int main(void){
-    ssize_t count = 0;
+    size_t count = 0;
     const char* msg = "This is a message that's exactly 100 bytes long....................................................\n";
     do {
         count = printf("task:\tHello world, I'm\ttty_test!\n");

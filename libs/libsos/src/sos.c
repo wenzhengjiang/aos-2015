@@ -43,8 +43,8 @@ int sos_sys_read(int file, char *buf, size_t nbyte) {
     return sos_read(buf, nbyte);
 }
 
-int sos_sys_write(int file, const char *buf, size_t nbyte) {
-
+int sos_sys_write(int file, char *buf, size_t nbyte) {
+    // TODO: Fix type issues here
     return sos_write(buf, nbyte);
 }
 
@@ -123,14 +123,14 @@ static size_t write_section(const char *msgdata, size_t count) {
 
 /**
  * Write-out the provided message.
- * @param vData pointer to a character array
+ * @param data pointer to a character array
  * @param count length of the array
  */
-size_t sos_write(void *vData, size_t count) {
+size_t sos_write(void *data, size_t count) {
     size_t i, seg_count;
     // The number of characters we can encode in a single IPC message
     size_t usable_msg_len = (seL4_MsgMaxLength - PRINT_MESSAGE_START) * sizeof(seL4_Word);
-    char* msgdata = vData;
+    const char* msgdata = data;
     size_t ipc_sections = count / usable_msg_len;
     size_t write_total = 0;
     for (i = 0; count && i <= ipc_sections; i++) {

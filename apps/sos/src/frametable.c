@@ -4,12 +4,17 @@
 #include <cspace/cspace.h>
 #include <limits.h>
 #include <ut/ut.h>
-#include <log/debug.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
+#include "frametable.h"
+
 #define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
+
 #define FRAME_REGION_SIZE   (1ull << FRAME_SIZE_BITS)
 #define FADDR_TO_VADDR(faddr) (faddr + FRAME_VSTART)
 #define VADDR_TO_FADDR(vaddr) (vaddr - FRAME_VSTART)
@@ -20,12 +25,13 @@
 /* Maximum number of frames which will fit in our region */
 #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 
-int nframes;
+static unsigned nframes;
 
 struct frame_entry {
     seL4_CPtr cap;
     struct frame_entry * next_free;
     seL4_Word paddr;
+    bool mapped;
 };
 
 typedef struct frame_entry frame_entry_t;
@@ -39,12 +45,68 @@ static void set_num_frames(void) {
     nframes = (high - low) / PAGE_SIZE;
 }
 
-static int frame_map_page(int idx) {
+/**
+ * Retrieve the cap corresponding to a frame
+ */
+seL4_CPtr frame_cap(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    assert(frame_table);
+    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
+    frame_entry_t *cur_frame = &frame_table[idx];
+    return cur_frame->cap;
+}
+
+seL4_Word frame_paddr(seL4_Word vaddr) {
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    assert(frame_table);
+    conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
+    frame_entry_t *cur_frame = &frame_table[idx];
+    return cur_frame->paddr;
+}
+
+/**
+ * Map the frame at vaddr into SOS
+ * @param vaddr the virtual address of the frame upon which to act
+ * @return 0 on success, non-zero on failure
+ */
+int sos_map_frame(seL4_Word vaddr) {
+    seL4_CPtr cap = frame_cap(vaddr);
+
+    assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    frame_entry_t *cur_frame = &frame_table[idx];
+    cur_frame->mapped = true;
+    int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    if (err) {
+        ERR("Unable to map page\n");
+        ut_free(frame_paddr(vaddr), seL4_PageBits);
+        cspace_delete_cap(cur_cspace, cap);
+        return EINVAL;
+    }
+    return 0;
+ }
+
+/**
+ * Unmap the frame at vaddr from SOS
+ * @param vaddr the virtual address of the frame upon which to act
+ * @return 0 on success, non-zero on failure
+ */
+int sos_unmap_frame(seL4_Word vaddr) {
+    assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
+    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    frame_entry_t *cur_frame = &frame_table[idx];
+    cur_frame->mapped = false;
+    return seL4_ARM_Page_Unmap(cur_frame->cap);
+}
+
+static int frame_map_page(unsigned idx) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
+
     // alloc a physical page
     seL4_Word paddr = ut_alloc(seL4_PageBits);
     if (paddr == 0) {
+        ERR("[frametable] Out of memory\n");
         return ENOMEM;
     }
     seL4_CPtr cap;
@@ -60,8 +122,8 @@ static int frame_map_page(int idx) {
         ut_free(paddr, seL4_PageBits);
         return EINVAL;
     }
-
     seL4_Word vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    assert((unsigned)vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -69,9 +131,9 @@ static int frame_map_page(int idx) {
         cspace_delete_cap(cur_cspace, cap);
         return EINVAL;
     }
-    frame_table[idx].cap = cap; 
+    memset((void*)vaddr, 0, PAGE_SIZE);
+    frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
-
     return 0;
 }
 
@@ -92,10 +154,12 @@ void frame_init(void) {
     assert(i > 0 && i < nframes);
     free_list = &frame_table[i];
     for (; i < nframes; i++) {
-        if (i < nframes-1)
+        if (i < nframes-1) {
             frame_table[i].next_free = &frame_table[i+1];
-        else 
+        }
+        else {
             frame_table[i].next_free = NULL;
+        }
     }
 }
 
@@ -111,14 +175,16 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         return 0;
     }
     if (!free_list) {
+        ERR("[frametable] Free list empty\n");
         *vaddr = 0;
         return 0;
     }
-    frame_entry_t * new_frame = free_list;
+    frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
-    int idx = (new_frame-frame_table);
+    unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t);
     int err = frame_map_page(idx);
     if (err) {
+        ERR("[frametable] Failed to map page: err %d\n", err);
         *vaddr = 0;
         return 0;
     }
@@ -126,9 +192,11 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
     return *vaddr;
 }
+
 /**
  * Free the frame
- * @param faddr Index of the frame to be removed
+ * @param vaddr Index of the frame to be removed
+ * @return 0 on success, non-zero on failure
  */
 int frame_free(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
@@ -138,7 +206,9 @@ int frame_free(seL4_Word vaddr) {
         return EINVAL;
     }
     frame_entry_t *cur_frame = &frame_table[idx];
-    seL4_ARM_Page_Unmap(cur_frame->cap);
+    if (cur_frame->mapped) {
+        seL4_ARM_Page_Unmap(cur_frame->cap);
+    }
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
         ERR("frame_free: failed to delete CAP\n");
@@ -148,19 +218,4 @@ int frame_free(seL4_Word vaddr) {
     cur_frame->next_free = free_list;
     free_list = cur_frame;
     return 0;
-}
-
-/**
- * Retrieve the cap corresponding to a frame
- */
-seL4_CPtr frame_cap(seL4_Word vaddr) {
-    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
-    assert(frame_table);
-    if (idx <= 0 || idx > nframes) {
-        ERR("frame_cap: illegal faddr received\n");
-        return EINVAL;
-    }
-    printf("getting cap at %d for %x\n", idx, vaddr);
-    frame_entry_t *cur_frame = &frame_table[idx];
-    return cur_frame->cap;
 }
