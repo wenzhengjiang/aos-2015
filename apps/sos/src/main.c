@@ -66,12 +66,14 @@ const seL4_BootInfo* _boot_info;
 
 #define PRINT_MESSAGE_START 2
 
+#define SERIAL_BUF_SIZE  1024
+
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
 static struct serial* serial;
-static char buf[1024];
-static int buflen = 0;
+static char ser_buf[SERIAL_BUF_SIZE];
+static int ser_buflen = 0;
 
 static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
@@ -166,7 +168,37 @@ void notify_client(uint32_t id, void *data) {
 }
 
 void serial_handler(struct serial *serial, char c) {
-    buf[buflen++] = c;
+    if (ser_buflen == SERIAL_BUF_SIZE) return; // TODO better solution not losing data ?
+    ser_buf[ser_buflen++] = c;
+}
+
+static void serial_open(void) {
+    serial = serial_init();
+    serial_register_handler(serial, serial_handler);
+}
+
+// copy content in serial buffer to buf
+// buf is a sosptr
+static int serial_read(sos_vaddr buf, size_t nbyte) {
+    assert(buf && nbyte);
+    int len = min(nbyte, buflen);
+    int i;
+    for (i = 0; i < len; i++)
+        buf[i] = ser_buf[i]; 
+    if (len < buflen)
+        memmove(ser_buf, ser_buf+i, buflen-len);
+    buflen -= len;
+    return i;
+}
+
+static int serial_write(sosptr buf, size_t nbyte) {
+    assert(buf && nbyte);
+    return serial_send(serial, buf, nbyte);
+}
+
+// TODO not finished !
+sos_vaddr cliptr2sosptr(client_vaddr cliptr) {
+    return as_lookup_sos_vaddr(current_as(), cliptr);
 }
 
 void handle_syscall(seL4_Word badge, int num_args) {
@@ -232,20 +264,36 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_OPEN:
         dprintf(0, "syscall: open\n");
-        serial = serial_init();
-        serial_register_handler(serial, serial_handler);
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
+        serial_open();
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
+        seL4_SetMR(0, 5);
         seL4_Send(reply_cap, reply);
-        dprintf(0, "syscall: open finished\n");
         break;
     case SOS_SYSCALL_READ:
-        dprintf(0, "syscall: read\n");
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,buflen);
-        for (int i = 0; i < buflen; i++)
-            seL4_SetMR(i, buf[i]);
-        buflen = 0;
+        {
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
+        int file = (int) seL4_GetMR(1);
+        sos_vaddr buf = cliptr2sosptr((client_vaddr) seL4_GetMR(2));
+        size_t nbyte = (size_t) seL4_GetMR(3);
+        (void)file;
+        seL4_SetMR(0, serial_read(buf, nbyte));
+        sos_unmap_frame(buf);
         seL4_Send(reply_cap, reply);
+        }
         break;
+    case SOS_SYSCALL_WRITE:
+        {
+        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
+        int file = (int) seL4_GetMR(1);
+        sos_vaddr buf = cliptr2sosptr((client_vaddr) seL4_GetMR(2));
+        size_t nbyte = (size_t) seL4_GetMR(3);
+        (void)file;
+        seL4_SetMR(0, serial_write(buf, nbyte));
+        sos_unmap_frame(buf);
+        seL4_Send(reply_cap, reply);
+        }
+        break;
+
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */

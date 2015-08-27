@@ -8,6 +8,8 @@
 
 #define TEST_PROCESS_NAME             CONFIG_SOS_STARTUP_APP
 
+#define current_as() proc_as(current_process())
+
 typedef struct process {
     sos_addrspace_t *vspace;
     seL4_Word tcb_addr;
@@ -16,9 +18,9 @@ typedef struct process {
     seL4_CPtr user_ep_cap;
 } sos_proc_t;
 
-
 int process_create(seL4_CPtr fault_ep);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_proc_t *current_process(void);
+sos_addrspace_t *current_as(void);
 
 #endif

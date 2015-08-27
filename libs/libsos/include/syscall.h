@@ -12,5 +12,6 @@
 #define SOS_SYSCALL_TIMESTAMP (5)
 #define SOS_SYSCALL_OPEN (6)
 #define SOS_SYSCALL_READ (7)
+#define SOS_SYSCALL_WRITE (7)
 
 #endif

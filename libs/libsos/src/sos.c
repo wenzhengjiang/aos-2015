@@ -19,6 +19,7 @@
 
 #define PRINT_MESSAGE_START 2
 
+#define SOS_SYSCALL_READ (7)
 static size_t sos_debug_print(char *data) {
     int count = strlen(data);
     for (int i = 0; i < count; i++) {
@@ -28,24 +29,50 @@ static size_t sos_debug_print(char *data) {
 }
 
 int sos_sys_open(const char *path, fmode_t mode) {
-    (void)mode;
 
-    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
     seL4_SetTag(tag);
-    seL4_SetMR(0, SOS_SYSCALL_OPEN); 
-    seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
-
-    return 5;
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
+    seL4_SetMR(1, (seL4_Word)path);
+    seL4_SetMR(2, (seL4_Word)mode);
+    seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
+        return -1;
+    else 
+        return seL4_GetMR(0);
 }
 
 int sos_sys_read(int file, char *buf, size_t nbyte) {
+    if (file < 0 || buf == NULL || nbyte == 0) return 0;
 
-    return sos_read(buf, nbyte);
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_READ); 
+    seL4_SetMR(1, (seL4_Word)file);
+    seL4_SetMR(2, (seL4_Word)buf);
+    seL4_SetMR(3, (seL4_Word)nbyte);
+    seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
+        return -1;
+    else 
+        return seL4_GetMR(0);
+
 }
 
 int sos_sys_write(int file, char *buf, size_t nbyte) {
-    // TODO: Fix type issues here
-    return sos_write(buf, nbyte);
+    if (file < 0 || buf == NULL || nbyte == 0) return 0;
+
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_WRITE); 
+    seL4_SetMR(1, (seL4_Word)file);
+    seL4_SetMR(2, (seL4_Word)buf);
+    seL4_SetMR(3, (seL4_Word)nbyte);
+    seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
+        return -1;
+    else 
+        return seL4_GetMR(0);
 }
 
 /*
