@@ -167,6 +167,7 @@ void frame_init(void) {
         else {
             frame_table[i].next_free = NULL;
         }
+        frame_table[i].map_req_count = 0;
     }
 }
 
