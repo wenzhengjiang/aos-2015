@@ -26,6 +26,7 @@
 #include "frametable.h"
 #include "process.h"
 #include "addrspace.h"
+#include "syscall.h"
 
 #include "network.h"
 #include "elf.h"
@@ -64,16 +65,8 @@ const seL4_BootInfo* _boot_info;
  */
 #define SOS_SYSCALL0 0
 
-#define PRINT_MESSAGE_START 2
-
-#define SERIAL_BUF_SIZE  1024
-
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
-
-static struct serial* serial;
-static char ser_buf[SERIAL_BUF_SIZE];
-static int ser_buflen = 0;
 
 static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
@@ -107,98 +100,6 @@ extern fhandle_t mnt_point;
 static inline int CONST min(int a, int b)
 {
     return (a < b) ? a : b;
-}
-
-
-/**
- * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
- * @param msgBuf starting point of buffer to store contents.  Must have at
- * least 4 chars available.
- * @param packed_data word packed with 4 characters
- */
-static int unpack_word(char* msgBuf, seL4_Word packed_data) {
-    int length = 0;
-    int j = sizeof(seL4_Word);
-    while (j > 0) {
-        // Unpack data encoded 4-chars per word.
-        *msgBuf = (char)(packed_data >> ((--j) * 8));
-        if (*msgBuf == 0) {
-            return length;
-        }
-        length++;
-        msgBuf++;
-    }
-    return length;
-}
-
-/**
- * @param num_args number of IPC args supplied
- * @returns length of the message printed
- */
-static size_t syscall_print(size_t num_args) {
-    size_t i,unpack_len,send_len;
-    size_t total_unpack = 0;
-    seL4_Word packed_data;
-    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
-    char *bufPtr = msgBuf;
-    char req_count = seL4_GetMR(1);
-    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
-    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
-        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
-        unpack_len = unpack_word(bufPtr, packed_data);
-        total_unpack += unpack_len;
-        bufPtr += unpack_len;
-        /* Unpack was short the expected amount, so we signal the end. */
-        if (unpack_len < sizeof(seL4_Word)) {
-            break;
-        }
-    }
-    send_len = serial_send(serial, msgBuf, min(req_count, total_unpack));
-    free(msgBuf);
-    return send_len;
-}
-
-void notify_client(uint32_t id, void *data) {
-    seL4_CPtr reply_cap = (seL4_CPtr)data;
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
-    seL4_Send(reply_cap, reply);
-    dprintf(0, "notify_client\n");
-    cspace_free_slot(cur_cspace, reply_cap);
-    keep_reply_cap = false;
-}
-
-void serial_handler(struct serial *serial, char c) {
-    if (ser_buflen == SERIAL_BUF_SIZE) return; // TODO better solution not losing data ?
-    ser_buf[ser_buflen++] = c;
-}
-
-static void serial_open(void) {
-    serial = serial_init();
-    serial_register_handler(serial, serial_handler);
-}
-
-// copy content in serial buffer to buf
-// buf is a sosptr
-static int serial_read(sos_vaddr buf, size_t nbyte) {
-    assert(buf && nbyte);
-    int len = min(nbyte, buflen);
-    int i;
-    for (i = 0; i < len; i++)
-        buf[i] = ser_buf[i]; 
-    if (len < buflen)
-        memmove(ser_buf, ser_buf+i, buflen-len);
-    buflen -= len;
-    return i;
-}
-
-static int serial_write(sosptr buf, size_t nbyte) {
-    assert(buf && nbyte);
-    return serial_send(serial, buf, nbyte);
-}
-
-// TODO not finished !
-sos_vaddr cliptr2sosptr(client_vaddr cliptr) {
-    return as_lookup_sos_vaddr(current_as(), cliptr);
 }
 
 void handle_syscall(seL4_Word badge, int num_args) {
@@ -254,7 +155,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         {
         uint64_t delay = 1000ULL * seL4_GetMR(1);
         dprintf(0, "syscall: usleep %u ms\n", seL4_GetMR(1));
-        if(!register_timer(delay, notify_client, (void*)reply_cap)) {
+        if(!register_timer(delay, sys_notify_client, (void*)reply_cap)) {
             reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
             seL4_Send(reply_cap, reply);
         } else {
@@ -264,7 +165,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_OPEN:
         dprintf(0, "syscall: open\n");
-        serial_open();
+        sys_serial_open();
         reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
         seL4_SetMR(0, 5);
         seL4_Send(reply_cap, reply);
@@ -276,7 +177,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         sos_vaddr buf = cliptr2sosptr((client_vaddr) seL4_GetMR(2));
         size_t nbyte = (size_t) seL4_GetMR(3);
         (void)file;
-        seL4_SetMR(0, serial_read(buf, nbyte));
+        seL4_SetMR(0, sys_serial_read(buf, nbyte));
         sos_unmap_frame(buf);
         seL4_Send(reply_cap, reply);
         }
@@ -288,7 +189,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         sos_vaddr buf = cliptr2sosptr((client_vaddr) seL4_GetMR(2));
         size_t nbyte = (size_t) seL4_GetMR(3);
         (void)file;
-        seL4_SetMR(0, serial_write(buf, nbyte));
+        seL4_SetMR(0, sys_serial_write(buf, nbyte));
         sos_unmap_frame(buf);
         seL4_Send(reply_cap, reply);
         }

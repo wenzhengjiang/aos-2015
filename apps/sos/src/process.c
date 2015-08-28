@@ -97,6 +97,10 @@ int process_create(seL4_CPtr fault_ep) {
     return 0;
 }
 
+sos_addrspace_t *current_as(void) {
+    return proc_as(curproc);
+}
+
 sos_proc_t *current_process(void) {
     return curproc;
 }
