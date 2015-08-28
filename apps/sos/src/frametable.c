@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
+#include <assert.h>
 #include "frametable.h"
 
 #define verbose 5

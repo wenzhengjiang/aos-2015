@@ -12,6 +12,7 @@
 #define _CLOCK_H_
 
 #include <sel4/sel4.h>
+#include <stdint.h>
 
 /*
  * Return codes for driver functions

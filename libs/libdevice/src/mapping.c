@@ -12,7 +12,7 @@
 
 #include <ut/ut.h>
 #include <device/vmem_layout.h>
-
+#include <assert.h>
 #define verbose 0
 #include <log/panic.h>
 #include <log/debug.h>

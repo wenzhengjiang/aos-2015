@@ -14,7 +14,6 @@ typedef struct process {
     seL4_TCB tcb_cap;
     cspace_t *cspace;
     seL4_CPtr user_ep_cap;
-    sos_open_file_t *oft;
 } sos_proc_t;
 
 int process_create(seL4_CPtr fault_ep);
