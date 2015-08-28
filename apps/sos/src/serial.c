@@ -24,8 +24,8 @@ void sos_serial_open(void) {
     serial_register_handler(serial, serial_handler);
 }
 
-int sos_serial_read(iovec_t* vec, size_t nbyte) {
-    assert(vec && nbyte);
+int sos_serial_read(iovec_t* vec) {
+    assert(vec);
     int pos = 0;
     for (iovec_t *v = vec; v && pos < buflen; v = v->next) {
         assert(vec->sz);
@@ -40,8 +40,8 @@ int sos_serial_read(iovec_t* vec, size_t nbyte) {
     return pos;
 }
 
-int sos_serial_write(iovec_t* vec, size_t nbyte) {
-    assert(vec && nbyte);
+int sos_serial_write(iovec_t* vec) {
+    assert(vec);
     assert(serial);
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {

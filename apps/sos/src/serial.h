@@ -7,9 +7,9 @@
 
 void sos_serial_open(void);
 
-int sos_serial_read(iovec_t* vecs, size_t nbyte);
+int sos_serial_read(iovec_t* vecs);
 
-int sos_serial_write(iovec_t* vecs, size_t nbyte);
+int sos_serial_write(iovec_t* vecs);
 
 
 #endif
