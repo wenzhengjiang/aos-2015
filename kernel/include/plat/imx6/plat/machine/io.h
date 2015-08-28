@@ -13,7 +13,7 @@
 
 #include <types.h>
 
-#ifdef DEBUG
+#if defined DEBUG || defined RELEASE_PRINTF
 void init_serial(void);
 void imx6_uart_putchar(char c);
 void putDebugChar(unsigned char c);

@@ -217,7 +217,7 @@ static int milli_sleep(int argc,char *argv[]) {
         printf("Usage %s milliseconds\n", argv[0]);
         return 1;
     }
-    nanos = (uint64_t)atoi(argv[0]) * NS_IN_MS;
+    nanos = (uint64_t)atoi(argv[1]) * NS_IN_MS;
     /* Get whole seconds */
     tv.tv_sec = nanos / NS_IN_S;
     /* Get nanos remaining */
