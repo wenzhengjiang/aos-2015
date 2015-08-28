@@ -5,11 +5,11 @@
 #include "addrspace.h"
 #include "syscall.h"
 
-void serial_open(void);
+void sos_serial_open(void);
 
-int serial_read(iovec_t* vecs, size_t nbyte);
+int sos_serial_read(iovec_t* vecs, size_t nbyte);
 
-int serial_write(iovec_t* vecs, size_t nbyte);
+int sos_serial_write(iovec_t* vecs, size_t nbyte);
 
 
 #endif

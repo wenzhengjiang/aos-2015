@@ -47,6 +47,33 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
     return length;
 }
 
+/**
+ * @param num_args number of IPC args supplied
+ * @returns length of the message printed
+ */
+
+size_t sys_print(size_t num_args) {
+    size_t i,unpack_len,send_len;
+    size_t total_unpack = 0;
+    seL4_Word packed_data;
+    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
+    char *bufPtr = msgBuf;
+    char req_count = seL4_GetMR(1);
+    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
+    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
+        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
+        unpack_len = unpack_word(bufPtr, packed_data);
+        total_unpack += unpack_len;
+        bufPtr += unpack_len;
+        /* Unpack was short the expected amount, so we signal the end. */
+        if (unpack_len < sizeof(seL4_Word)) {
+            break;
+        }
+    }
+    send_len = sos_serial_write(msgBuf, umin(req_count, total_unpack));
+    free(msgBuf);
+    return send_len;
+}
 static sos_vaddr
 check_page(sos_addrspace_t *as, char* buf, iop_direction_t dir) {
     // Ensure client process has the page mapped

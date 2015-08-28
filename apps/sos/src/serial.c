@@ -1,6 +1,7 @@
 #include "serial.h"
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define SERIAL_BUF_SIZE  1024
 
@@ -18,14 +19,16 @@ static void serial_handler(struct serial *serial, char c) {
     buf[buflen++] = c;
 }
 
-void sys_serial_open(void) {
+void sos_serial_open(void) {
     serial = serial_init();
     serial_register_handler(serial, serial_handler);
 }
 
-int serial_read(iovec_t* vec, size_t nbyte) {
+int sos_serial_read(iovec_t* vec, size_t nbyte) {
+    assert(vec && nbyte);
     int pos = 0;
     for (iovec_t *v = vec; v && pos < buflen; v = v->next) {
+        assert(vec->sz);
         int n = min(buflen-pos, vec->sz);
         memcpy((char*)v->start, buf+pos, n); 
         pos += n;
@@ -37,10 +40,13 @@ int serial_read(iovec_t* vec, size_t nbyte) {
     return pos;
 }
 
-int serial_write(iovec_t* vec, size_t nbyte) {
+int sos_serial_write(iovec_t* vec, size_t nbyte) {
+    assert(vec && nbyte);
+    assert(serial);
     int sent = 0;
-   for (iovec_t *v = vec; v ; v = v->next) {
-       sent += serial_send(serial, (char*)v->start, v->sz);
-   }
-   return sent;
+    for (iovec_t *v = vec; v ; v = v->next) {
+        assert(vec->sz);
+        sent += serial_send(serial, (char*)v->start, v->sz);
+    }
+    return sent;
 }
