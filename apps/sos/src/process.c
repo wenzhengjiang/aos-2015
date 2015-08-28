@@ -23,6 +23,7 @@
 #define USER_EP_CAP          (1)
 #define TEST_PRIORITY         (0)
 #define TEST_EP_BADGE         (101)
+#define FD_TABLE_SIZE    1024
 
 sos_proc_t test_proc;
 sos_proc_t *curproc = &test_proc;
@@ -31,6 +32,13 @@ static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
     proc->cspace = cspace_create(1);
     assert(proc->cspace != NULL);
+}
+
+static int init_fd_table(sos_proc_t *proc) {
+    seL4_Word fdt_addr;
+    frame_alloc(&fdt_addr);
+    
+    return 0;
 }
 
 static void init_tcb(sos_proc_t *proc) {
