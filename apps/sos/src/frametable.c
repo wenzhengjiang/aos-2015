@@ -141,6 +141,7 @@ static int frame_map_page(unsigned idx) {
     memset((void*)vaddr, 0, PAGE_SIZE);
     frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
+    frame_table[idx].map_req_count++;
     return 0;
 }
 
