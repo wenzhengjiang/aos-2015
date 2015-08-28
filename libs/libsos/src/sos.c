@@ -19,7 +19,6 @@
 
 #define PRINT_MESSAGE_START 2
 
-#define SOS_SYSCALL_READ (7)
 static size_t sos_debug_print(char *data) {
     int count = strlen(data);
     for (int i = 0; i < count; i++) {

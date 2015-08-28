@@ -160,5 +160,5 @@ int sys_serial_read(char* buf, size_t nbyte) {
 
 int sys_serial_write(client_vaddr buf, size_t nbyte) {
     assert(buf && nbyte);
-    return serial_send((char*)serial, buf, nbyte);
+    return serial_send(serial, (char*)buf, nbyte);
 }
