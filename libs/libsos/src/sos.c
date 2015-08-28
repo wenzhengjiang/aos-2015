@@ -19,14 +19,6 @@
 
 #define PRINT_MESSAGE_START 2
 
-static size_t sos_debug_print(char *data) {
-    int count = strlen(data);
-    for (int i = 0; i < count; i++) {
-        seL4_DebugPutChar(data[i]);
-    }
-    return count;
-}
-
 int sos_sys_open(const char *path, fmode_t mode) {
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
