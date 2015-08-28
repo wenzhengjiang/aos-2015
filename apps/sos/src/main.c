@@ -179,10 +179,11 @@ void handle_syscall(seL4_Word badge, int num_args) {
     case SOS_SYSCALL_OPEN:
         {
         dprintf(0, "syscall: open\n");
-        cilent_vaddr path = seL4_GetMR(1); 
+        client_vaddr path = seL4_GetMR(1); 
         fmode_t mode = seL4_GetMR(2);
         int fd;
-        int err = sos_sys_open(path, mode, &fd);
+        int err = sos__sys_open(path, mode, &fd);
+
         reply = seL4_MessageInfo_new(err,0,0,1);
         seL4_SetMR(0, fd);
         seL4_Send(reply_cap, reply);
@@ -194,7 +195,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         client_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);
         int bytes;
-        int err = sos_sys_read(file, buf, nbyte, &bytes);
+        int err = sos__sys_read(file, buf, nbyte, &bytes);
 
         reply = seL4_MessageInfo_new(err,0,0,1);
         seL4_SetMR(0, bytes);
@@ -203,11 +204,13 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_WRITE:
         {
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
         int file = (int) seL4_GetMR(1);
-        sos_vaddr buf = seL4_GetMR(2);
+        client_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);
-        int bytes = sos_sys_write(file, buf, nbyte, &bytes);
+        int bytes;
+        int err = sos__sys_write(file, buf, nbyte, &bytes);
+
+        reply = seL4_MessageInfo_new(err,0,0,1);
         seL4_SetMR(0, bytes);
         seL4_Send(reply_cap, reply);
         }

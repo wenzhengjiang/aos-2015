@@ -100,7 +100,6 @@ sos_usleep(int usecs) {
 void 
 network_irq(void) {
     int err;
-    int i;
     /* skip if the network was not initialised */
     if(_irq_ep == seL4_CapNull){
         return;
