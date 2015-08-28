@@ -104,6 +104,15 @@ static inline int CONST min(int a, int b)
     return (a < b) ? a : b;
 }
 
+static void sys_notify_client(uint32_t id, void *data) {
+    seL4_CPtr reply_cap = (seL4_CPtr)data;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
+    seL4_Send(reply_cap, reply);
+    dprintf(0, "notify_client\n");
+    cspace_free_slot(cur_cspace, reply_cap);
+    keep_reply_cap = false;
+}
+
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -134,7 +143,8 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_SetMR(1, reply_msg);
         seL4_Send(reply_cap, reply);
         break;
-    case SOS_SYSCALL_BRK:;
+    case SOS_SYSCALL_BRK:
+        {
         sos_addrspace_t* as = proc_as(current_process());
         assert(as);
         reply_msg = sos_brk(as, seL4_GetMR(1));
@@ -142,6 +152,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_SetMR(0, reply_msg);
         seL4_SetTag(reply);
         seL4_Send(reply_cap, reply);
+        }
         break;
     case SOS_SYSCALL_TIMESTAMP:
         {
@@ -166,22 +177,27 @@ void handle_syscall(seL4_Word badge, int num_args) {
         }
         break;
     case SOS_SYSCALL_OPEN:
+        {
         dprintf(0, "syscall: open\n");
-        sys_serial_open();
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
-        seL4_SetMR(0, 5);
+        cilent_vaddr path = seL4_GetMR(1); 
+        fmode_t mode = seL4_GetMR(2);
+        int fd;
+        int err = sos_sys_open(path, mode, &fd);
+        reply = seL4_MessageInfo_new(err,0,0,1);
+        seL4_SetMR(0, fd);
         seL4_Send(reply_cap, reply);
+        }
         break;
     case SOS_SYSCALL_READ:
         {
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
-        // TODO: use me
         int file = (int) seL4_GetMR(1);
-        sos_vaddr buf = seL4_GetMR(2);
+        client_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);
-        (void)file;
-        seL4_SetMR(0, sys_serial_read(buf, nbyte));
-        sos_unmap_frame(buf);
+        int bytes;
+        int err = sos_sys_read(file, buf, nbyte, &bytes);
+
+        reply = seL4_MessageInfo_new(err,0,0,1);
+        seL4_SetMR(0, bytes);
         seL4_Send(reply_cap, reply);
         }
         break;
@@ -191,9 +207,8 @@ void handle_syscall(seL4_Word badge, int num_args) {
         int file = (int) seL4_GetMR(1);
         sos_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);
-        (void)file;
-        seL4_SetMR(0, sys_serial_write(buf, nbyte));
-        sos_unmap_frame(buf);
+        int bytes = sos_sys_write(file, buf, nbyte, &bytes);
+        seL4_SetMR(0, bytes);
         seL4_Send(reply_cap, reply);
         }
         break;

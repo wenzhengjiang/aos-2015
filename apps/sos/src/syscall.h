@@ -5,11 +5,12 @@
 #include "process.h"
 #include "addrspace.h"
 
-void sys_notify_client(uint32_t id, void *data);
-void sys_serial_handler(struct serial *serial, char c);
-void sys_serial_open(void);
-int sys_serial_read(sos_vaddr buf, size_t nbyte);
-int sys_serial_write(sos_vaddr buf, size_t nbyte);
-size_t sys_print(size_t num_args);
+size_t sys_sys_print(size_t num_args);
+
+int sos_sys_open(const char *path, fmode_t mode, int *ret);
+
+int sos_sys_read(int file, char *buf, size_t nbyte, int *ret);
+
+int sos_sys_write(int file, char *buf, size_t nbyte, int *ret);
 
 #endif

@@ -29,7 +29,6 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 {
     return (a < b) ? a : b;
 }
-static bool keep_reply_cap = false;
 
 /**
  * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
@@ -57,14 +56,7 @@ static void serial_handler(struct serial *serial, char c) {
     ser_buf[ser_buflen++] = c;
 }
 
-void sys_notify_client(uint32_t id, void *data) {
-    seL4_CPtr reply_cap = (seL4_CPtr)data;
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
-    seL4_Send(reply_cap, reply);
-    dprintf(0, "notify_client\n");
-    cspace_free_slot(cur_cspace, reply_cap);
-    keep_reply_cap = false;
-}
+
 
 void sys_serial_open(void) {
     serial = serial_init();
@@ -132,8 +124,9 @@ size_t sys_print(size_t num_args) {
 
 // copy content in serial buffer to buf
 // buf is a sosptr
-int sys_serial_read(char* buf, size_t nbyte) {
+int sys_serial_read(client_vaddr cbuf, size_t nbyte) {
     assert(buf);
+    char *buf = (char*) cbuf;
     size_t remaining = nbyte;
     sos_addrspace_t* as = current_as();
     if (check_iop(buf, nbyte, READ) != 0) {
