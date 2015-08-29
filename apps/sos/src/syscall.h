@@ -23,4 +23,8 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret);
 
 void ipc_read(int start, char *buf);
 
+extern seL4_CPtr reader_cap;
+
+void iov_free(iovec_t *);
+
 #endif

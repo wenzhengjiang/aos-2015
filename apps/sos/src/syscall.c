@@ -52,7 +52,7 @@ check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
     return saddr;
 }
 
-static void iov_free(iovec_t *iov) {
+void iov_free(iovec_t *iov) {
     iovec_t *cur;
     while(iov) {
         cur = iov;
@@ -124,6 +124,7 @@ size_t sys_print(size_t num_args) {
 }
 
 static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **iotail) {
+    printf("iov_create: %u, %u\n", start ,sz);
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -186,13 +187,18 @@ int sos__sys_open(const char *path, fmode_t mode, int *ret) {
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
+    printf("sos__sys_read: enter %08x\n", buf);
     io_device_t *dev = device_handler("console"); //TODO removd hardcode
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
+    if (iov == NULL) {
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
     if (dev) {
         *ret = dev->read(iov);
     } else 
         assert(!"only support console");
-    iov_free(iov);
+    printf("sos__sys_read: leave\n");
     return 0;
 }
 

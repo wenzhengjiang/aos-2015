@@ -71,6 +71,8 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
+seL4_CPtr reader_cap;
+
 static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
@@ -129,103 +131,104 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
     /* Process system call */
     switch (syscall_number) {
-    case SOS_SYSCALL0:
-        dprintf(0, "syscall: thread made syscall 0!\n");
+        case SOS_SYSCALL0:
+            dprintf(0, "syscall: thread made syscall 0!\n");
 
-        reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, 0);
-        seL4_Send(reply_cap, reply);
-        break;
-    case SOS_SYSCALL_PRINT:
-        dprintf(0, "syscall:print\n");
-        reply_msg = sys_print(num_args);
-        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
-        seL4_SetMR(0, 0);
-        seL4_SetMR(1, reply_msg);
-        seL4_Send(reply_cap, reply);
-        break;
-    case SOS_SYSCALL_BRK:
-        {
-            printf("SYS BRK\n");
-        sos_addrspace_t* as = proc_as(current_process());
-        assert(as);
-        reply_msg = sos_brk(as, seL4_GetMR(1));
-        reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, reply_msg);
-        seL4_SetTag(reply);
-        seL4_Send(reply_cap, reply);
-        }
-        break;
-    case SOS_SYSCALL_TIMESTAMP:
-        {
-            printf("SYS TIME\n");
-        uint64_t tick = time_stamp();
-        dprintf(0, "syscall: timestamp %llu\n", tick);
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
-        seL4_SetMR(0, tick & 0xffffffff);
-        seL4_SetMR(1, tick>>32);
-        seL4_Send(reply_cap, reply);
-        }
-        break;
-    case SOS_SYSCALL_USLEEP:
-        {
-            printf("SYS SLEEP\n");
-        uint64_t delay = 1000ULL * seL4_GetMR(1);
-        dprintf(0, "syscall: usleep %u ms\n", seL4_GetMR(1));
-        if(!register_timer(delay, sys_notify_client, (void*)reply_cap)) {
-            reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
+            reply = seL4_MessageInfo_new(0, 0, 0, 1);
+            seL4_SetMR(0, 0);
             seL4_Send(reply_cap, reply);
-        } else {
-            keep_reply_cap = true;
-        }
-        }
-        break;
-    case SOS_SYSCALL_OPEN:
-        {
-        printf("SYS OPEN\n");
-        fmode_t mode = seL4_GetMR(1);
-        static char path[MAX_FILENAME_LEN];
-        ipc_read(OPEN_MESSAGE_START, path); 
-        int fd;
-        int err = sos__sys_open(path, mode, &fd);
+            break;
+        case SOS_SYSCALL_PRINT:
+            dprintf(0, "syscall:print\n");
+            reply_msg = sys_print(num_args);
+            reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+            seL4_SetMR(0, 0);
+            seL4_SetMR(1, reply_msg);
+            seL4_Send(reply_cap, reply);
+            break;
+        case SOS_SYSCALL_BRK:
+            {
+                printf("SYS BRK\n");
+                sos_addrspace_t* as = proc_as(current_process());
+                assert(as);
+                reply_msg = sos_brk(as, seL4_GetMR(1));
+                reply = seL4_MessageInfo_new(0, 0, 0, 1);
+                seL4_SetMR(0, reply_msg);
+                seL4_SetTag(reply);
+                seL4_Send(reply_cap, reply);
+            }
+            break;
+        case SOS_SYSCALL_TIMESTAMP:
+            {
+                printf("SYS TIME\n");
+                uint64_t tick = time_stamp();
+                dprintf(0, "syscall: timestamp %llu\n", tick);
+                reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
+                seL4_SetMR(0, tick & 0xffffffff);
+                seL4_SetMR(1, tick>>32);
+                seL4_Send(reply_cap, reply);
+            }
+            break;
+        case SOS_SYSCALL_USLEEP:
+            {
+                printf("SYS SLEEP\n");
+                uint64_t delay = 1000ULL * seL4_GetMR(1);
+                dprintf(0, "syscall: usleep %u ms\n", seL4_GetMR(1));
+                if(!register_timer(delay, sys_notify_client, (void*)reply_cap)) {
+                    reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
+                    seL4_Send(reply_cap, reply);
+                } else {
+                    keep_reply_cap = true;
+                }
+            }
+            break;
+        case SOS_SYSCALL_OPEN:
+            {
+                printf("SYS OPEN\n");
+                fmode_t mode = seL4_GetMR(1);
+                static char path[MAX_FILENAME_LEN];
+                ipc_read(OPEN_MESSAGE_START, path); 
+                int fd;
+                int err = sos__sys_open(path, mode, &fd);
+                
+                reply = seL4_MessageInfo_new(err,0,0,1);
+                seL4_SetMR(0, fd);
+                seL4_Send(reply_cap, reply);
+            }
+            break;
+        case SOS_SYSCALL_READ:
+            {
+                printf("SYS READ\n");
+                int file = (int) seL4_GetMR(1);
+                client_vaddr buf = seL4_GetMR(2);
+                size_t nbyte = (size_t) seL4_GetMR(3);
+                int bytes;
+                reader_cap = reply_cap;
+                sos__sys_read(file, buf, nbyte, &bytes);
 
-        reply = seL4_MessageInfo_new(err,0,0,1);
-        seL4_SetMR(0, fd);
-        seL4_Send(reply_cap, reply);
-        }
-        break;
-    case SOS_SYSCALL_READ:
-        {
-            printf("SYS READ\n");
-        int file = (int) seL4_GetMR(1);
-        client_vaddr buf = seL4_GetMR(2);
-        size_t nbyte = (size_t) seL4_GetMR(3);
-        int bytes;
-        int err = sos__sys_read(file, buf, nbyte, &bytes);
 
-        reply = seL4_MessageInfo_new(err,0,0,1);
-        seL4_SetMR(0, bytes);
-        seL4_Send(reply_cap, reply);
-        }
-        break;
-    case SOS_SYSCALL_WRITE:
-        {
-            printf("SYS WRITE\n");
-        int file = (int) seL4_GetMR(1);
-        client_vaddr buf = seL4_GetMR(2);
-        size_t nbyte = (size_t) seL4_GetMR(3);
-        int bytes;
-        int err = sos__sys_write(file, buf, nbyte, &bytes);
+                keep_reply_cap = true;
+                // serial handler will reply it
+            }
+            break;
+        case SOS_SYSCALL_WRITE:
+            {
+                printf("SYS WRITE\n");
+                int file = (int) seL4_GetMR(1);
+                client_vaddr buf = seL4_GetMR(2);
+                size_t nbyte = (size_t) seL4_GetMR(3);
+                int bytes;
+                int err = sos__sys_write(file, buf, nbyte, &bytes);
 
-        reply = seL4_MessageInfo_new(err,0,0,1);
-        seL4_SetMR(0, bytes);
-        seL4_Send(reply_cap, reply);
-        }
-        break;
+                reply = seL4_MessageInfo_new(err,0,0,1);
+                seL4_SetMR(0, bytes);
+                seL4_Send(reply_cap, reply);
+            }
+            break;
 
-    default:
-        printf("Unknown syscall %d\n", syscall_number);
-        /* we don't want to reply to an unknown syscall */
+        default:
+            printf("Unknown syscall %d\n", syscall_number);
+            /* we don't want to reply to an unknown syscall */
     }
     /* Free the saved reply cap */
     if (!keep_reply_cap)
