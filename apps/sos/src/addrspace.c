@@ -112,7 +112,7 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     // Create a frame
     frame_alloc(sos_vaddr);
     conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
-    sos_unmap_frame(*sos_vaddr);
+    //sos_unmap_frame(*sos_vaddr);
 
     // Retrieve the Cap for the newly created frame
     seL4_CPtr fc = frame_cap(*sos_vaddr);

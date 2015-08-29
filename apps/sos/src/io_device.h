@@ -18,7 +18,6 @@ typedef struct device_map {
 } device_map_t;
 
 #define DEVICE_NUM 1
-device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
 
 
 #endif

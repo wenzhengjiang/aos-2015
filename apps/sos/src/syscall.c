@@ -24,6 +24,9 @@
 #define PRINT_MESSAGE_START (2)
 #define MAX_FILE_PATH_LENGTH (2048)
 
+extern io_device_t serial_io;
+device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
+
 typedef enum iop_direction {READ, WRITE} iop_direction_t;
 
 static inline unsigned CONST umin(unsigned a, unsigned b)
@@ -100,8 +103,10 @@ size_t sys_print(size_t num_args) {
             break;
         }
     }
-    iovec_t iov {.start = msgBuf, .sz = umin(req_count, total_unpack), .next = NULL};
-    send_len = sos_serial_write(iov);
+    iovec_t iov = { .start = (sos_vaddr)msgBuf,
+                    .sz = umin(req_count, total_unpack), 
+                    .next = NULL};
+    send_len = sos_serial_write(&iov);
     free(msgBuf);
     return send_len;
 }
@@ -117,7 +122,7 @@ static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **i
     ionew->next = NULL;
     if (iohead == NULL) {
         return ionew;
-    } else (iohead) {
+    } else {
         assert(*iotail);
         (*iotail)->next = ionew;
         *iotail = ionew;
@@ -169,20 +174,22 @@ int sos__sys_open(client_vaddr path, fmode_t mode, int *ret) {
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
     io_device_t *dev = device_handler("console"); //TODO removd hardcode
-    iovect_t *iov = cbuf_to_iov(buf, nbyte, READ);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (dev) {
         *ret = dev->read(iov);
     } else 
         assert(!"only support console");
+    iov_free(iov);
     return 0;
 }
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret) {
     io_device_t *dev = device_handler("console"); //TODO removd hardcode
-    iovect_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (dev) {
         *ret = dev->write(iov);
     } else 
         assert(!"only support console");
+    iov_free(iov);
     return 0;
 }

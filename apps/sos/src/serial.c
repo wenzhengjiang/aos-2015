@@ -5,6 +5,11 @@
 #include "io_device.h"
 #define SERIAL_BUF_SIZE  1024
 
+#define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
+
+
 io_device_t serial_io = {
     .open = sos_serial_open,
     .close = sos_serial_close,
@@ -37,7 +42,7 @@ int sos_serial_close(void) {
 int sos_serial_open(void) {
     serial = serial_init();
     serial_register_handler(serial, serial_handler);
-    return 0;
+    return 5;
 }
 
 int sos_serial_read(iovec_t* vec) {
