@@ -68,5 +68,8 @@ int sos_serial_write(iovec_t* vec) {
 }
 
 int sos_simple_write(char* buf, int len) {
+    if (serial == NULL) {
+        sos_serial_open("", 0);
+    }
     return serial_send(serial, buf, len);
 }
