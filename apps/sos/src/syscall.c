@@ -21,6 +21,7 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
+#define PRINT_MESSAGE_START (2)
 #define MAX_FILE_PATH_LENGTH (2048)
 
 typedef enum iop_direction {READ, WRITE} iop_direction_t;
@@ -56,6 +57,54 @@ static void iov_free(iovec_t *iov) {
         iov = iov->next;
         free(cur);
     }
+}
+
+/**
+ * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
+ * @param msgBuf starting point of buffer to store contents.  Must have at
+ * least 4 chars available.
+ * @param packed_data word packed with 4 characters
+ */
+static int unpack_word(char* msgBuf, seL4_Word packed_data) {
+    int length = 0;
+    int j = sizeof(seL4_Word);
+    while (j > 0) {
+        // Unpack data encoded 4-chars per word.
+        *msgBuf = (char)(packed_data >> ((--j) * 8));
+        if (*msgBuf == 0) {
+            return length;
+        }
+        length++;
+        msgBuf++;
+    }
+    return length;
+}
+
+/**
+ * @param num_args number of IPC args supplied
+ * @returns length of the message printed
+ */
+size_t sys_print(size_t num_args) {
+    size_t i,unpack_len,send_len;
+    size_t total_unpack = 0;
+    seL4_Word packed_data;
+    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
+    char *bufPtr = msgBuf;
+    char req_count = seL4_GetMR(1);
+    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
+    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
+        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
+        unpack_len = unpack_word(bufPtr, packed_data);
+        total_unpack += unpack_len;
+        bufPtr += unpack_len;
+        /* Unpack was short the expected amount, so we signal the end. */
+        if (unpack_len < sizeof(seL4_Word)) {
+            break;
+        }
+    }
+    send_len = sos_simple_write(msgBuf, umin(req_count, total_unpack));
+    free(msgBuf);
+    return send_len;
 }
 
 static iovec_t* iov_create(size_t offset, size_t buf_delta, iovec_t *iohead, iovec_t **iotail) {

@@ -14,6 +14,8 @@ int sos_serial_write(iovec_t* vecs);
 
 int sos_serial_close(void);
 
+int sos_simple_write(char* buf, int len);
+
 extern io_device_t serial_io;
 
 #endif
