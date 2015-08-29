@@ -17,30 +17,7 @@
 
 #include <sel4/sel4.h>
 
-/**
- * Pack characters of the message into seL4_words
- * @param msgdata message to be printed
- * @param count length of the message
- * @returns the number of characters encoded
- */
-static int pack_string(const char* msgdata, size_t mr_offset) {
-    size_t mr_idx,i,j;
-    seL4_Word pack;
-    size_t count = min(strlen(msgdata), );
-    i = 0;
-    mr_idx = mr_offset;
-    while(i < count) {
-        pack = 0;
-        j = sizeof(seL4_Word);
-        while (j > 0 && i < count) {
-            pack = pack | ((seL4_Word)msgdata[i] << ((--j)*8));
-            i++;
-        }
-        seL4_SetMR(mr_idx, pack);
-        mr_idx++;
-    }
-    return ((count + sizeof(seL4_Word) - 1) >> 2) + mr_offset;
-}
+#define PRINT_MESSAGE_START 2
 
 int sos_sys_open(const char *path, fmode_t mode) {
 
@@ -48,7 +25,7 @@ int sos_sys_open(const char *path, fmode_t mode) {
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
     seL4_SetMR(1, (seL4_Word)mode);
-    pack_string(path, 2);
+    seL4_SetMR(2, (seL4_Word)path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
