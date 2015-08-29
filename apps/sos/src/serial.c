@@ -64,8 +64,7 @@ int sos_serial_read(iovec_t* vec) {
 int sos_serial_write(iovec_t* vec) {
     assert(vec);
     if (!serial) {
-        ERR("serial port is not open!");
-        return 0;
+        sos_serial_open();
     }
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {

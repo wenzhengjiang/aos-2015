@@ -248,13 +248,7 @@ struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
         {"time", second_time}, {"mtime", micro_time} };
 
-static size_t sos_debug_print(char *data) {
-    int count = strlen(data);
-    for (int i = 0; i < count; i++) {
-        seL4_DebugPutChar(data[i]);
-    }
-    return count;
-}
+
 
 int main(void) {
     char buf[BUF_SIZ];

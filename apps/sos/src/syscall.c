@@ -22,7 +22,8 @@
 #include <log/panic.h>
 
 #define PRINT_MESSAGE_START (2)
-#define MAX_FILE_PATH_LENGTH (2048)
+
+#define MAX_FILE_PATH_LENGTH (256)
 
 extern io_device_t serial_io;
 device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
@@ -81,6 +82,17 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
     return length;
 }
 
+void ipc_read(int start, char *buf) {
+    assert(buf && start > 0);
+    int k = 0;
+    for (int i = start; i < seL4_MsgMaxLength; i++) {
+       int len = unpack_word(buf+k, seL4_GetMR(i)); 
+       k += len;
+       if (k < sizeof(seL4_Word)) break;
+    }
+    if (k < MAX_FILE_PATH_LENGTH)
+        buf[k] = 0;
+}
 /**
  * @param num_args number of IPC args supplied
  * @returns length of the message printed
@@ -162,8 +174,9 @@ static io_device_t* device_handler(char* filename) {
     return NULL;
 }
 
-int sos__sys_open(client_vaddr path, fmode_t mode, int *ret) {
-    io_device_t *dev = device_handler("console"); //TODO removd hardcode
+int sos__sys_open(const char *path, fmode_t mode, int *ret) {
+    printf("Open %s\n", path);
+    io_device_t *dev = device_handler(path); //TODO removd hardcode
     if (dev) {
         *ret = dev->open();
     } else 

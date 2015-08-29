@@ -15,10 +15,12 @@ typedef struct iovec {
 
 size_t sys_print(size_t num_args);
 
-int sos__sys_open(client_vaddr path, fmode_t mode, int *ret);
+int sos__sys_open(const char *path, fmode_t mode, int *ret);
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret);
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret);
+
+void ipc_read(int start, char *buf);
 
 #endif

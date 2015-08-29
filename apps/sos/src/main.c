@@ -66,6 +66,7 @@ const seL4_BootInfo* _boot_info;
  * A dummy starting syscall
  */
 #define SOS_SYSCALL0 0
+#define OPEN_MESSAGE_START (2)
 
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
@@ -181,9 +182,10 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_OPEN:
         {
-            printf("SYS OPEN\n");
-        client_vaddr path = seL4_GetMR(1); 
-        fmode_t mode = seL4_GetMR(2);
+        printf("SYS OPEN\n");
+        fmode_t mode = seL4_GetMR(1);
+        static char path[MAX_FILENAME_LEN];
+        ipc_read(OPEN_MESSAGE_START, path); 
         int fd;
         int err = sos__sys_open(path, mode, &fd);
 
