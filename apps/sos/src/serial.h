@@ -6,15 +6,13 @@
 #include "syscall.h"
 #include "io_device.h"
 
-int sos_serial_open(char* pathname, fmode_t mode);
+int sos_serial_open(void);
 
 int sos_serial_read(iovec_t* vecs);
 
 int sos_serial_write(iovec_t* vecs);
 
 int sos_serial_close(void);
-
-int sos_simple_write(char* buf, int len);
 
 extern io_device_t serial_io;
 

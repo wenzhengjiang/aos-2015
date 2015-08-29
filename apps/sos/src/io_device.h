@@ -2,13 +2,23 @@
 #define _IO_DEVICE_H_
 
 #include <sos.h>
+#include "serial.h"
 #include "syscall.h"
 
 typedef struct io_device {
-    int (*open)(char* pathname, fmode_t mode);
+    int (*open)(void);
     int (*close)(void);
     int (*read)(iovec_t*);
     int (*write)(iovec_t*);
 } io_device_t;
+
+typedef struct device_map {
+    io_device_t *handler;
+    char *name;
+} device_map_t;
+
+#define DEVICE_NUM 1
+device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
+
 
 #endif

@@ -6,10 +6,10 @@
 #define SERIAL_BUF_SIZE  1024
 
 io_device_t serial_io = {
-    &sos_serial_open,
-    &sos_serial_close,
-    &sos_serial_read,
-    &sos_serial_write
+    .open = sos_serial_open,
+    .close = sos_serial_close,
+    .read = sos_serial_read,
+    .write = sos_serial_write
 };
 
 static struct serial* serial;
@@ -29,12 +29,12 @@ static void serial_handler(struct serial *serial, char c) {
 int sos_serial_close(void) {
     serial_register_handler(serial, NULL);
     serial = NULL;
+    memset(buf, 0, sizeof(SERIAL_BUF_SIZE));
+    buflen = 0;
     return 0;
 }
 
-int sos_serial_open(char* pathname, fmode_t mode) {
-    (void)pathname;
-    (void)mode;
+int sos_serial_open(void) {
     serial = serial_init();
     serial_register_handler(serial, serial_handler);
     return 0;
@@ -58,7 +58,10 @@ int sos_serial_read(iovec_t* vec) {
 
 int sos_serial_write(iovec_t* vec) {
     assert(vec);
-    assert(serial);
+    if (!serial) {
+        ERR("serial port is not open!");
+        return 0;
+    }
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {
         assert(vec->sz);
@@ -67,9 +70,3 @@ int sos_serial_write(iovec_t* vec) {
     return sent;
 }
 
-int sos_simple_write(char* buf, int len) {
-    if (serial == NULL) {
-        sos_serial_open("", 0);
-    }
-    return serial_send(serial, buf, len);
-}
