@@ -182,9 +182,8 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_OPEN:
         {
-        printf("SYS OPEN\n");
         fmode_t mode = seL4_GetMR(1);
-        static char path[MAX_FILENAME_LEN];
+        static char path[MAX_FILE_PATH_LENGTH];
         ipc_read(OPEN_MESSAGE_START, path); 
         int fd;
         int err = sos__sys_open(path, mode, &fd);
