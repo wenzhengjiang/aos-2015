@@ -23,8 +23,6 @@
 
 #define PRINT_MESSAGE_START (2)
 
-#define MAX_FILE_PATH_LENGTH (256)
-
 extern io_device_t serial_io;
 device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
 

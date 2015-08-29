@@ -7,6 +7,8 @@
 #include "process.h"
 #include "addrspace.h"
 
+#define MAX_FILE_PATH_LENGTH (256)
+
 typedef struct iovec {
     sos_vaddr start;
     size_t sz;
