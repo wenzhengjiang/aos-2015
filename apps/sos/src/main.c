@@ -135,16 +135,9 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_SetMR(0, 0);
         seL4_Send(reply_cap, reply);
         break;
-    case SOS_SYSCALL_PRINT:
-        dprintf(0, "syscall:print\n");
-        reply_msg = sys_print(num_args);
-        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
-        seL4_SetMR(0, 0);
-        seL4_SetMR(1, reply_msg);
-        seL4_Send(reply_cap, reply);
-        break;
     case SOS_SYSCALL_BRK:
         {
+            printf("SYS BRK\n");
         sos_addrspace_t* as = proc_as(current_process());
         assert(as);
         reply_msg = sos_brk(as, seL4_GetMR(1));
@@ -156,6 +149,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_TIMESTAMP:
         {
+            printf("SYS TIME\n");
         uint64_t tick = time_stamp();
         dprintf(0, "syscall: timestamp %llu\n", tick);
         reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
@@ -166,6 +160,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_USLEEP:
         {
+            printf("SYS SLEEP\n");
         uint64_t delay = 1000ULL * seL4_GetMR(1);
         dprintf(0, "syscall: usleep %u ms\n", seL4_GetMR(1));
         if(!register_timer(delay, sys_notify_client, (void*)reply_cap)) {
@@ -178,7 +173,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_OPEN:
         {
-        dprintf(0, "syscall: open\n");
+            printf("SYS OPEN\n");
         client_vaddr path = seL4_GetMR(1); 
         fmode_t mode = seL4_GetMR(2);
         int fd;
@@ -191,6 +186,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_READ:
         {
+            printf("SYS READ\n");
         int file = (int) seL4_GetMR(1);
         client_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);
@@ -204,6 +200,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         break;
     case SOS_SYSCALL_WRITE:
         {
+            printf("SYS WRITE\n");
         int file = (int) seL4_GetMR(1);
         client_vaddr buf = seL4_GetMR(2);
         size_t nbyte = (size_t) seL4_GetMR(3);

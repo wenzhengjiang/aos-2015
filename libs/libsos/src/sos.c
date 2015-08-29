@@ -24,8 +24,8 @@ int sos_sys_open(const char *path, fmode_t mode) {
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
-    seL4_SetMR(1, (seL4_Word)path);
-    seL4_SetMR(2, (seL4_Word)mode);
+    seL4_SetMR(1, (seL4_Word)mode);
+    seL4_SetMR(2, (seL4_Word)path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
