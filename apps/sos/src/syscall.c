@@ -165,7 +165,7 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
     return iohead;
 }
 
-static io_device_t* device_handler(char* filename) {
+static io_device_t* device_handler(const char* filename) {
     for (int i = 0; i < DEVICE_NUM; i++) {
         if (strcmp(filename, dev_map[i].name) == 0)
             return dev_map[i].handler;
