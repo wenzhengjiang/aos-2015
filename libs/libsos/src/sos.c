@@ -17,15 +17,53 @@
 
 #include <sel4/sel4.h>
 
+#define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
+
 #define PRINT_MESSAGE_START 2
+#define OPEN_MESSAGE_START 2
+
+/**
+ * Pack characters of the message into seL4_words
+ * @param msgdata message to be printed
+ * @param count length of the message
+ * @returns the number of characters encoded
+ */
+static void ipc_write(int start, const char* msgdata, size_t count) {
+    size_t mr_idx,i,j;
+    seL4_Word pack;
+    i = 0;
+    mr_idx = start;
+    while(i < count) {
+        pack = 0;
+        j = sizeof(seL4_Word);
+        while (j > 0 && i < count) {
+            pack = pack | ((seL4_Word)msgdata[i] << ((--j)*8));
+            i++;
+        }
+        seL4_SetMR(mr_idx, pack);
+        mr_idx++;
+    }
+}
+
 
 int sos_sys_open(const char *path, fmode_t mode) {
 
-    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
+    if (!path) {
+        printf("path is null pointer\n");
+        return -1;
+    } 
+    int len = strlen(path);
+    if (len > MAX_FILENAME_LEN) {
+        printf("file name longer than 256\n");
+        return -1;
+    }
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
     seL4_SetMR(1, (seL4_Word)mode);
-    seL4_SetMR(2, (seL4_Word)path);
+    ipc_write(OPEN_MESSAGE_START, path, len+1);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
@@ -98,29 +136,6 @@ int64_t sos_sys_time_stamp(void) {
 }
 
 /**
- * Pack characters of the message into seL4_words
- * @param msgdata message to be printed
- * @param count length of the message
- * @returns the number of characters encoded
- */
-static void encode_section(const char* msgdata, size_t count) {
-    size_t mr_idx,i,j;
-    seL4_Word pack;
-    i = 0;
-    mr_idx = PRINT_MESSAGE_START;
-    while(i < count) {
-        pack = 0;
-        j = sizeof(seL4_Word);
-        while (j > 0 && i < count) {
-            pack = pack | ((seL4_Word)msgdata[i] << ((--j)*8));
-            i++;
-        }
-        seL4_SetMR(mr_idx, pack);
-        mr_idx++;
-    }
-}
-
-/**
  * Encode and send a section of message data over IPC for writing.  A section
  * is defined by the IPC message size limitations.
  * @param msgdata message to be printed
@@ -133,18 +148,26 @@ static size_t write_section(const char *msgdata, size_t count) {
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_PRINT);
     seL4_SetMR(1, count);
-    encode_section(msgdata, count);
+    ipc_write(PRINT_MESSAGE_START, msgdata, count);
     seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     /* the reply - chars written */
     return seL4_GetMR(1);
 }
 
+static size_t sos_debug_print(char *data) {
+    int count = strlen(data);
+    for (int i = 0; i < count; i++) {
+        seL4_DebugPutChar(data[i]);
+    }
+    return count;
+}
 /**
  * Write-out the provided message.
  * @param data pointer to a character array
  * @param count length of the array
  */
 size_t sos_write(void *data, size_t count) {
+    sos_debug_print("sos_write start\n");
     size_t i, seg_count;
     // The number of characters we can encode in a single IPC message
     size_t usable_msg_len = (seL4_MsgMaxLength - PRINT_MESSAGE_START) * sizeof(seL4_Word);
@@ -152,6 +175,7 @@ size_t sos_write(void *data, size_t count) {
     size_t ipc_sections = count / usable_msg_len;
     size_t write_total = 0;
     for (i = 0; count && i <= ipc_sections; i++) {
+        sos_debug_print("sos_write write section\n");
         if (i == ipc_sections) {
             seg_count = count % usable_msg_len;
         } else {
@@ -160,6 +184,7 @@ size_t sos_write(void *data, size_t count) {
         write_total += write_section(msgdata, seg_count);
         msgdata += seg_count;
     }
+    sos_debug_print("sos_write finish\n");
     return write_total;
 }
 
