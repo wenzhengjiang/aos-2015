@@ -22,7 +22,6 @@ io_device_t serial_io = {
 
 #define NEXT_BID(i) ((i+1)%2)
 #define PREV_BID(i) ((i+1)%2)
-#define SERIAL_FD 5
 
 static struct serial* serial;
 static char line_buf[2][SERIAL_BUF_SIZE];
@@ -89,7 +88,7 @@ int sos_serial_open(void) {
     assert(!serial);
     serial = serial_init();
     serial_register_handler(serial, serial_handler);
-    line_buflen[0] = line_buflen[1] = 0; // clear buffer
+//    line_buflen[0] = line_buflen[1] = 0; // clear buffer
     return SERIAL_FD;
 }
 
