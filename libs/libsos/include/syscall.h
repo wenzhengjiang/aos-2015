@@ -6,7 +6,7 @@
 // Syscall 1 is reserved for blocking behaviour until we can implement this
 // cleanly.
 
-#define MAX_FILENAME_LEN 255
+#define MAX_FILE_PATH_LENGTH 255
 
 #define SOS_SYSCALL_PRINT (2)
 #define SOS_SYSCALL_BRK (3)

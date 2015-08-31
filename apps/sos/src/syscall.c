@@ -16,6 +16,7 @@
 #include "io_device.h"
 #include <assert.h>
 #include <sos.h>
+#include <syscall.h>
 
 #define verbose 5
 #include <log/debug.h>

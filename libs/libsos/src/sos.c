@@ -24,6 +24,13 @@
 #define PRINT_MESSAGE_START 2
 #define OPEN_MESSAGE_START 2
 
+static size_t sos_debug_print(char *data) {
+    int count = strlen(data);
+    for (int i = 0; i < count; i++) {
+        seL4_DebugPutChar(data[i]);
+    }
+    return count;
+}
 /**
  * Pack characters of the message into seL4_words
  * @param msgdata message to be printed
@@ -50,19 +57,19 @@ static void ipc_write(int start, const char* msgdata, size_t count) {
 
 int sos_sys_open(const char *path, fmode_t mode) {
     if (!path) {
-        printf("path is null pointer\n");
+        sos_debug_print("path is null pointer\n");
         return -1;
     } 
-    int len = strlen(path);
-    if (len > MAX_FILENAME_LEN) {
-        printf("file name longer than 256\n");
+    int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
+    if (strlen(path) > MAX_FILE_PATH_LENGTH) {
+        sos_debug_print("file name longer than 256\n");
         return -1;
     }
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
     seL4_SetMR(1, (seL4_Word)mode);
-    ipc_write(OPEN_MESSAGE_START, path, len+1);
+    ipc_write(OPEN_MESSAGE_START, path, strlen(path)+1);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
@@ -153,13 +160,7 @@ static size_t write_section(const char *msgdata, size_t count) {
     return seL4_GetMR(1);
 }
 
-static size_t sos_debug_print(char *data) {
-    int count = strlen(data);
-    for (int i = 0; i < count; i++) {
-        seL4_DebugPutChar(data[i]);
-    }
-    return count;
-}
+
 /**
  * Write-out the provided message.
  * @param data pointer to a character array
