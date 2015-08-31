@@ -22,6 +22,7 @@ io_device_t serial_io = {
 
 #define NEXT_BID(i) ((i+1)%2)
 #define PREV_BID(i) ((i+1)%2)
+#define SERIAL_FD 5
 
 static struct serial* serial;
 static char line_buf[2][SERIAL_BUF_SIZE];
@@ -49,6 +50,7 @@ static inline void try_send_buffer(int i) {
         memcpy((char*)v->start, buf+pos, n); 
         pos += n;
     }
+    printf("send buf %d, sz = %u,%d\n", i, line_buflen[i], pos);
     // reply to client reader
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
     seL4_SetMR(0, pos);
@@ -84,9 +86,11 @@ int sos_serial_close(void) {
 }
 
 int sos_serial_open(void) {
+    assert(!serial);
     serial = serial_init();
     serial_register_handler(serial, serial_handler);
-    return 5;
+    line_buflen[0] = line_buflen[1] = 0; // clear buffer
+    return SERIAL_FD;
 }
 
 int sos_serial_read(iovec_t* vec) {
@@ -97,9 +101,7 @@ int sos_serial_read(iovec_t* vec) {
 
 int sos_serial_write(iovec_t* vec) {
     assert(vec);
-    if (!serial) {
-        sos_serial_open();
-    }
+    assert(serial); 
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {
         assert(vec->sz);

@@ -49,7 +49,6 @@ static void ipc_write(int start, const char* msgdata, size_t count) {
 
 
 int sos_sys_open(const char *path, fmode_t mode) {
-
     if (!path) {
         printf("path is null pointer\n");
         return -1;
@@ -167,15 +166,14 @@ static size_t sos_debug_print(char *data) {
  * @param count length of the array
  */
 size_t sos_write(void *data, size_t count) {
-    sos_debug_print("sos_write start\n");
     size_t i, seg_count;
+    //sos_debug_print("sos_write");
     // The number of characters we can encode in a single IPC message
     size_t usable_msg_len = (seL4_MsgMaxLength - PRINT_MESSAGE_START) * sizeof(seL4_Word);
     const char* msgdata = data;
     size_t ipc_sections = count / usable_msg_len;
     size_t write_total = 0;
     for (i = 0; count && i <= ipc_sections; i++) {
-        sos_debug_print("sos_write write section\n");
         if (i == ipc_sections) {
             seg_count = count % usable_msg_len;
         } else {
@@ -184,7 +182,6 @@ size_t sos_write(void *data, size_t count) {
         write_total += write_section(msgdata, seg_count);
         msgdata += seg_count;
     }
-    sos_debug_print("sos_write finish\n");
     return write_total;
 }
 

@@ -96,6 +96,9 @@ void ipc_read(int start, char *buf) {
  * @returns length of the message printed
  */
 size_t sys_print(size_t num_args) {
+    static struct serial *serial = NULL;
+    if (serial == NULL) serial = serial_init();
+
     size_t i,unpack_len,send_len;
     size_t total_unpack = 0;
     seL4_Word packed_data;
@@ -113,10 +116,7 @@ size_t sys_print(size_t num_args) {
             break;
         }
     }
-    iovec_t iov = { .start = (sos_vaddr)msgBuf,
-                    .sz = umin(req_count, total_unpack), 
-                    .next = NULL};
-    send_len = sos_serial_write(&iov);
+    send_len = serial_send(serial, msgBuf, umin(req_count, total_unpack));
     free(msgBuf);
     return send_len;
 }
@@ -185,7 +185,6 @@ int sos__sys_open(const char *path, fmode_t mode, int *ret) {
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
-    printf("sos__sys_read: enter %08x\n", buf);
     io_device_t *dev = device_handler("console"); //TODO removd hardcode
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (iov == NULL) {
@@ -196,7 +195,6 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
         *ret = dev->read(iov);
     } else 
         assert(!"only support console");
-    printf("sos__sys_read: leave\n");
     return 0;
 }
 
