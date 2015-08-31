@@ -25,7 +25,7 @@
 #define PRINT_MESSAGE_START (2)
 
 extern io_device_t serial_io;
-device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
+device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console", SERIAL_FD}};
 
 typedef enum iop_direction {READ, WRITE} iop_direction_t;
 
@@ -36,18 +36,26 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 
 static sos_vaddr
 check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
-    // Ensure client process has the page mapped
-    sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
-    if (saddr == 0) {
+
+    sos_region_t* reg = as_vaddr_region(as, buf);
+    if (!reg) {
         return 0;
     }
     // Ensure client process has correct permissions to the page
-    sos_region_t* reg = as_vaddr_region(as, buf);
     if (!(reg->rights & seL4_CanWrite) && dir == WRITE) {
         return 0;
     } else if (!(reg->rights & seL4_CanRead) && dir == READ) {
         return 0;
     }
+    
+    // Ensure client process has the page mapped
+    sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
+    if (saddr == 0) {
+        int err = as_create_page(as, buf, reg->rights);
+        if (err) return 0;
+    }
+    saddr = as_lookup_sos_vaddr(as, buf);
+    
     return saddr;
 }
 
@@ -166,17 +174,23 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
     return iohead;
 }
 
-static io_device_t* device_handler(const char* filename) {
+static io_device_t* device_handler_str(const char* filename) {
     for (int i = 0; i < DEVICE_NUM; i++) {
         if (strcmp(filename, dev_map[i].name) == 0)
             return dev_map[i].handler;
     }
     return NULL;
 }
-
+static io_device_t* device_handler_fd(int fd) {
+    for (int i = 0; i < DEVICE_NUM; i++) {
+        if (fd == dev_map[i].fd)
+            return dev_map[i].handler;
+    }
+    return NULL;
+}
 int sos__sys_open(const char *path, fmode_t mode, int *ret) {
     printf("Open %s\n", path);
-    io_device_t *dev = device_handler(path); //TODO removd hardcode
+    io_device_t *dev = device_handler_str(path);
     if (dev) {
         *ret = dev->open();
     } else 
@@ -186,7 +200,7 @@ int sos__sys_open(const char *path, fmode_t mode, int *ret) {
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
-    io_device_t *dev = device_handler("console"); //TODO removd hardcode
+    io_device_t *dev = device_handler_fd(file); 
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (iov == NULL) {
         assert(!"illegal buf addr");
@@ -200,7 +214,7 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
 }
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret) {
-    io_device_t *dev = device_handler("console"); //TODO removd hardcode
+    io_device_t *dev = device_handler_fd(file); 
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (dev) {
         *ret = dev->write(iov);
