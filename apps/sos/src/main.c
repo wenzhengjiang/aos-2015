@@ -138,14 +138,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
             seL4_SetMR(0, 0);
             seL4_Send(reply_cap, reply);
             break;
-        case SOS_SYSCALL_PRINT:
-            dprintf(0, "syscall:print\n");
-            reply_msg = sys_print(num_args);
-            reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
-            seL4_SetMR(0, 0);
-            seL4_SetMR(1, reply_msg);
-            seL4_Send(reply_cap, reply);
-            break;
         case SOS_SYSCALL_BRK:
             {
                 printf("SYS BRK\n");
@@ -190,7 +182,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
                 ipc_read(OPEN_MESSAGE_START, path); 
                 int fd;
                 int err = sos__sys_open(path, mode, &fd);
-                
+
                 reply = seL4_MessageInfo_new(err,0,0,1);
                 seL4_SetMR(0, fd);
                 seL4_Send(reply_cap, reply);

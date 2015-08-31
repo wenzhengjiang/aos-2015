@@ -100,38 +100,8 @@ void ipc_read(int start, char *buf) {
     if (k < MAX_FILE_PATH_LENGTH)
         buf[k] = 0;
 }
-/**
- * @param num_args number of IPC args supplied
- * @returns length of the message printed
- */
-size_t sys_print(size_t num_args) {
-    static struct serial *serial = NULL;
-    if (serial == NULL) serial = serial_init();
-
-    size_t i,unpack_len,send_len;
-    size_t total_unpack = 0;
-    seL4_Word packed_data;
-    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
-    char *bufPtr = msgBuf;
-    char req_count = seL4_GetMR(1);
-    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
-    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
-        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
-        unpack_len = unpack_word(bufPtr, packed_data);
-        total_unpack += unpack_len;
-        bufPtr += unpack_len;
-        /* Unpack was short the expected amount, so we signal the end. */
-        if (unpack_len < sizeof(seL4_Word)) {
-            break;
-        }
-    }
-    send_len = serial_send(serial, msgBuf, umin(req_count, total_unpack));
-    free(msgBuf);
-    return send_len;
-}
 
 static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **iotail) {
-    printf("iov_create: %u, %u\n", start ,sz);
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -163,7 +133,7 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
-        iohead = iov_create(saddr+offset, buf_delta, iohead, iotail);
+        iohead = iov_create(saddr, buf_delta, iohead, iotail);
         if (iohead == NULL) {
             ERR("Insufficient memory to create new iovec\n");
             return NULL;
@@ -189,7 +159,6 @@ static io_device_t* device_handler_fd(int fd) {
     return NULL;
 }
 int sos__sys_open(const char *path, fmode_t mode, int *ret) {
-    printf("Open %s\n", path);
     io_device_t *dev = device_handler_str(path);
     if (dev) {
         *ret = dev->open();
@@ -201,7 +170,7 @@ int sos__sys_open(const char *path, fmode_t mode, int *ret) {
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
     io_device_t *dev = device_handler_fd(file); 
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (iov == NULL) {
         assert(!"illegal buf addr");
         return EINVAL;
@@ -215,7 +184,7 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret) {
     io_device_t *dev = device_handler_fd(file); 
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (dev) {
         *ret = dev->write(iov);
     } else 

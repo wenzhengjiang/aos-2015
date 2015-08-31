@@ -49,7 +49,6 @@ static inline void try_send_buffer(int i) {
         memcpy((char*)v->start, buf+pos, n); 
         pos += n;
     }
-    printf("send buf %d, sz = %u,%d\n", i, line_buflen[i], pos);
     // reply to client reader
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
     seL4_SetMR(0, pos);
