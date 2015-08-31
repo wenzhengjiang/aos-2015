@@ -15,6 +15,7 @@ typedef struct io_device {
 typedef struct device_map {
     io_device_t *handler;
     char *name;
+    int fd;
 } device_map_t;
 
 #define DEVICE_NUM 1

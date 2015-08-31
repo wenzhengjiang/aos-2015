@@ -6,6 +6,7 @@
 #include "syscall.h"
 #include "io_device.h"
 
+#define SERIAL_FD 5
 int sos_serial_open(void);
 
 int sos_serial_read(iovec_t* vecs);

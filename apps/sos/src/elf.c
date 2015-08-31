@@ -24,8 +24,8 @@
 #include <device/mapping.h>
 
 #define verbose 0
-#include <sys/debug.h>
-#include <sys/panic.h>
+#include <log/debug.h>
+#include <log/panic.h>
 
 /* Minimum of two values. */
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -108,7 +108,6 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         int nbytes;
         int err;
 
-        kdst   = as_lookup_sos_vaddr(as, dst);
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
 
@@ -116,6 +115,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         err = as_create_page(as, vpage, permissions);
         conditional_panic(err, "Failed to map to tty address space");
 
+        kdst   = as_lookup_sos_vaddr(as, dst);
         sos_cap = frame_cap(kdst);
 
         /* Now copy our data into the destination vspace. */

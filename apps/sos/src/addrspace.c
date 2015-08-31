@@ -39,7 +39,7 @@ sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     if (as->pd[pd_idx]) {
-        return as->pd[pd_idx][pt_idx];
+        return (as->pd[pd_idx][pt_idx] + (0x00000fff & vaddr));
     }
     return 0;
 }

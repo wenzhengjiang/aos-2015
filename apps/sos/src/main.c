@@ -367,6 +367,7 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     /* Start the new process */
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
+    printf("pc = %08x\n", context.pc);
     context.sp = PROCESS_STACK_TOP;
     seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
 }
