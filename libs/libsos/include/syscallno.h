@@ -15,5 +15,9 @@
 #define SOS_SYSCALL_OPEN (6)
 #define SOS_SYSCALL_READ (7)
 #define SOS_SYSCALL_WRITE (8)
+#define SOS_SYSCALL_GETDIRENT (9)
+#define SOS_SYSCALL_STAT (10)
 
+#define STDIN_FD (0)
+#define STDOUT_FD (1)
 #endif

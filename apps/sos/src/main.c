@@ -33,7 +33,7 @@
 #include "network.h"
 #include "elf.h"
 #include <device/mapping.h>
-#include <syscall.h>
+#include <syscallno.h>
 
 #include <ut/ut.h>
 #include <device/vmem_layout.h>

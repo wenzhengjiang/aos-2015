@@ -25,10 +25,11 @@
 #include <sys/resource.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <sys/syscall.h>
-#include "ttyout.h"
+//#include "ttyout.h"
 
 #define STDIN_FD 0
 #define STDOUT_FD 1
