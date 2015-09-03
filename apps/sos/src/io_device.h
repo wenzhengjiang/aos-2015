@@ -8,8 +8,8 @@
 typedef struct io_device {
     int (*open)(char* path, fmode_t mode);
     int (*close)(int fh);
-    int (*read)(iovec_t*, int fh);
-    int (*write)(iovec_t*, int fh);
+    int (*read)(iovec_t*, int fh, int count);
+    int (*write)(iovec_t*, int fh, int count);
     int (*getattr)(iovec_t*, int fh);
     int (*readdir)(iovec_t*, int fh);
 } io_device_t;

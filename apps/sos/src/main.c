@@ -98,11 +98,6 @@ static int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
 }
 static bool keep_reply_cap = false;
 
-/**
- * NFS mount point
- */
-extern fhandle_t mnt_point;
-
 static inline int CONST min(int a, int b)
 {
     return (a < b) ? a : b;

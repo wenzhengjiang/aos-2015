@@ -27,4 +27,6 @@ extern seL4_CPtr reader_cap;
 
 void iov_free(iovec_t *);
 
+void syscall_end_continuation(sos_process_t *proc, int retval);
+
 #endif
