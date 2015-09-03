@@ -136,9 +136,11 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status,
         iov = cont->iovec;
         of = fd_lookup(proc, fd);
         of->offset += count;
-        nfs_write(of->fhandle, of->offset, iov->sz, iov->start,
+        if (nfs_write(of->fhandle, of->offset, iov->sz, iov->start,
                   nfs_write_callback,
-                  (unsigned)proc->pid);
+                      (unsigned)proc->pid) != RPC_OK) {
+            syscall_end_continuation(proc, -status);
+        }
     }
 }
 
@@ -173,7 +175,7 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
     syscall_end_continuation(proc, status);
 }
 
-int sos_nfs_getattr(int fd, iovec_t* iov) {
+int sos_nfs_getattr(iovec_t* iov, int fd) {
     open_file_t *of = proc_fd(current_process(), fd);
     pid_t pid = current_process()->pid;
     cont_t* cont = continuation_create();
@@ -208,8 +210,10 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     }
     cont->counter += num_files;
     if (nfscookie != 0) {
-        nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
-                    (unsigned)proc->pid);
+        if (nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
+                        (unsigned)proc->pid) != RPC_OK) {;
+            syscall_end_continuation(proc, -status);
+        }
     }
     return;
 }
