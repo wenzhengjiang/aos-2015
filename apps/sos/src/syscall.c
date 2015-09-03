@@ -34,6 +34,17 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
     return (a < b) ? a : b;
 }
 
+void syscall_end_continuation(sos_process_t *proc, int retval) {
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, retval);
+    seL4_SetTag(reply);
+    assert(proc->continuation);
+    assert(proc->continuation->reply_cap != seL4_CapNull);
+    seL4_Send(proc->continuation->reply_cap, reply);
+    continuation_free(proc);
+}
+
 static sos_vaddr
 check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
 

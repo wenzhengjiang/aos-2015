@@ -41,6 +41,7 @@ struct gpt_register {
 typedef struct gpt_register gpt_register_t;
 typedef uint64_t timestamp_t;
 typedef void (*timer_callback_t)(uint32_t id, void *data);
+typedef void (*tick_callback_t)(void);
 
 /*
  * Initialise driver. Performs implicit stop_timer() if already initialised.
@@ -88,5 +89,8 @@ timestamp_t time_stamp(void);
  * Returns CLOCK_R_OK iff successful.
  */
 int stop_timer(void);
+
+/** Register a callback to fire on kernel tick event */
+uint32_t register_tick_event(tick_callback_t callback_fun);
 
 #endif /* _CLOCK_H_ */

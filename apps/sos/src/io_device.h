@@ -6,10 +6,12 @@
 #include "syscall.h"
 
 typedef struct io_device {
-    int (*open)(void);
-    int (*close)(void);
-    int (*read)(iovec_t*);
-    int (*write)(iovec_t*);
+    int (*open)(char* path, fmode_t mode);
+    int (*close)(int fh);
+    int (*read)(iovec_t*, int fh);
+    int (*write)(iovec_t*, int fh);
+    int (*getattr)(iovec_t*, int fh);
+    int (*readdir)(iovec_t*, int fh);
 } io_device_t;
 
 typedef struct device_map {
@@ -19,6 +21,5 @@ typedef struct device_map {
 } device_map_t;
 
 #define DEVICE_NUM 1
-
 
 #endif

@@ -32,6 +32,7 @@
 
 #include "network.h"
 #include "elf.h"
+#include "sos_nfs.h"
 #include <device/mapping.h>
 #include <syscallno.h>
 
@@ -475,6 +476,7 @@ int main(void) {
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     frame_init();
+    sos_nfs_init(CONFIG_SOS_NFS_DIR);
 
     /* Start the user application */
     start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
