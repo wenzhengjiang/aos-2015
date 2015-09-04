@@ -35,6 +35,7 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 }
 
 void syscall_end_continuation(sos_process_t *proc, int retval) {
+    iovec_t *iov;
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(0, 0, 0, 1);
     seL4_SetMR(0, retval);
@@ -42,7 +43,15 @@ void syscall_end_continuation(sos_process_t *proc, int retval) {
     assert(proc->continuation);
     assert(proc->continuation->reply_cap != seL4_CapNull);
     seL4_Send(proc->continuation->reply_cap, reply);
-    continuation_free(proc);
+    iov = proc->cont->iovec;
+    while(iov) {
+        if (iov) {
+            proc->cont->iovec = iov->next;
+        }
+        free(iov);
+        iov = proc->cont->iovec;
+    }
+    memset(proc->cont, 0, sizeof(cont_t));
 }
 
 static sos_vaddr

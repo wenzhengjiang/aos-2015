@@ -20,5 +20,7 @@ int process_create(seL4_CPtr fault_ep);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);
+sos_proc_t *process_lookup(pid_t pid);
+open_file_t *fd_lookup(sos_proc_t *proc, int fd);
 
 #endif

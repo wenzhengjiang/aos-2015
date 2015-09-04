@@ -104,3 +104,14 @@ sos_addrspace_t *current_as(void) {
 sos_proc_t *current_process(void) {
     return curproc;
 }
+
+open_file_t *fd_lookup(sos_proc_t *proc, int fd) {
+    assert(proc);
+    return proc->fd_table[fd];
+}
+
+sos_proc_t *process_lookup(pid_t pid) {
+    (void)pid;
+    // TODO: Implement me
+    return &test_proc;
+}
