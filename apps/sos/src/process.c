@@ -85,6 +85,7 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
  * @return error code or 0 for success
  */
 int process_create(seL4_CPtr fault_ep) {
+    curproc->pid = 0;
     curproc->vspace = as_create();
     init_cspace(curproc);
     curproc->user_ep_cap = init_ep(curproc, fault_ep);
@@ -101,6 +102,22 @@ sos_proc_t *current_process(void) {
     return curproc;
 }
 
+
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
+    assert(proc);
     return proc->fd_table[fd];
+}
+
+sos_proc_t *process_lookup(pid_t pid) {
+    (void)pid;
+    // TODO: Implement me
+    return &test_proc;
+}
+
+void fd_free(sos_proc_t* proc, int fd) {
+    assert(proc);
+    assert(proc->fd_table[fd]);
+
+    proc->fd_table[fd]->io = NULL;
+    proc->fd_table[fd] = NULL;
 }

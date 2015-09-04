@@ -28,6 +28,10 @@
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
 
+static inline unsigned CONST umin(unsigned a, unsigned b)
+{
+    return (a < b) ? a : b;
+}
 /**
  * Lookup a sos vaddr (SOS frametable address) given a client vaddr
  * @param as address space
@@ -291,3 +295,28 @@ sos_addrspace_t* as_create(void) {
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;
 }
+
+int iov_read(iovec_t *iov, char *buf, int count) {
+    assert(iov && buf && (count > 0 ));
+    //if (!iov || !buf || count < 0) return -1;
+    int i = 0;
+    for (iovec_t *v = iov; v && i < count; v = v->next) {
+        assert(v->sz);
+        int n = umin(count-i, v->sz);
+        memcpy((char*)v->start, buf+i, n); 
+        i += n;
+    }
+    assert(i == count);
+    return 0; 
+}
+
+void iov_free(iovec_t *iov) {
+    iovec_t *cur;
+    while(iov) {
+        cur = iov;
+        iov = iov->next;
+        free(cur);
+    }
+}
+
+

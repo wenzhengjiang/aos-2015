@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <sel4/sel4.h>
 #include "serial.h"
-#include "syscall.h"
 #include "file.h"
 #include "process.h"
 

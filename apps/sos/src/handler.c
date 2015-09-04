@@ -94,11 +94,11 @@ static int timestamp_handler (seL4_CPtr reply_cap) {
 static int open_handler (seL4_CPtr reply_cap) {
     static char path[MAX_FILE_PATH_LENGTH];
 
-    printf("SYS OPEN\n");
     fmode_t mode = seL4_GetMR(1);
     ipc_read(OPEN_MESSAGE_START, path); 
     cur_proc->cont.reply_cap = reply_cap; 
 
+    printf("SYS OPEN %s %u\n", path, mode);
     return sos__sys_open(path, mode);
 }
  

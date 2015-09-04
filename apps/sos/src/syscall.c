@@ -34,6 +34,25 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
     return (a < b) ? a : b;
 }
 
+void syscall_end_continuation(sos_proc_t *proc, int retval) {
+    iovec_t *iov;
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    seL4_SetMR(0, retval);
+    seL4_SetTag(reply);
+    assert(proc->cont.reply_cap != seL4_CapNull);
+    seL4_Send(proc->cont.reply_cap, reply);
+    iov = proc->cont.iov;
+    while(iov) {
+        if (iov) {
+            proc->cont.iov = iov->next;
+        }
+        free(iov);
+        iov = proc->cont.iov;
+    }
+    memset(&proc->cont, 0, sizeof(cont_t));
+}
+
 static sos_vaddr
 check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
 
@@ -57,15 +76,6 @@ check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
     saddr = as_lookup_sos_vaddr(as, buf);
     
     return saddr;
-}
-
-void iov_free(iovec_t *iov) {
-    iovec_t *cur;
-    while(iov) {
-        cur = iov;
-        iov = iov->next;
-        free(cur);
-    }
 }
 
 /**
@@ -209,17 +219,4 @@ int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
     return nfs_io.getdirent(pos, iov);
 }
 
-int iov_read(iovec_t *iov, char *buf, int count) {
-    assert(iov && buf && (count > 0 ));
-    //if (!iov || !buf || count < 0) return -1;
-    int i = 0;
-    for (iovec_t *v = iov; v && i < count; v = v->next) {
-        assert(v->sz);
-        int n = umin(count-i, v->sz);
-        memcpy((char*)v->start, buf+i, n); 
-        i += n;
-    }
-    assert(i == count);
-    return 0; 
-}
 

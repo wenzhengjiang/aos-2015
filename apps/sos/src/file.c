@@ -21,7 +21,7 @@ of_entry_t* get_ofe() {
 }
 
 // return fd; -1 means ENOMEM
-int fd_create(fd_table_t fdt, fhandle_t *handle, io_device_t* io, fmode_t mode) {
+int fd_create(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode) {
     assert(fdt);
     assert(handle || io);
     for (int i = 0; i < FD_TABLE_SIZE; i++) {
@@ -30,7 +30,7 @@ int fd_create(fd_table_t fdt, fhandle_t *handle, io_device_t* io, fmode_t mode) 
             if (fdt[i] == NULL) return -1;
             fdt[i]->offset = 0;
             fdt[i]->mode = mode;
-            fdt[i]->nfs_handle = handle;
+            fdt[i]->fhandle = handle;
             fdt[i]->io = io;
             return i;
         }
@@ -44,9 +44,9 @@ int init_fd_table(void) {
     sos_proc_t* proc = current_process();
     frame_alloc((seL4_Word*)&proc->fd_table);
     conditional_panic(!proc->fd_table, "No memory for new TCB");
-    assert(fd_create(proc->fd_table, NULL, &serial_io, FM_READ) == 0);
-    assert(fd_create(proc->fd_table, NULL, &serial_io, FM_WRITE) == 1);
-    assert(fd_create(proc->fd_table, NULL, &serial_io, FM_WRITE) == 2);
+    assert(fd_create(proc->fd_table, 0, &serial_io, FM_READ) == 0);
+    assert(fd_create(proc->fd_table, 0, &serial_io, FM_WRITE) == 1);
+    assert(fd_create(proc->fd_table, 0, &serial_io, FM_WRITE) == 2);
 
     return 0;
 }

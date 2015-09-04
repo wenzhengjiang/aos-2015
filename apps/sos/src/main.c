@@ -34,6 +34,7 @@
 
 #include "network.h"
 #include "elf.h"
+#include "sos_nfs.h"
 #include <device/mapping.h>
 #include <syscallno.h>
 
@@ -71,11 +72,6 @@ const seL4_BootInfo* _boot_info;
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
-
-/**
- * NFS mount point
- */
-extern fhandle_t mnt_point;
 
 static inline int CONST min(int a, int b)
 {
@@ -331,6 +327,7 @@ int main(void) {
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_CLOCK));
 
     frame_init();
+    sos_nfs_init(CONFIG_SOS_NFS_DIR);
 
     sos_serial_init();
     /* Start the user application */
