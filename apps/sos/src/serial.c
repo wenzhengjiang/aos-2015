@@ -2,22 +2,26 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <errno.h>
 #include <sel4/sel4.h>
 #include "serial.h"
-#include "io_device.h"
 #include "syscall.h"
+#include "file.h"
+#include "process.h"
+
 #define SERIAL_BUF_SIZE  1024
 
 #define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
-
 io_device_t serial_io = {
     .open = sos_serial_open,
     .close = sos_serial_close,
     .read = sos_serial_read,
-    .write = sos_serial_write
+    .write = sos_serial_write,
+    .getdirent = NULL,
+    .stat = NULL
 };
 
 #define NEXT_BID(i) ((i+1)%2)
@@ -28,8 +32,8 @@ static char line_buf[2][SERIAL_BUF_SIZE];
 static size_t line_buflen[2];
 static int bid = 0; // current line buffer
 
-extern seL4_CPtr reader_cap;
-iovec_t *reader_iov;
+static seL4_CPtr reader_cap;
+static iovec_t *reader_iov;
 
 static inline unsigned CONST min(unsigned a, unsigned b)
 {
@@ -56,6 +60,7 @@ static inline void try_send_buffer(int i) {
     cspace_free_slot(cur_cspace, reader_cap);
     reader_cap = 0;
     iov_free(reader_iov);
+    reader_iov = NULL;
 
     if (pos < buflen) {
         memmove(buf, buf+pos, buflen-pos);
@@ -83,23 +88,28 @@ int sos_serial_close(void) {
     return 0;
 }
 
-int sos_serial_open(void) {
-    assert(!serial);
-    serial = serial_init();
-    serial_register_handler(serial, serial_handler);
-//    line_buflen[0] = line_buflen[1] = 0; // clear buffer
-    return SERIAL_FD;
+int sos_serial_open(const char* filename, fmode_t mode) {
+    assert(strcmp(filename, "console"));
+    //    line_buflen[0] = line_buflen[1] = 0; // clear buffer
+    sos_proc_t* proc = current_process();
+    return fd_create(proc->fd_table, NULL, &serial_io, mode);
 }
 
-int sos_serial_read(iovec_t* vec) {
-    assert(vec);
-    reader_iov = vec;
+int sos_serial_read(iovec_t* vec, int fd, int count) {
+    (void)count;
+    sos_proc_t* proc = current_process();
+    assert(proc != NULL);
+    cont_t *cont = &(proc->cont); 
+    reader_iov = cont->iov;
+    reader_cap = cont->reply_cap;
+
     return 0;
 }
 
-int sos_serial_write(iovec_t* vec) {
+int sos_serial_write(iovec_t* vec, int fd, int count) {
+    (void)fd;
+    (void)count;
     assert(vec);
-    assert(serial); 
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {
         assert(vec->sz);
@@ -108,3 +118,7 @@ int sos_serial_write(iovec_t* vec) {
     return sent;
 }
 
+void sos_serial_init() {
+    serial = serial_init();
+    serial_register_handler(serial, serial_handler);
+}

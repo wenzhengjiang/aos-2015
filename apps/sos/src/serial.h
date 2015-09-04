@@ -4,16 +4,16 @@
 #include <stdint.h>
 #include "addrspace.h"
 #include "syscall.h"
-#include "io_device.h"
 
-#define SERIAL_FD 5
-int sos_serial_open(void);
+int sos_serial_open(const char* filename, fmode_t mode);
 
-int sos_serial_read(iovec_t* vecs);
+int sos_serial_read(iovec_t* vecs, int fd, int count);
 
-int sos_serial_write(iovec_t* vecs);
+int sos_serial_write(iovec_t* vec, int fd, int count);
 
 int sos_serial_close(void);
+
+void sos_serial_init(void);
 
 extern io_device_t serial_io;
 

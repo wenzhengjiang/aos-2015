@@ -11,9 +11,9 @@
 #include "serial.h"
 #include "frametable.h"
 #include "process.h"
+#include "file.h"
 #include "addrspace.h"
 #include "syscall.h"
-#include "io_device.h"
 #include <assert.h>
 #include <sos.h>
 #include <syscallno.h>
@@ -25,9 +25,9 @@
 #define PRINT_MESSAGE_START (2)
 
 extern io_device_t serial_io;
-device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console", SERIAL_FD}};
+extern io_device_t nfs_io;
 
-typedef enum iop_direction {READ, WRITE} iop_direction_t;
+typedef enum iop_direction {READ, WRITE, NONE} iop_direction_t;
 
 static inline unsigned CONST umin(unsigned a, unsigned b)
 {
@@ -145,50 +145,81 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
 }
 
 static io_device_t* device_handler_str(const char* filename) {
-    for (int i = 0; i < DEVICE_NUM; i++) {
-        if (strcmp(filename, dev_map[i].name) == 0)
-            return dev_map[i].handler;
-    }
-    return NULL;
+    if (strcmp(filename, "console") == 0)
+        return &serial_io;
+    else 
+        return &nfs_io;
 }
+
 static io_device_t* device_handler_fd(int fd) {
-    for (int i = 0; i < DEVICE_NUM; i++) {
-        if (fd == dev_map[i].fd)
-            return dev_map[i].handler;
-    }
-    return NULL;
+    sos_proc_t *curproc = current_process();
+    assert(curproc);
+    assert(curproc->fd_table);
+    return curproc->fd_table[fd]->io;
 }
-int sos__sys_open(const char *path, fmode_t mode, int *ret) {
+
+int sos__sys_open(const char *path, fmode_t mode) {
     io_device_t *dev = device_handler_str(path);
-    if (dev) {
-        *ret = dev->open();
-    } else 
-        assert(!"only support console");
-
-    return 0;
+    assert(dev);
+    return dev->open(path, mode);
 }
 
-int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
+int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
+    if (file < 0 || file > MAX_FD)
+        return EINVAL;
     io_device_t *dev = device_handler_fd(file); 
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (iov == NULL) {
         assert(!"illegal buf addr");
         return EINVAL;
     }
-    if (dev) {
-        *ret = dev->read(iov);
-    } else 
-        assert(!"only support console");
-    return 0;
+    assert(dev);
+    return dev->read(iov, file, nbyte);
 }
 
-int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret) {
+int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
+    if (file < 0 || file > MAX_FD)
+        return EINVAL;
     io_device_t *dev = device_handler_fd(file); 
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
-    if (dev) {
-        *ret = dev->write(iov);
-    } else 
-        assert(!"only support console");
-    iov_free(iov);
-    return 0;
+    if (iov == NULL) {
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+    assert(dev);
+    return dev->write(iov, file, nbyte);
 }
+
+int sos__sys_stat(char *path, client_vaddr buf) {
+    iovec_t *iov = cbuf_to_iov((client_vaddr)path, sizeof(sos_stat_t), WRITE);
+    if (iov == NULL) {
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+
+    return nfs_io.stat(path, iov);
+}
+
+int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
+    iovec_t *iov = cbuf_to_iov(name, nbyte, WRITE);
+    if (iov == NULL) {
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+    return nfs_io.getdirent(pos, iov);
+}
+
+int iov_read(iovec_t *iov, char *buf, int count) {
+    assert(iov && buf && (count > 0 ));
+    //if (!iov || !buf || count < 0) return -1;
+    int i = 0;
+    for (iovec_t *v = iov; v && i < count; v = v->next) {
+        assert(v->sz);
+        int n = umin(count-i, v->sz);
+        memcpy((char*)v->start, buf+i, n); 
+        i += n;
+    }
+    assert(i == count);
+    return 0; 
+}
+

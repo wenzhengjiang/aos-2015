@@ -21,8 +21,6 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
-#define PRINT_MESSAGE_START 2
-#define OPEN_MESSAGE_START 2
 #define STAE_MESSAGE_START 2
 
 static size_t sos_debug_print(char *data) {
@@ -54,7 +52,6 @@ static void ipc_write(int start, const char* msgdata, size_t count) {
         mr_idx++;
     }
 }
-
 
 int sos_sys_open(const char *path, fmode_t mode) {
     if (!path) {
@@ -142,21 +139,6 @@ int64_t sos_sys_time_stamp(void) {
     return ret;
 }
 
-pid_t sos_process_create(const char *path) {
-    assert(!"sos_process_create not implemented!");
-    return 0;
-}
-
-int sos_process_status(sos_process_t *processes, unsigned max) {
-    assert(!"sos_process_status not implemented!");
-    return 0;
-}
-
-pid_t sos_process_wait(pid_t pid) {
-    assert(!"sos_process_wait not implemented!");
-    return 0;
-}
-
 int sos_stat(const char *path, sos_stat_t *buf) {
     if (!path || !buf) return -1;
     int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
@@ -170,10 +152,10 @@ int sos_stat(const char *path, sos_stat_t *buf) {
     seL4_SetMR(1, (seL4_Word)buf); 
     ipc_write(STAE_MESSAGE_START, path, strlen(path)+1);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
-    if(seL4_MessageInfo_get_label(reply) != seL4_NoFault)
-        return -1;
-    else
+    if(seL4_MessageInfo_get_label(reply) == seL4_NoFault)
         return 0;
+    else
+        return -1;
 }
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {
@@ -199,4 +181,17 @@ size_t sos_read(void *vData, size_t count) {
     return sos_sys_read(STDOUT_FD, vData, count);
 }
 
+pid_t sos_process_create(const char *path) {
+    assert(!"sos_process_create not implemented!");
+    return 0;
+}
 
+int sos_process_status(sos_process_t *processes, unsigned max) {
+    assert(!"sos_process_status not implemented!");
+    return 0;
+}
+
+pid_t sos_process_wait(pid_t pid) {
+    assert(!"sos_process_wait not implemented!");
+    return 0;
+}
