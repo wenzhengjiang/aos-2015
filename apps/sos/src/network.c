@@ -229,7 +229,7 @@ network_init(seL4_CPtr interrupt_ep) {
         if(err){
             WARN("Failed to initialise NFS\n");
         }
-    }else{
+    } else {
         WARN("Skipping Network initialisation since no mount point was "
              "specified\n");
     }

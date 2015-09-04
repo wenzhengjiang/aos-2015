@@ -6,11 +6,16 @@
 
 #include <nfs/nfs.h>
 #include <clock/clock.h>
+#include "network.h"
 #include "file.h"
 #include "process.h"
 #include "sos_nfs.h"
 #include "syscall.h"
 #include "addrspace.h"
+
+#define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
 
 io_device_t nfs_io = {
     .open = sos_nfs_open,
@@ -20,8 +25,6 @@ io_device_t nfs_io = {
     .stat = sos_nfs_getattr,
     .getdirent = sos_nfs_readdir
 };
-
-extern fhandle_t mnt_point ;
 
 /* FILE OPENING */
 
@@ -56,7 +59,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
 
 static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
-                  fhandle_t* fh, fattr_t* fattr) {
+                      fhandle_t* fh, fattr_t* fattr) {
     sos_proc_t *proc;
     int fd;
     of_entry_t *of;
@@ -188,7 +191,7 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
 }
 
 static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
-                        fhandle_t* fh, fattr_t* fattr) {
+                                    fhandle_t* fh, fattr_t* fattr) {
     pid_t pid = current_process()->pid;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
@@ -252,13 +255,9 @@ int sos_nfs_readdir(int stop_index, iovec_t *iov) {
 
 int sos_nfs_init(const char* dir) {
     int err;
-    err = nfs_mount(dir, &mnt_point);
-    if (err) {
-        return err;
-    }
     register_tick_event(nfs_timeout);
     if (err) {
         return err;
     }
-      return 0;
+    return 0;
 }

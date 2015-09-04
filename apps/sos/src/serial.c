@@ -48,8 +48,8 @@ static inline void try_send_buffer(int i) {
     int pos = 0;
     for (iovec_t *v = reader_iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
-        int n = min(buflen-pos, v->sz);
-        memcpy((char*)v->start, buf+pos, n); 
+        int n = min(buflen - pos, v->sz);
+        memcpy((char*)v->start, buf+pos, n);
         pos += n;
     }
     // reply to client reader
@@ -62,7 +62,7 @@ static inline void try_send_buffer(int i) {
     reader_iov = NULL;
 
     if (pos < buflen) {
-        memmove(buf, buf+pos, buflen-pos);
+        memmove(buf, buf + pos, buflen - pos);
     }
     line_buflen[i] -= pos;
 }
@@ -88,7 +88,7 @@ int sos_serial_close(void) {
 }
 
 int sos_serial_open(const char* filename, fmode_t mode) {
-    assert(strcmp(filename, "console"));
+    assert(!strcmp(filename, "console"));
     //    line_buflen[0] = line_buflen[1] = 0; // clear buffer
     sos_proc_t* proc = current_process();
     return fd_create(proc->fd_table, NULL, &serial_io, mode);
@@ -98,7 +98,8 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
     (void)count;
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
-    cont_t *cont = &(proc->cont); 
+    cont_t *cont = &(proc->cont);
+    cont->iov = vec;
     reader_iov = cont->iov;
     reader_cap = cont->reply_cap;
 

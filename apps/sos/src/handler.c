@@ -178,9 +178,15 @@ void handle_syscall(seL4_Word badge, int num_args) {
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
 
     if (handlers[syscall_number]) {
-        int err = handlers[syscall_number](reply_cap);
-        if (err) {
+        int ret = handlers[syscall_number](reply_cap);
+        // TODO: Fix - We can't return '0' to a client here, as '0' indicates
+        // a blocking request.  This is silly...
+        if (ret < 0) {
             reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 0);
+            send_back(reply_cap, reply);
+        } else if (ret > 0) {
+            reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+            seL4_SetMR(0, (seL4_Word)ret);
             send_back(reply_cap, reply);
         }
     } else {

@@ -37,6 +37,7 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 void syscall_end_continuation(sos_proc_t *proc, int retval) {
     iovec_t *iov;
     seL4_MessageInfo_t reply;
+    dprintf(1, "Returning %d\n", retval);
     reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
     seL4_SetMR(0, retval);
     seL4_SetTag(reply);
@@ -66,7 +67,7 @@ check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
     } else if (!(reg->rights & seL4_CanRead) && dir == READ) {
         return 0;
     }
-    
+
     // Ensure client process has the page mapped
     sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
     if (saddr == 0) {
@@ -74,7 +75,7 @@ check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
         if (err) return 0;
     }
     saddr = as_lookup_sos_vaddr(as, buf);
-    
+
     return saddr;
 }
 
@@ -155,10 +156,11 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
 }
 
 static io_device_t* device_handler_str(const char* filename) {
-    if (strcmp(filename, "console") == 0)
+    if (strcmp(filename, "console") == 0) {
         return &serial_io;
-    else 
+    } else {
         return &nfs_io;
+    }
 }
 
 static io_device_t* device_handler_fd(int fd) {
@@ -177,7 +179,7 @@ int sos__sys_open(const char *path, fmode_t mode) {
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
     if (file < 0 || file > MAX_FD)
         return EINVAL;
-    io_device_t *dev = device_handler_fd(file); 
+    io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (iov == NULL) {
         assert(!"illegal buf addr");
