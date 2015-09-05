@@ -135,6 +135,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
+    printf("nfs_write_callback: start\n");
     sos_proc_t *proc;
     int fd;
     of_entry_t *of;
@@ -156,11 +157,15 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         iov = proc->cont.iov;
         of = fd_lookup(proc, fd);
         of->offset += count;
+        printf("nfs_write_callback: before nfs_write\n", count);
         if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start,
                       nfs_write_callback,
                       (unsigned)proc->pid) != RPC_OK) {
+
+            printf("nfs_write_callback: nfs_write failed\n");
             syscall_end_continuation(proc, -status);
         }
+        printf("nfs_write_callback: after nfs_write\n", count);
     }
 }
 
