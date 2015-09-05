@@ -203,7 +203,7 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
 }
 
 int sos__sys_stat(char *path, client_vaddr buf) {
-    iovec_t *iov = cbuf_to_iov((client_vaddr)path, sizeof(sos_stat_t), WRITE);
+    iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
     if (iov == NULL) {
         assert(!"illegal buf addr");
         return EINVAL;

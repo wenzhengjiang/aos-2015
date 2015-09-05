@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include <syscallno.h>
 #include <sos.h>
@@ -95,6 +96,7 @@ static int open_handler (seL4_CPtr reply_cap) {
     static char path[MAX_FILE_PATH_LENGTH];
 
     fmode_t mode = seL4_GetMR(1);
+    memset(path, 0, sizeof(path));
     ipc_read(OPEN_MESSAGE_START, path); 
     cur_proc->cont.reply_cap = reply_cap; 
 
@@ -123,8 +125,8 @@ static int write_handler (seL4_CPtr reply_cap) {
 }
 
 static int getdirent_handler (seL4_CPtr reply_cap) {
-    printf("SYS GETDIRENT\n");
     int pos = seL4_GetMR(1);
+    printf("SYS GETDIRENT %u\n", pos);
     client_vaddr name = (client_vaddr)seL4_GetMR(2);
     size_t nbyte = seL4_GetMR(3);
     cur_proc->cont.reply_cap = reply_cap; 
@@ -133,9 +135,9 @@ static int getdirent_handler (seL4_CPtr reply_cap) {
 }
 
 static int stat_handler (seL4_CPtr reply_cap) {
-    printf("SYS STAT\n");
     client_vaddr buf = (client_vaddr) seL4_GetMR(1);
     ipc_read(STAT_MESSAGE_START, path);
+    printf("SYS STAT %s\n", path);
     cur_proc->cont.reply_cap = reply_cap; 
 
     return sos__sys_stat(path, buf);

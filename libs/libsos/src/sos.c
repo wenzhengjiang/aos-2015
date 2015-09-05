@@ -195,3 +195,8 @@ pid_t sos_process_wait(pid_t pid) {
     assert(!"sos_process_wait not implemented!");
     return 0;
 }
+
+
+int sos_sys_close(int file) {
+    return 0;
+}

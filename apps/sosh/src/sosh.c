@@ -94,7 +94,7 @@ static int cp(int argc, char **argv) {
         num_written = write(fd_out, buf, num_read);
 
     if (num_read == -1 || num_written == -1) {
-        printf("error on cp\n");
+        printf("error on cp %d, %d\n", num_read, num_written);
         return 1;
     }
 
