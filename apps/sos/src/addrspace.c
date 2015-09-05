@@ -297,7 +297,6 @@ sos_addrspace_t* as_create(void) {
 }
 
 int iov_read(iovec_t *iov, char *buf, int count) {
-    assert(iov && buf && (count > 0 ));
     //if (!iov || !buf || count < 0) return -1;
     int i = 0;
     for (iovec_t *v = iov; v && i < count; v = v->next) {

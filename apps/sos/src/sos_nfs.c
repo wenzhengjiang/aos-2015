@@ -31,10 +31,8 @@ io_device_t nfs_io = {
 static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
-    sos_proc_t *proc;
-    int fd;
-    proc = process_lookup(token);
-    fd = proc->cont.fd;
+    sos_proc_t *proc = process_lookup(token);
+    int fd = proc->cont.fd;
     if (status != NFS_OK) {
         // Clean up the preemptively created FD.  TODO: Consider whether we
         // should just be passing the error straight through, or should be
@@ -73,9 +71,10 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
-        printf("sos_nfs_open_callback %s\n", proc->cont.filename);
+        printf("sos_nfs_open_callback %s %d\n", proc->cont.filename, proc->cont.fd);
         nfs_create(&mnt_point, proc->cont.filename, &default_attr,
                    sos_nfs_create_callback, proc->pid);
+        return ;
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc, fd);
@@ -95,7 +94,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
     proc->cont.fd = fd;
     proc->cont.filename = filename;
     pid_t pid = current_process()->pid;
-    printf("sos_nfs_open %s %d\n", filename, fd);
+    printf("sos_nfs_open %s %d\n", filename, proc->cont.fd);
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
                       (unsigned)pid);
 }
@@ -135,37 +134,30 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
-    printf("nfs_write_callback: start\n");
-    sos_proc_t *proc;
-    int fd;
-    of_entry_t *of;
-    proc = process_lookup(token);
-    fd = proc->cont.fd;
+    sos_proc_t *proc = proc = process_lookup(token);
+    int fd = proc->cont.fd;
 
     if (status != NFS_OK) {
         syscall_end_continuation(proc, -status);
         return;
     }
+    proc->cont.counter += count;
+    of_entry_t *of = fd_lookup(proc, fd);
+    of->offset += count;
+
     iovec_t *iov = proc->cont.iov;
-    if (iov == NULL) {
-        proc->cont.counter += count;
+    proc->cont.iov = proc->cont.iov->next;
+    free(iov);
+    if (proc->cont.iov == NULL) {
         syscall_end_continuation(proc, proc->cont.counter);
     } else {
-        printf("nfs_write_callback: %d\n", count);
-        proc->cont.iov = iov->next;
-        free(iov);
         iov = proc->cont.iov;
-        of = fd_lookup(proc, fd);
-        of->offset += count;
-        printf("nfs_write_callback: before nfs_write\n", count);
         if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start,
                       nfs_write_callback,
                       (unsigned)proc->pid) != RPC_OK) {
 
-            printf("nfs_write_callback: nfs_write failed\n");
             syscall_end_continuation(proc, -status);
         }
-        printf("nfs_write_callback: after nfs_write\n", count);
     }
 }
 

@@ -249,7 +249,12 @@ struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         {"time", second_time}, {"mtime", micro_time} };
 
 
+static void create_tmpfiles(void) {
+    int fd1 = open("tmp1", O_RDWR);
+    char *msg = "hello, world";
+    assert(write(fd1,msg, strlen(msg)) == strlen(msg));
 
+}
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
@@ -262,7 +267,7 @@ int main(void) {
     bp = buf;
     done = 0;
     new = 1;
-
+    create_tmpfiles();
 //    sos_debug_print("SOS starting\n");
     printf("\n[SOS Starting]\n");
 
