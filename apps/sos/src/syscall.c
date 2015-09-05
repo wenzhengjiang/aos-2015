@@ -102,11 +102,11 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
 
 void ipc_read(int start, char *buf) {
     assert(buf && start > 0);
-    int k = 0;
-    for (int i = start; i < seL4_MsgMaxLength; i++) {
+    int k = 0, i ;
+    for (i = start; i < seL4_MsgMaxLength; i++) {
        int len = unpack_word(buf+k, seL4_GetMR(i)); 
        k += len;
-       if (k < sizeof(seL4_Word)) break;
+       if (len < sizeof(seL4_Word)) break;
     }
     if (k < MAX_FILE_PATH_LENGTH)
         buf[k] = 0;

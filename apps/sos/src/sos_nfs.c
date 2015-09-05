@@ -51,8 +51,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
         syscall_end_continuation(proc, -status);
         return;
     }
-    memcpy(of->fhandle, fh, sizeof(fhandle_t));
-    of->fhandle = fh;
+    *(of->fhandle) = *fh;
 
     syscall_end_continuation(proc, fd);
 }
@@ -73,6 +72,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
+        printf("sos_nfs_open_callback %s\n", proc->cont.filename);
         nfs_create(&mnt_point, proc->cont.filename, &default_attr,
                    sos_nfs_create_callback, proc->pid);
     } else if (status != NFS_OK) {
@@ -82,8 +82,8 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
         return;
     }
 
-    of = fd_lookup(proc, fd);
-    of->fhandle = fh;
+    of->fhandle = (fhandle_t*)malloc(sizeof(fhandle_t));
+    *(of->fhandle) = *fh;
 
     syscall_end_continuation(proc, fd);
 }
@@ -93,6 +93,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
     int fd = fd_create(proc->fd_table, NULL,  &nfs_io, mode);
     proc->cont.fd = fd;
     pid_t pid = current_process()->pid;
+    printf("sos_nfs_open %s %d\n", filename, fd);
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
                       (unsigned)pid);
 }
@@ -112,6 +113,8 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         return;
     }
     iov_read(proc->cont.iov, data, count);
+    of_entry_t *of = fd_lookup(proc, fd);
+    of->offset += count; 
     syscall_end_continuation(proc, count);
 }
 

@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sos.h>
+#include <stdio.h>
+#include <fcntl.h>
 #include <syscallno.h>
 
 #include <sel4/sel4.h>
@@ -36,11 +38,12 @@ static size_t sos_debug_print(char *data) {
  * @param count length of the message
  * @returns the number of characters encoded
  */
-static void ipc_write(int start, const char* msgdata, size_t count) {
+static void ipc_write(int start, const char* msgdata) {
     size_t mr_idx,i,j;
     seL4_Word pack;
     i = 0;
     mr_idx = start;
+    int count = strlen(msgdata);
     while(i < count) {
         pack = 0;
         j = sizeof(seL4_Word);
@@ -51,6 +54,16 @@ static void ipc_write(int start, const char* msgdata, size_t count) {
         seL4_SetMR(mr_idx, pack);
         mr_idx++;
     }
+    seL4_SetMR(mr_idx, 0);
+}
+
+fmode_t mode2fmode(unsigned mode) {
+    fmode_t ret = 0;
+    if ((mode & O_RDONLY) || (mode & O_RDWR))
+        ret |= FM_READ;
+    if ((mode & O_WRONLY) || (mode & O_RDWR))
+        ret |= FM_WRITE;
+    return ret;
 }
 
 int sos_sys_open(const char *path, fmode_t mode) {
@@ -63,11 +76,12 @@ int sos_sys_open(const char *path, fmode_t mode) {
         sos_debug_print("file name longer than 256\n");
         return -1;
     }
+    mode = mode2fmode(mode);
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
     seL4_SetMR(1, (seL4_Word)mode);
-    ipc_write(OPEN_MESSAGE_START, path, strlen(path)+1);
+    ipc_write(OPEN_MESSAGE_START, path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
@@ -150,7 +164,7 @@ int sos_stat(const char *path, sos_stat_t *buf) {
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_STAT); 
     seL4_SetMR(1, (seL4_Word)buf); 
-    ipc_write(STAE_MESSAGE_START, path, strlen(path)+1);
+    ipc_write(STAE_MESSAGE_START, path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault)
         return 0;
