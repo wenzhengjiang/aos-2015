@@ -24,7 +24,7 @@
 /* Your OS header file */
 #include <sos.h>
 
-#define BUF_SIZ   128
+#define BUF_SIZ   2048
 #define MAX_ARGS   32
 #define BENCHMARK_BUF_SIZ (1048576)
 
@@ -211,20 +211,22 @@ static int dir(int argc, char **argv) {
     return 0;
 }
 
+const int pkg_size = 1284;
+#define PKGS(n) ((n+pkg_size-1)/pkg_size)
 static int benchmark(int argc,char *argv[]) {
     int max_buf_size = 1024 * 1024;
     int buf_size = 1;
     struct timeval start_time, end_time;
     int file = open("output", O_WRONLY);
     printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
-    for(buf_size = 1; buf_size < max_buf_size; buf_size *= 2) {
+    for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
         gettimeofday(&start_time, NULL);
         int cnt = write(file, benchmark_buf, (size_t)buf_size);
-        printf("written: %d\n", cnt);
         gettimeofday(&end_time, NULL);
         uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-        printf("%d %llu us\n", buf_size, elapsed);
+        printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
     }
+    
     return 0;
 }
 
@@ -315,7 +317,7 @@ static m5_test(void) {
     file = open("bootimg.elf", O_RDONLY);
     assert(file > 0);
     r = read(file, buf, BUF_SIZ);
-    assert(r == 128);
+    assert(r == BUF_SIZ);
     r = close(file);
     assert(r == 0);
     r = read(500, buf, BUF_SIZ);

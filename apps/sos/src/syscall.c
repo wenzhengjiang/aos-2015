@@ -17,8 +17,9 @@
 #include <assert.h>
 #include <sos.h>
 #include <syscallno.h>
+#include <clock/clock.h>
 
-#define verbose 1
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -33,7 +34,10 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 {
     return (a < b) ? a : b;
 }
+timestamp_t start_time, end_time;
 
+const int pkg_size = 1284;
+#define PKGS(n) ((n+pkg_size-1)/pkg_size)
 void syscall_end_continuation(sos_proc_t *proc, int retval) {
     iovec_t *iov;
     seL4_MessageInfo_t reply;
@@ -42,6 +46,10 @@ void syscall_end_continuation(sos_proc_t *proc, int retval) {
     seL4_SetMR(0, retval);
     seL4_SetTag(reply);
     assert(proc->cont.reply_cap != seL4_CapNull);
+
+    timestamp_t  elapsed = time_stamp() - start_time;    
+    dprintf(0, "%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", retval, elapsed, (double)elapsed/retval, (double)elapsed/PKGS(retval));
+    dprintf(0, " %llu\n", end_time-start_time);
     seL4_Send(proc->cont.reply_cap, reply);
     iov = proc->cont.iov;
     while(iov) {
@@ -112,7 +120,7 @@ void ipc_read(int start, char *buf) {
         buf[k] = 0;
 }
 
-static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **iotail) {
+static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t *iotail) {
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -121,12 +129,11 @@ static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **i
     ionew->start = start;
     ionew->sz = sz;
     ionew->next = NULL;
+
     if (iohead == NULL) {
         return ionew;
     } else {
-        assert(*iotail);
-        (*iotail)->next = ionew;
-        *iotail = ionew;
+        iotail->next = ionew;
         return iohead;
     }
 }
@@ -135,7 +142,7 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
     sos_vaddr saddr;
     size_t remaining = nbyte;
     iovec_t *iohead = NULL;
-    iovec_t **iotail = &iohead;
+    iovec_t *iotail = NULL;
     sos_addrspace_t* as = current_as();
     if (remaining == 0) {
         saddr = check_page(as, buf, dir);
@@ -146,6 +153,7 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
         iohead = iov_create(saddr, 0, NULL, NULL);
         return iohead;
     }
+    dprintf(1, "cbuf_to_iov: %d bytes\n", nbyte);
     while(remaining) {
         size_t offset = ((unsigned)buf % PAGE_SIZE);
         size_t buf_delta = umin((PAGE_SIZE - offset), remaining);
@@ -154,14 +162,25 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
+        dprintf(1, "cbuf_to_iov: delta=%d\n", buf_delta);
         iohead = iov_create(saddr, buf_delta, iohead, iotail);
+        if (iotail == NULL) iotail = iohead;
+        else iotail = iotail->next;
+
         if (iohead == NULL) {
             ERR("Insufficient memory to create new iovec\n");
             return NULL;
         }
+        assert(iotail);
         remaining -= buf_delta;
         buf += buf_delta;
     }
+    int cnt = 0;
+    for (iovec_t* iov = iohead; iov; iov = iov->next) {
+       cnt += iov->sz; 
+    }
+    dprintf(1, "cbuf_to_iov: iov=%d, nbyte=%d\n", cnt, nbyte);
+    assert(cnt == nbyte);
     return iohead;
 }
 
@@ -213,6 +232,9 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
         return EINVAL;
     }
     assert(dev);
+
+    dprintf(0, "write nbytes %u ", nbyte);
+    start_time = time_stamp();
     return dev->write(iov, file, nbyte);
 }
 

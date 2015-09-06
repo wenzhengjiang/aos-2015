@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <clock/clock.h>
 
 #include <nfs/nfs.h>
 #include <clock/clock.h>
@@ -28,6 +29,7 @@ io_device_t nfs_io = {
     .getdirent = sos_nfs_readdir
 };
 
+static timestamp_t prevt;
 /* FILE OPENING */
 
 static void
@@ -138,6 +140,8 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
+    dprintf(-1, "write_callback %d %llu\n",  count, time_stamp()-prevt);
+    prevt = time_stamp();
     sos_proc_t *proc = proc = process_lookup(token);
     int fd = proc->cont.fd;
 
@@ -147,12 +151,17 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
     }
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
-    dprintf(2, "[WRITE] Using %x for fd %d\n", of, fd);
+    dprintf(1, "[WRITE] for %d bytes\n", count);
     of->offset += (unsigned)count;
 
     iovec_t *iov = proc->cont.iov;
-    proc->cont.iov = proc->cont.iov->next;
-    free(iov);
+    if (proc->cont.iov->sz == count) {
+        proc->cont.iov = iov->next;
+        free(iov);
+    } else {
+        iov->start += count;
+        iov->sz -= count;
+    }
     if (proc->cont.iov == NULL) {
         dprintf(2, "wrote %d bytes.  now at offset: %u\n", count, of->offset);
         syscall_end_continuation(proc, proc->cont.counter);
@@ -173,7 +182,9 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     pid_t pid = proc->pid;
     proc->cont.iov = iov;
     proc->cont.fd = fd;
-    dprintf(2, "Writing to offset: %u\n", of->offset);
+    dprintf(2, "Writing to offset: %u %d (%d)bytes\n", of->offset, count, iov->sz);
+    prevt = time_stamp();
+
     return nfs_write(of->fhandle, of->offset, iov->sz,
                      (const void*)iov->start, nfs_write_callback,
                      (unsigned)pid);

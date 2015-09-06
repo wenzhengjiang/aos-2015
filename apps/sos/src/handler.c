@@ -26,6 +26,7 @@ static cont_t empty_cont;
 
 static char path[MAX_FILE_PATH_LENGTH];
 
+
 int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {

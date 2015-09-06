@@ -174,6 +174,7 @@ int sos_stat(const char *path, sos_stat_t *buf) {
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {
     if (!name) return -1;
+    if (nbyte == 0) return 0;
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_GETDIRENT); 
