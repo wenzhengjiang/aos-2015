@@ -107,21 +107,40 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
+    (void)fattr;
+    dprintf(-1, "read_callback %d %llu us\n",  count, time_stamp()-prevt);
+    prevt = time_stamp();
     sos_proc_t *proc;
     int fd;
-    proc = process_lookup(token);
+    proc = process_lookup((int)token);
     fd = proc->cont.fd;
 
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
-    iov_read(proc->cont.iov, data, count);
+    proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
 
-    dprintf(-1, "read %d bytes, now at offset: %u\n", count, of->offset);
-    syscall_end_continuation(proc, count, true);
+    iovec_t *iov = proc->cont.iov;
+    if ((int)iov->sz != count) {
+        dprintf(-1, "iovsz = %d, count = %d\n", iov->sz, count);
+    }
+    memcpy((char*)iov->start, data, (size_t)count);
+    proc->cont.iov = iov->next;
+    free(iov);
+    if (proc->cont.iov == NULL) {
+        syscall_end_continuation(proc, proc->cont.counter, true);
+        return ;
+    }
+    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
+    int err = nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz,
+                       sos_nfs_read_callback, (unsigned)proc->pid);
+    if (err != RPC_OK) {
+        syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        return;
+    }
 }
 
 int sos_nfs_read(iovec_t* vec, int fd, int count) {
@@ -131,10 +150,11 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     proc->cont.fd = fd;
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
-    dprintf(-1, "[READ] Using %x for fd %d\n", of, fd);
-    dprintf(-1, "reading from offset: %u\n", of->offset);
-    return nfs_read(of->fhandle, of->offset, count, sos_nfs_read_callback,
-                    (unsigned)pid);
+    int err = 0, nvec = 0; 
+    int oldoffset = of->offset;
+    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
+    prevt = time_stamp();
+    return nfs_read(of->fhandle, of->offset, proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
 /* WRITE FILE */
@@ -150,6 +170,7 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
+
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
     dprintf(1, "[WRITE] for %d bytes\n", count);
