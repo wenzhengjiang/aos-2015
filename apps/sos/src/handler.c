@@ -81,7 +81,7 @@ static int usleep_handler (seL4_CPtr reply_cap) {
     if(!register_timer(delay, sys_notify_client, (int*)reply_cap)) {
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
         send_back(reply_cap, reply);
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -104,7 +104,6 @@ static int open_handler (seL4_CPtr reply_cap) {
     memset(path, 0, sizeof(path));
     ipc_read(OPEN_MESSAGE_START, path); 
     cur_proc->cont.reply_cap = reply_cap; 
-
     return sos__sys_open(path, mode);
 }
  
@@ -206,13 +205,9 @@ void handle_syscall(seL4_Word badge, int num_args) {
     if (handlers[syscall_number]) {
 
         int ret = handlers[syscall_number](reply_cap);
-        // TODO: Fix - We can't return '0' to a client here, as '0' indicates
-        // a blocking request.  This is silly...
-        if (ret < 0) {
-            reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 0);
-            send_back(reply_cap, reply);
-        } else if (ret > 0) {
-            reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+        assert(ret >= 0);
+        if (ret > 0) {
+            reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)ret);
             send_back(reply_cap, reply);
         }

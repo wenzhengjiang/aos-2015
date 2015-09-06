@@ -219,7 +219,6 @@ int sos_sys_close(int file) {
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
         return (int)seL4_GetMR(0);
-    } else {
-        return -1;
+    } else {        return -1;
     }
 }

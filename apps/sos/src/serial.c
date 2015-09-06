@@ -10,7 +10,7 @@
 
 #define SERIAL_BUF_SIZE  1024
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -94,7 +94,13 @@ int sos_serial_open(const char* filename, fmode_t mode) {
     assert(!strcmp(filename, "console"));
     //    line_buflen[0] = line_buflen[1] = 0; // clear buffer
     sos_proc_t* proc = current_process();
-    return fd_create(proc->fd_table, NULL, &serial_io, mode);
+    int retval = fd_create(proc->fd_table, NULL, &serial_io, mode);
+    if (retval >= 0) {
+        syscall_end_continuation(current_process(), retval, true);
+    } else {
+        syscall_end_continuation(current_process(), retval, false);
+    }
+    return 0;
 }
 
 int sos_serial_read(iovec_t* vec, int fd, int count) {
@@ -118,7 +124,11 @@ int sos_serial_write(iovec_t* vec, int fd, int count) {
         assert(vec->sz);
         sent += serial_send(serial, (char*)v->start, v->sz);
     }
-    return sent;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault, 0,0,1);
+    seL4_SetMR(0, (seL4_Word)sent);
+    seL4_SetTag(reply);
+    seL4_Send(current_process()->cont.reply_cap, reply);
+    return 0;
 }
 
 void sos_serial_init() {

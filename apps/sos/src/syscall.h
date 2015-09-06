@@ -3,6 +3,7 @@
 
 #include <sos.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <serial/serial.h>
 #include "addrspace.h"
 #include "process.h"
@@ -23,6 +24,6 @@ int sos__sys_close(int fd);
 
 void ipc_read(int start, char *buf);
 
-void syscall_end_continuation(sos_proc_t *proc, int retval);
+void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 
 #endif

@@ -38,16 +38,21 @@ timestamp_t start_time, end_time;
 
 const int pkg_size = 1284;
 #define PKGS(n) ((n+pkg_size-1)/pkg_size)
-void syscall_end_continuation(sos_proc_t *proc, int retval) {
+void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     iovec_t *iov;
     seL4_MessageInfo_t reply;
-    dprintf(1, "Returning %d\n", retval);
-    reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    dprintf(4, "ENDING SYSCALL\n", retval);
+    dprintf(4, "[SYSEND] Returning %d\n", retval);
+    if (success) {
+        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    } else {
+        reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
+    }
     seL4_SetMR(0, retval);
     seL4_SetTag(reply);
     assert(proc->cont.reply_cap != seL4_CapNull);
-
-    timestamp_t  elapsed = time_stamp() - start_time;    
+    assert(proc->cont.reply_cap != seL4_CapNull);
+    timestamp_t  elapsed = time_stamp() - start_time;
     dprintf(0, "%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", retval, elapsed, (double)elapsed/retval, (double)elapsed/PKGS(retval));
     dprintf(0, " %llu\n", end_time-start_time);
     seL4_Send(proc->cont.reply_cap, reply);
@@ -60,11 +65,11 @@ void syscall_end_continuation(sos_proc_t *proc, int retval) {
         iov = proc->cont.iov;
     }
     memset(&proc->cont, 0, sizeof(cont_t));
+    dprintf(4, "SYSCALL ENDED\n", retval);
 }
 
 static sos_vaddr
 check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
-
     sos_region_t* reg = as_vaddr_region(as, buf);
     if (!reg) {
         return 0;
@@ -207,7 +212,7 @@ int sos__sys_open(const char *path, fmode_t mode) {
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
     if (fd_lookup(current_process(), file) == NULL) {
-        return -1;
+        return 1;
     }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
@@ -224,7 +229,7 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
     if (fd_lookup(current_process(), file) == NULL) {
         return EINVAL;
     }
-    io_device_t *dev = device_handler_fd(file); 
+    io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (iov == NULL) {
         // TODO: Kill bad client
@@ -232,7 +237,6 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
         return EINVAL;
     }
     assert(dev);
-
     dprintf(0, "write nbytes %u ", nbyte);
     start_time = time_stamp();
     return dev->write(iov, file, nbyte);
@@ -265,7 +269,6 @@ int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
  */
 int sos__sys_close(int file) {
     if (fd_lookup(current_process(), file) == NULL) {
-        printf("fd lookup failed\n");
         return EINVAL;
     }
     int res;
