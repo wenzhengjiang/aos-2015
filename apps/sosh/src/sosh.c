@@ -288,7 +288,10 @@ static m5_test(void) {
     assert(file > 0);
     r = read(file, buf, BUF_SIZ);
     assert(r == 128);
-    //assert(close(file) == 0);
+    r = close(file);
+    assert(r == 0);
+    r = read(500, buf, BUF_SIZ);
+    assert(r == -1);
     r = read(file, buf, BUF_SIZ);
     assert(r == -1);
 }
@@ -298,7 +301,7 @@ int main(void) {
     char *argv[MAX_ARGS];
     int i, r, done, found, new, argc;
     char *bp, *p;
-    //m5_test();
+    m5_test();
     in = open("console", O_RDONLY);
 
     assert(in >= 0);

@@ -187,8 +187,8 @@ int sos__sys_open(const char *path, fmode_t mode) {
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
-    if (fd_lookup(current_process(), file)) {
-        return EINVAL;
+    if (fd_lookup(current_process(), file) == NULL) {
+        return -1;
     }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
@@ -202,7 +202,7 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
 }
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
-    if (fd_lookup(current_process(), file)) {
+    if (fd_lookup(current_process(), file) == NULL) {
         return EINVAL;
     }
     io_device_t *dev = device_handler_fd(file); 
@@ -242,7 +242,8 @@ int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
  * Should not block the caller.
  */
 int sos__sys_close(int file) {
-    if (fd_lookup(current_process(), file)) {
+    if (fd_lookup(current_process(), file) == NULL) {
+        printf("fd lookup failed\n");
         return EINVAL;
     }
     int res;

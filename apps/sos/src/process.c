@@ -118,8 +118,11 @@ int fd_free(sos_proc_t* proc, int fd) {
     assert(proc);
     assert(proc->fd_table[fd]);
     if (proc->fd_table[fd] == NULL) {
+        printf("fd %d not found to close\n", fd);
         return -1;
     }
     proc->fd_table[fd]->io = NULL;
     proc->fd_table[fd] = NULL;
+    printf("fd %d closed okay\n", fd);
+    return 0;
 }
