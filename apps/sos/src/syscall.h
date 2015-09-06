@@ -19,8 +19,9 @@ int sos__sys_stat(char *path, client_vaddr buf) ;
 
 int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte);
 
-void ipc_read(int start, char *buf);
+int sos__sys_close(int fd);
 
+void ipc_read(int start, char *buf);
 
 void syscall_end_continuation(sos_proc_t *proc, int retval);
 

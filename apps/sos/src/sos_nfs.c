@@ -17,6 +17,8 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
+#define SOS_NFS_ERR (-1)
+
 io_device_t nfs_io = {
     .open = sos_nfs_open,
     .close = NULL,
@@ -38,7 +40,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
         // should just be passing the error straight through, or should be
         // standardising them somehow
         fd_free(proc, fd);
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
 
@@ -72,13 +74,12 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
         dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.filename, proc->cont.fd);
-        nfs_create(&mnt_point, proc->cont.filename, &default_attr,
-                   sos_nfs_create_callback, proc->pid);
+        nfs_create(&mnt_point, proc->cont.filename, &default_attr, sos_nfs_create_callback, proc->pid);
         return ;
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc, fd);
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
 
@@ -110,7 +111,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     fd = proc->cont.fd;
 
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
     iov_read(proc->cont.iov, data, count);
@@ -141,7 +142,7 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
     int fd = proc->cont.fd;
 
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
     proc->cont.counter += count;
@@ -155,12 +156,12 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
     if (proc->cont.iov == NULL) {
         dprintf(2, "wrote %d bytes.  now at offset: %u\n", count, of->offset);
         syscall_end_continuation(proc, proc->cont.counter);
+        return;
     } else {
         iov = proc->cont.iov;
-        if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start,
-                      nfs_write_callback,
-                      (unsigned)proc->pid) != RPC_OK) {
-            syscall_end_continuation(proc, -status);
+        if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start, nfs_write_callback, (unsigned)proc->pid) != RPC_OK) {
+            syscall_end_continuation(proc, SOS_NFS_ERR);
+            return;
         }
     }
 }
@@ -193,7 +194,7 @@ static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
     sos_stat_t sos_attr;
@@ -212,7 +213,7 @@ static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
     pid_t pid = current_process()->pid;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
     nfs_getattr(fh, sos_nfs_getattr_callback, (unsigned)pid);
@@ -236,36 +237,40 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     sos_proc_t *proc = process_lookup(token);
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, -status);
+        syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
-    if (proc->cont.target == 0) return ; //TODO why target could be zero ?
+    if (proc->cont.target < 0) {
+        syscall_end_continuation(proc, SOS_NFS_ERR);
+        return;
+    }
     dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.target, num_files);
-    assert(proc->cont.counter < proc->cont.target);
-
     if (proc->cont.target <= proc->cont.counter + num_files) {
-        char *file = file_names[proc->cont.target-proc->cont.counter-1];
+        char *file = file_names[proc->cont.target - proc->cont.counter];
         iovec_t *iov = proc->cont.iov;
         iov_read(iov, file, strlen(file)+1);
         syscall_end_continuation(proc, strlen(file)+1);
         return;
     }
     proc->cont.counter += num_files;
-    if (nfscookie != 0) {
-        if (nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
-                        (unsigned)proc->pid) != RPC_OK) {;
-            syscall_end_continuation(proc, -status);
-        }
+    if (nfscookie == 0) {
+        syscall_end_continuation(proc, SOS_NFS_ERR);
+        return;
     }
-    syscall_end_continuation(proc, 0);
+    if (nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
+                    (unsigned)proc->pid) != RPC_OK) {;
+        syscall_end_continuation(proc, SOS_NFS_ERR);
+        return;
+    }
     return;
 }
 
 int sos_nfs_readdir(int stop_index, iovec_t *iov) {
     sos_proc_t *proc = current_process();
     pid_t pid = current_process()->pid;
-    proc->cont.target = stop_index+1;
+    proc->cont.target = stop_index;
     proc->cont.iov = iov;
+    printf("Reading directory up to %d\n", stop_index);
     return nfs_readdir(&mnt_point, 0, nfs_readdir_callback,
                        (unsigned)pid);
 }

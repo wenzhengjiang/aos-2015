@@ -255,12 +255,50 @@ static void create_tmpfiles(void) {
     assert(write(fd1,msg, strlen(msg)) == strlen(msg));
 
 }
+
+// TODO: Remove this once satisfied all is okay.
+static m5_test(void) {
+    int file, r;
+    char* buf[BUF_SIZ];
+    file = open(NULL, 0);
+    assert(file == -1);
+    file = open(NULL, O_RDONLY);
+    assert(file == -1);
+    file = open(NULL, O_RDWR);
+    assert(file == -1);
+    file = open("readnonexistent", O_RDONLY);
+    assert(file == -1);
+    file = open("readnonexistentVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVLONGSTRINGVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV", O_RDONLY);
+    assert(file == -1);
+    r = sos_getdirent(-1, buf, BUF_SIZ);
+    assert(r == -1);
+    // Small buf size
+    buf[0] = 0;
+    r = sos_getdirent(0, buf, 0);
+    assert(r != -1);
+    assert(buf[0] == 0);
+    // No such file
+    r = sos_getdirent(100000, buf, BUF_SIZ);
+    assert(r == -1);
+    r = sos_stat(NULL, &sbuf);
+    assert(r == -1);
+    r = sos_stat(buf, NULL);
+    assert(r == -1);
+    file = open("bootimg.elf", O_RDONLY);
+    assert(file > 0);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == 128);
+    //assert(close(file) == 0);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == -1);
+}
+
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
     int i, r, done, found, new, argc;
     char *bp, *p;
-
+    //m5_test();
     in = open("console", O_RDONLY);
 
     assert(in >= 0);

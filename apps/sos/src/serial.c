@@ -14,9 +14,11 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
+// Note: even though we DO have a close function, this should NOT be exposed
+// to the client
 io_device_t serial_io = {
     .open = sos_serial_open,
-    .close = sos_serial_close,
+    .close = NULL,
     .read = sos_serial_read,
     .write = sos_serial_write,
     .getdirent = NULL,
@@ -80,7 +82,8 @@ static void serial_handler(struct serial *serial, char c) {
 }
 
 
-int sos_serial_close(void) {
+int sos_serial_close(int fd) {
+    (void)fd;
     serial_register_handler(serial, NULL);
     serial = NULL;
     line_buflen[0] = line_buflen[1] = 0;

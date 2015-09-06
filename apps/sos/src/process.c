@@ -114,10 +114,12 @@ sos_proc_t *process_lookup(pid_t pid) {
     return &test_proc;
 }
 
-void fd_free(sos_proc_t* proc, int fd) {
+int fd_free(sos_proc_t* proc, int fd) {
     assert(proc);
     assert(proc->fd_table[fd]);
-
+    if (proc->fd_table[fd] == NULL) {
+        return -1;
+    }
     proc->fd_table[fd]->io = NULL;
     proc->fd_table[fd] = NULL;
 }

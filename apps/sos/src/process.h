@@ -36,6 +36,6 @@ sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);
 sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
-void fd_free(sos_proc_t* proc, int fd);
+int fd_free(sos_proc_t* proc, int fd);
 
 #endif

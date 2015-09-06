@@ -143,6 +143,22 @@ static int stat_handler (seL4_CPtr reply_cap) {
     return sos__sys_stat(path, buf);
 }
 
+//static int close_handler (seL4_CPtr reply_cap) {
+//    int res;
+//    seL4_MessageInfo_t reply;
+//    int fd = (int)seL4_GetMR(1);
+//    printf("SYS CLOSE %s\n", path);
+//    res = sos__sys_close(fd);
+//    if (res != 0) {
+//        reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
+//    } else {
+//        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
+//    }
+//    seL4_SetMR(0, (seL4_Word)res);
+//    send_back(reply_cap, reply);
+//    return 0;
+//}
+
 void register_handlers(void) {
     assert(handlers[SOS_SYSCALL_BRK] == NULL);
     handlers[SOS_SYSCALL_BRK] = brk_handler; 
@@ -167,6 +183,9 @@ void register_handlers(void) {
 
     assert(handlers[SOS_SYSCALL_STAT] == NULL);
     handlers[SOS_SYSCALL_STAT] = stat_handler;
+
+    //assert(handlers[SOS_SYSCALL_CLOSE] == NULL);
+    //handlers[SOS_SYSCALL_CLOSE] = close_handler;
 }
 
 void handle_syscall(seL4_Word badge, int num_args) {

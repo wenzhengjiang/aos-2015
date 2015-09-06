@@ -300,13 +300,12 @@ int iov_read(iovec_t *iov, char *buf, int count) {
     //if (!iov || !buf || count < 0) return -1;
     int i = 0;
     for (iovec_t *v = iov; v && i < count; v = v->next) {
-        assert(v->sz);
-        int n = umin(count-i, v->sz);
-        memcpy((char*)v->start, buf+i, n); 
+        size_t n = umin((unsigned)count - (unsigned)i, v->sz);
+        memcpy((char*)v->start, buf+i, (size_t)n);
         i += n;
     }
-    assert(i == count);
-    return 0; 
+    assert(i <= count);
+    return 0;
 }
 
 void iov_free(iovec_t *iov) {

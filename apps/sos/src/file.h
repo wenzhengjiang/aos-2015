@@ -9,7 +9,7 @@
 
 typedef struct io_device {
     int (*open)(const char*, fmode_t);
-    int (*close)(void);
+    int (*close)(int fd);
     int (*read)(iovec_t*, int fd, int count);
     int (*write)(iovec_t*, int fd, int count);
     int (*stat)(char*, iovec_t*);

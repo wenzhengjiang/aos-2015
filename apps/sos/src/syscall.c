@@ -132,14 +132,24 @@ static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **i
 }
 
 static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
+    sos_vaddr saddr;
     size_t remaining = nbyte;
     iovec_t *iohead = NULL;
     iovec_t **iotail = &iohead;
     sos_addrspace_t* as = current_as();
+    if (remaining == 0) {
+        saddr = check_page(as, buf, dir);
+        if (saddr == 0) {
+            ERR("Client page lookup %x failed\n", buf);
+            return NULL;
+        }
+        iohead = iov_create(saddr, 0, NULL, NULL);
+        return iohead;
+    }
     while(remaining) {
         size_t offset = ((unsigned)buf % PAGE_SIZE);
         size_t buf_delta = umin((PAGE_SIZE - offset), remaining);
-        sos_vaddr saddr = check_page(as, buf, dir);
+        saddr = check_page(as, buf, dir);
         if (saddr == 0) {
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
@@ -177,11 +187,13 @@ int sos__sys_open(const char *path, fmode_t mode) {
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
-    if (file < 0 || file > MAX_FD)
+    if (fd_lookup(current_process(), file)) {
         return EINVAL;
+    }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (iov == NULL) {
+        // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;
     }
@@ -190,11 +202,13 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
 }
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
-    if (file < 0 || file > MAX_FD)
+    if (fd_lookup(current_process(), file)) {
         return EINVAL;
+    }
     io_device_t *dev = device_handler_fd(file); 
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
     if (iov == NULL) {
+        // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;
     }
@@ -205,6 +219,7 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
 int sos__sys_stat(char *path, client_vaddr buf) {
     iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
     if (iov == NULL) {
+        // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;
     }
@@ -215,10 +230,30 @@ int sos__sys_stat(char *path, client_vaddr buf) {
 int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
     iovec_t *iov = cbuf_to_iov(name, nbyte, WRITE);
     if (iov == NULL) {
+        // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;
     }
     return nfs_io.getdirent(pos, iov);
 }
 
-
+/**
+ * Close an open file.
+ * Should not block the caller.
+ */
+int sos__sys_close(int file) {
+    if (fd_lookup(current_process(), file)) {
+        return EINVAL;
+    }
+    int res;
+    of_entry_t* of = fd_lookup(current_process(), file);
+    io_device_t *io = of->io;
+    if (io == NULL) {
+        res = fd_free(current_process(), file);
+    } else if (io->close == NULL) {
+        res = fd_free(current_process(), file);
+    } else {
+        res = io->close(file);
+    }
+    return res;
+}

@@ -11,7 +11,7 @@ int sos_serial_read(iovec_t* vecs, int fd, int count);
 
 int sos_serial_write(iovec_t* vec, int fd, int count);
 
-int sos_serial_close(void);
+int sos_serial_close(int fd);
 
 void sos_serial_init(void);
 
