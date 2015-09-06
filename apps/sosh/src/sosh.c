@@ -24,7 +24,7 @@
 /* Your OS header file */
 #include <sos.h>
 
-#define BUF_SIZ   1024*1024
+#define BUF_SIZ   4*1024
 #define MAX_ARGS   32
 #define BENCHMARK_BUF_SIZ (1048576)
 
@@ -229,7 +229,7 @@ static int benchmark(int argc,char *argv[]) {
    // }
    
     printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
-    for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
+    for(buf_size = max_buf_size; buf_size > 0; buf_size /= 2) {
         gettimeofday(&start_time, NULL);
         int cnt = read(file, benchmark_buf, (size_t)buf_size);
         gettimeofday(&end_time, NULL);
