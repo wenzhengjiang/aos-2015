@@ -290,14 +290,12 @@ struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", di
 
 
 static void create_tmpfiles(void) {
-    int fd1 = open("tmp1", O_RDWR);
-    char *msg = "hello, world";
-    assert(write(fd1,msg, strlen(msg)) == strlen(msg));
+
 
 }
 
 // TODO: Remove this once satisfied all is okay.
-static m5_test(void) {
+static void m5_test(void) {
     int file, r;
     char buf[BUF_SIZ];
     file = open(NULL, 0);
@@ -324,10 +322,14 @@ static m5_test(void) {
     assert(r == -1);
     r = sos_stat(buf, NULL);
     assert(r == -1);
-    file = open("bootimg.elf", O_RDONLY);
+    file = open("tmp1", O_RDWR);
+    char *msg = "hello, world";
+    assert(write(file, msg, strlen(msg)) == strlen(msg));
+    close(file);
+    file = open("tmp1", O_RDONLY);
     assert(file > 0);
     r = read(file, buf, BUF_SIZ);
-    assert(r == BUF_SIZ);
+    assert(r == 13);
     r = close(file);
     assert(r == 0);
     r = read(500, buf, BUF_SIZ);
@@ -341,14 +343,14 @@ int main(void) {
     char *argv[MAX_ARGS];
     int i, r, done, found, new, argc;
     char *bp, *p;
- //   m5_test();
+    create_tmpfiles();
+    m5_test();
     in = open("console", O_RDONLY);
-
     assert(in >= 0);
     bp = buf;
     done = 0;
     new = 1;
-    create_tmpfiles();
+
 //    sos_debug_print("SOS starting\n");
     printf("\n[SOS Starting]\n");
 
