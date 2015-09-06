@@ -51,7 +51,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
     }
     *(of->fhandle) = *fh;
 
-    printf("sos_nfs_create_callback %d\n", proc->cont.fd);
+    dprintf(2, "sos_nfs_create_callback %d\n", proc->cont.fd);
     syscall_end_continuation(proc, fd);
 }
 
@@ -71,7 +71,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
-        printf("sos_nfs_open_callback %s %d\n", proc->cont.filename, proc->cont.fd);
+        dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.filename, proc->cont.fd);
         nfs_create(&mnt_point, proc->cont.filename, &default_attr,
                    sos_nfs_create_callback, proc->pid);
         return ;
@@ -94,7 +94,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
     proc->cont.fd = fd;
     proc->cont.filename = filename;
     pid_t pid = current_process()->pid;
-    printf("sos_nfs_open %s %d\n", filename, proc->cont.fd);
+    dprintf(2, "sos_nfs_open %s %d\n", filename, proc->cont.fd);
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
                       (unsigned)pid);
 }
@@ -115,7 +115,8 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     }
     iov_read(proc->cont.iov, data, count);
     of_entry_t *of = fd_lookup(proc, fd);
-    of->offset += count; 
+    of->offset += (unsigned)count;
+    dprintf(2, "read %d bytes, now at offset: %u\n", count, of->offset);
     syscall_end_continuation(proc, count);
 }
 
@@ -126,6 +127,8 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     proc->cont.fd = fd;
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
+    dprintf(2, "[READ] Using %x for fd %d\n", of, fd);
+    dprintf(2, "reading from offset: %u\n", of->offset);
     return nfs_read(of->fhandle, of->offset, count, sos_nfs_read_callback,
                     (unsigned)pid);
 }
@@ -143,19 +146,20 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
     }
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
-    of->offset += count;
+    dprintf(2, "[WRITE] Using %x for fd %d\n", of, fd);
+    of->offset += (unsigned)count;
 
     iovec_t *iov = proc->cont.iov;
     proc->cont.iov = proc->cont.iov->next;
     free(iov);
     if (proc->cont.iov == NULL) {
+        dprintf(2, "wrote %d bytes.  now at offset: %u\n", count, of->offset);
         syscall_end_continuation(proc, proc->cont.counter);
     } else {
         iov = proc->cont.iov;
         if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start,
                       nfs_write_callback,
                       (unsigned)proc->pid) != RPC_OK) {
-
             syscall_end_continuation(proc, -status);
         }
     }
@@ -163,9 +167,12 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
 
 int sos_nfs_write(iovec_t* iov, int fd, int count) {
     of_entry_t *of = fd_lookup(current_process(), fd);
+    dprintf(2, "[WRITE] Using %x for fd %d\n", of, fd);
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
     proc->cont.iov = iov;
+    proc->cont.fd = fd;
+    dprintf(2, "Writing to offset: %u\n", of->offset);
     return nfs_write(of->fhandle, of->offset, iov->sz,
                      (const void*)iov->start, nfs_write_callback,
                      (unsigned)pid);
@@ -175,12 +182,12 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
 
 static void prstat(sos_stat_t sbuf) {
     /* print out stat buf */
-    printf("%c%c%c%c 0x%06x 0x%lx 0x%06lx\n",
-            sbuf.st_type == ST_SPECIAL ? 's' : '-',
-            sbuf.st_fmode & FM_READ ? 'r' : '-',
-            sbuf.st_fmode & FM_WRITE ? 'w' : '-',
-            sbuf.st_fmode & FM_EXEC ? 'x' : '-', sbuf.st_size, sbuf.st_ctime,
-            sbuf.st_atime);
+    dprintf(2, "%c%c%c%c 0x%06x 0x%lx 0x%06lx\n",
+           sbuf.st_type == ST_SPECIAL ? 's' : '-',
+           sbuf.st_fmode & FM_READ ? 'r' : '-',
+           sbuf.st_fmode & FM_WRITE ? 'w' : '-',
+           sbuf.st_fmode & FM_EXEC ? 'x' : '-', sbuf.st_size, sbuf.st_ctime,
+           sbuf.st_atime);
 }
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
@@ -233,7 +240,7 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
         return;
     }
     if (proc->cont.target == 0) return ; //TODO why target could be zero ?
-    printf("readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.target, num_files);
+    dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.target, num_files);
     assert(proc->cont.counter < proc->cont.target);
 
     if (proc->cont.target <= proc->cont.counter + num_files) {
