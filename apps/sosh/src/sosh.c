@@ -26,6 +26,9 @@
 
 #define BUF_SIZ   128
 #define MAX_ARGS   32
+#define BENCHMARK_BUF_SIZ (1048576)
+
+static char benchmark_buf[BENCHMARK_BUF_SIZ] = {0};
 
 static int in;
 static sos_stat_t sbuf;
@@ -76,6 +79,7 @@ static int cp(int argc, char **argv) {
     char *file1, *file2;
     char buf[BUF_SIZ];
     int num_read, num_written = 0;
+    struct timeval start_time, end_time;
 
     if (argc != 3) {
         printf("Usage: cp from to\n");
@@ -90,8 +94,14 @@ static int cp(int argc, char **argv) {
 
     assert(fd >= 0);
 
-    while ((num_read = read(fd, buf, BUF_SIZ)) > 0)
+    printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
+        gettimeofday(&start_time, NULL);
         num_written = write(fd_out, buf, num_read);
+        gettimeofday(&end_time, NULL);
+        uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+        printf("%llu ", elapsed);
+    }
 
     if (num_read == -1 || num_written == -1) {
         printf("error on cp %d, %d\n", num_read, num_written);
@@ -201,6 +211,24 @@ static int dir(int argc, char **argv) {
     return 0;
 }
 
+static int benchmark(int argc,char *argv[]) {
+    int max_buf_size = 1024 * 1024;
+    int buf_size = 1;
+    struct timeval start_time, end_time;
+    int file = open("output", O_WRONLY);
+    printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    for(buf_size = 1; buf_size < max_buf_size; buf_size *= 2) {
+        gettimeofday(&start_time, NULL);
+        int cnt = write(file, benchmark_buf, (size_t)buf_size);
+        printf("written: %d\n", cnt);
+        gettimeofday(&end_time, NULL);
+        uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+        printf("%d %llu us\n", buf_size, elapsed);
+    }
+    return 0;
+}
+
+
 static int second_sleep(int argc,char *argv[]) {
     if (argc != 2) {
         printf("Usage %s seconds\n", argv[0]);
@@ -244,7 +272,7 @@ struct command {
     int (*command)(int argc, char **argv);
 };
 
-struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
+struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
         {"time", second_time}, {"mtime", micro_time} };
 

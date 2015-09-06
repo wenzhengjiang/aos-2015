@@ -18,7 +18,7 @@
 #include <sos.h>
 #include <syscallno.h>
 
-#define verbose 5
+#define verbose 1
 #include <log/debug.h>
 #include <log/panic.h>
 
