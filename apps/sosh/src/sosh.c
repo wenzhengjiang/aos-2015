@@ -309,7 +309,7 @@ static m5_test(void) {
     assert(buf[0] == 0);
     // No such file
     r = sos_getdirent(100000, buf, BUF_SIZ);
-    assert(r == -1);
+    assert(r == 0);
     r = sos_stat(NULL, &sbuf);
     assert(r == -1);
     r = sos_stat(buf, NULL);

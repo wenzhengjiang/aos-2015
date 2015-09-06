@@ -251,13 +251,13 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
         syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
-    if (proc->cont.target < 0) {
+    if (proc->cont.target <= 0) {
         syscall_end_continuation(proc, SOS_NFS_ERR);
         return;
     }
     dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.target, num_files);
     if (proc->cont.target <= proc->cont.counter + num_files) {
-        char *file = file_names[proc->cont.target - proc->cont.counter];
+        char *file = file_names[proc->cont.target - proc->cont.counter - 1];
         iovec_t *iov = proc->cont.iov;
         iov_read(iov, file, strlen(file)+1);
         syscall_end_continuation(proc, strlen(file)+1);
@@ -265,7 +265,7 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     }
     proc->cont.counter += num_files;
     if (nfscookie == 0) {
-        syscall_end_continuation(proc, SOS_NFS_ERR);
+        syscall_end_continuation(proc, 0);
         return;
     }
     if (nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
@@ -279,11 +279,14 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
 int sos_nfs_readdir(int stop_index, iovec_t *iov) {
     sos_proc_t *proc = current_process();
     pid_t pid = current_process()->pid;
-    proc->cont.target = stop_index;
+    proc->cont.target = stop_index + 1;
     proc->cont.iov = iov;
     printf("Reading directory up to %d\n", stop_index);
-    return nfs_readdir(&mnt_point, 0, nfs_readdir_callback,
-                       (unsigned)pid);
+    int err = nfs_readdir(&mnt_point, 0, nfs_readdir_callback, (unsigned)pid);
+    if (err < 0) {
+        return err;
+    }
+    return 0;
 }
 
 int sos_nfs_init(const char* dir) {
