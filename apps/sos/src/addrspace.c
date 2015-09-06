@@ -300,6 +300,7 @@ int iov_read(iovec_t *iov, char *buf, int count) {
     //if (!iov || !buf || count < 0) return -1;
     int i = 0;
     for (iovec_t *v = iov; v && i < count; v = v->next) {
+        printf("IOV READING\n");
         size_t n = umin((unsigned)count - (unsigned)i, v->sz);
         memcpy((char*)v->start, buf+i, (size_t)n);
         i += n;

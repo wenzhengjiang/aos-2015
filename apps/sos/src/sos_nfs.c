@@ -69,6 +69,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
         // TODO: Implement time stamps
         uint32_t clock_upper = time_stamp() >> 32;
         uint32_t clock_lower = (time_stamp() << 32) >> 32;
+
         struct sattr default_attr = {.mode = 0x7,
                                      .uid = 0,
                                      .gid = 0,
@@ -140,7 +141,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
-    dprintf(-1, "write_callback %d %llu\n",  count, time_stamp()-prevt);
+    dprintf(5, "write_callback %d %llu\n",  count, time_stamp()-prevt);
     prevt = time_stamp();
     sos_proc_t *proc = proc = process_lookup(token);
     int fd = proc->cont.fd;
