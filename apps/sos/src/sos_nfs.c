@@ -119,7 +119,8 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     iov_read(proc->cont.iov, data, count);
     of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
-    dprintf(2, "read %d bytes, now at offset: %u\n", count, of->offset);
+
+    dprintf(-1, "read %d bytes, now at offset: %u\n", count, of->offset);
     syscall_end_continuation(proc, count);
 }
 
@@ -130,8 +131,8 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     proc->cont.fd = fd;
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
-    dprintf(2, "[READ] Using %x for fd %d\n", of, fd);
-    dprintf(2, "reading from offset: %u\n", of->offset);
+    dprintf(-1, "[READ] Using %x for fd %d\n", of, fd);
+    dprintf(-1, "reading from offset: %u\n", of->offset);
     return nfs_read(of->fhandle, of->offset, count, sos_nfs_read_callback,
                     (unsigned)pid);
 }

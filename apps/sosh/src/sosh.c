@@ -24,7 +24,7 @@
 /* Your OS header file */
 #include <sos.h>
 
-#define BUF_SIZ   2048
+#define BUF_SIZ   1024*1024
 #define MAX_ARGS   32
 #define BENCHMARK_BUF_SIZ (1048576)
 
@@ -217,11 +217,21 @@ static int benchmark(int argc,char *argv[]) {
     int max_buf_size = 1024 * 1024;
     int buf_size = 1;
     struct timeval start_time, end_time;
+    
     int file = open("output", O_WRONLY);
-    printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    // printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+   // for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
+   //     gettimeofday(&start_time, NULL);
+   //     int cnt = write(file, benchmark_buf, (size_t)buf_size);
+   //     gettimeofday(&end_time, NULL);
+   //     uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+   //     printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+   // }
+   
+    printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
     for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
         gettimeofday(&start_time, NULL);
-        int cnt = write(file, benchmark_buf, (size_t)buf_size);
+        int cnt = read(file, benchmark_buf, (size_t)buf_size);
         gettimeofday(&end_time, NULL);
         uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
         printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
@@ -289,7 +299,7 @@ static void create_tmpfiles(void) {
 // TODO: Remove this once satisfied all is okay.
 static m5_test(void) {
     int file, r;
-    char* buf[BUF_SIZ];
+    char buf[BUF_SIZ];
     file = open(NULL, 0);
     assert(file == -1);
     file = open(NULL, O_RDONLY);
@@ -331,7 +341,7 @@ int main(void) {
     char *argv[MAX_ARGS];
     int i, r, done, found, new, argc;
     char *bp, *p;
-    m5_test();
+ //   m5_test();
     in = open("console", O_RDONLY);
 
     assert(in >= 0);
