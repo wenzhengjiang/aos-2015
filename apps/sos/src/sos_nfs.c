@@ -38,9 +38,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
-        // Clean up the preemptively created FD.  TODO: Consider whether we
-        // should just be passing the error straight through, or should be
-        // standardising them somehow
+
         fd_free(proc, fd);
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
@@ -108,7 +106,6 @@ static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
     (void)fattr;
-    dprintf(-1, "read_callback %d %llu us\n",  count, time_stamp()-prevt);
     prevt = time_stamp();
     sos_proc_t *proc;
     int fd;
@@ -120,7 +117,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         return;
     }
     proc->cont.counter += count;
-    of_entry_t *of = fd_lookup(proc, fd);
+     of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
 
     iovec_t *iov = proc->cont.iov;
@@ -146,7 +143,6 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
 int sos_nfs_read(iovec_t* vec, int fd, int count) {
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
-    // TODO: Check FD is open with mode allowing read (but don't do it here!)
     proc->cont.fd = fd;
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
@@ -257,7 +253,6 @@ int sos_nfs_getattr(char* filename, iovec_t* iov) {
     sos_proc_t *proc =current_process();
     pid_t pid = proc->pid;
     proc->cont.iov = iov;
-
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
     return nfs_lookup(&mnt_point, filename, sos_nfs_lookup_for_attr,

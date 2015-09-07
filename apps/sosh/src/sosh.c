@@ -217,26 +217,34 @@ static int benchmark(int argc,char *argv[]) {
     int max_buf_size = 1024 * 1024;
     int buf_size = 1;
     struct timeval start_time, end_time;
-    
+
     int file = open("output", O_WRONLY);
-    // printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
-   // for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
-   //     gettimeofday(&start_time, NULL);
-   //     int cnt = write(file, benchmark_buf, (size_t)buf_size);
-   //     gettimeofday(&end_time, NULL);
-   //     uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-   //     printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
-   // }
-   
-    printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
-    for(buf_size = max_buf_size; buf_size > 0; buf_size /= 2) {
-        gettimeofday(&start_time, NULL);
-        int cnt = read(file, benchmark_buf, (size_t)buf_size);
-        gettimeofday(&end_time, NULL);
-        uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-        printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+    if (argc != 2) {
+        printf("usage: %s <mode>\n", argv[0]);
+        return 1;
     }
-    
+
+    if(strcmp(argv[1], "write") == 0) {
+        printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+        for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
+            gettimeofday(&start_time, NULL);
+            int cnt = write(file, benchmark_buf, (size_t)buf_size);
+            gettimeofday(&end_time, NULL);
+            uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+            printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+        }
+    } else if(strcmp(argv[1], "read") == 0) {
+        printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
+        for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
+            gettimeofday(&start_time, NULL);
+            int cnt = read(file, benchmark_buf, (size_t)buf_size);
+            gettimeofday(&end_time, NULL);
+            uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+            printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+        }
+    } else {
+        printf("Unknown benchmark: %s\n",argv[1]);
+    }
     return 0;
 }
 
