@@ -28,6 +28,8 @@
 extern io_device_t serial_io;
 extern io_device_t nfs_io;
 
+int pkg_size, pkg_num;
+bool nfs_pkg = false; 
 typedef enum iop_direction {READ, WRITE, NONE} iop_direction_t;
 
 static inline unsigned CONST umin(unsigned a, unsigned b)
@@ -36,9 +38,11 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 }
 timestamp_t start_time, end_time;
 
-const int pkg_size = 1284;
-#define PKGS(n) ((n+pkg_size-1)/pkg_size)
 void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
+    if (nfs_pkg) {
+        printf("pkg_size = %d\n", pkg_size );
+        nfs_pkg = false;
+    }
     iovec_t *iov;
     seL4_MessageInfo_t reply;
     dprintf(4, "ENDING SYSCALL\n", retval);
@@ -53,8 +57,6 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     assert(proc->cont.reply_cap != seL4_CapNull);
     assert(proc->cont.reply_cap != seL4_CapNull);
     timestamp_t  elapsed = time_stamp() - start_time;
-    dprintf(0, "%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", retval, elapsed, (double)elapsed/retval, (double)elapsed/PKGS(retval));
-    dprintf(0, " %llu\n", end_time-start_time);
     seL4_Send(proc->cont.reply_cap, reply);
     iov = proc->cont.iov;
     while(iov) {
