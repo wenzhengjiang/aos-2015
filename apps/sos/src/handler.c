@@ -26,7 +26,6 @@ static cont_t empty_cont;
 
 static char path[MAX_FILE_PATH_LENGTH];
 
-
 int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
@@ -87,7 +86,7 @@ static int usleep_handler (seL4_CPtr reply_cap) {
 }
 
 static int timestamp_handler (seL4_CPtr reply_cap) {
-    dprintf(4, "SYS TIME\n");
+    dprintf(4, "SYS TIME %d\n", reply_cap);
     uint64_t tick = time_stamp();
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,2);
     seL4_SetMR(0, tick & 0xffffffff);
@@ -97,9 +96,7 @@ static int timestamp_handler (seL4_CPtr reply_cap) {
 }
 
 static int open_handler (seL4_CPtr reply_cap) {
-    static char path[MAX_FILE_PATH_LENGTH];
-
-    dprintf(4, "SYS OPEN %s\n", path);
+    dprintf(4, "SYS OPEN: %d\n", reply_cap);
     fmode_t mode = seL4_GetMR(1);
     memset(path, 0, sizeof(path));
     ipc_read(OPEN_MESSAGE_START, path);
@@ -108,7 +105,7 @@ static int open_handler (seL4_CPtr reply_cap) {
 }
 
 static int read_handler (seL4_CPtr reply_cap) {
-    dprintf(4, "SYS READ\n");
+    dprintf(4, "SYS READ: %d\n", reply_cap);
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t) seL4_GetMR(3);
@@ -118,7 +115,7 @@ static int read_handler (seL4_CPtr reply_cap) {
 }
 
 static int write_handler (seL4_CPtr reply_cap) {
-    dprintf(4, "SYS WRITE\n");
+    dprintf(4, "SYS WRITE: %d\n", reply_cap);
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t) seL4_GetMR(3);
@@ -139,8 +136,9 @@ static int getdirent_handler (seL4_CPtr reply_cap) {
 
 static int stat_handler (seL4_CPtr reply_cap) {
     client_vaddr buf = (client_vaddr) seL4_GetMR(1);
+    dprintf(4, "SYS STAT\n");
+    memset(path, 0, sizeof(path));
     ipc_read(STAT_MESSAGE_START, path);
-    dprintf(4, "SYS STAT %s\n", path);
     cur_proc->cont.reply_cap = reply_cap;
 
     return sos__sys_stat(path, buf);
@@ -150,7 +148,7 @@ static int close_handler (seL4_CPtr reply_cap) {
     int res;
     seL4_MessageInfo_t reply;
     int fd = (int)seL4_GetMR(1);
-    dprintf(4, "SYS CLOSE %s\n", path);
+    dprintf(4, "SYS CLOSE\n");
     res = sos__sys_close(fd);
     if (res != 0) {
         reply = seL4_MessageInfo_new(seL4_UserException,0,0,1);

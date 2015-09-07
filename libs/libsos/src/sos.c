@@ -59,24 +59,19 @@ static void ipc_write(int start, const char* msgdata) {
 
 fmode_t mode2fmode(unsigned mode) {
     fmode_t ret = 0;
-    if ((mode & O_RDONLY) || (mode & O_RDWR))
+    if (mode == 0 || (mode & O_RDWR)) {
         ret |= FM_READ;
-    if ((mode & O_WRONLY) || (mode & O_RDWR))
+    }
+    if ((mode & O_WRONLY) || (mode & O_RDWR)) {
         ret |= FM_WRITE;
+    }
     return ret;
 }
 
 int sos_sys_open(const char *path, fmode_t mode) {
-    if (!path) {
-        sos_debug_print("path is null pointer\n");
-        return -1;
-    } 
     int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
-    if (strlen(path) > MAX_FILE_PATH_LENGTH) {
-        sos_debug_print("file name longer than 256\n");
-        return -1;
-    }
     mode = mode2fmode(mode);
+    sos_debug_print("translated mode\n");
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
@@ -90,8 +85,6 @@ int sos_sys_open(const char *path, fmode_t mode) {
 }
 
 int sos_sys_read(int file, char *buf, size_t nbyte) {
-    if (file < 0 || buf == NULL || nbyte == 0) return 0;
-
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_READ); 
@@ -107,6 +100,7 @@ int sos_sys_read(int file, char *buf, size_t nbyte) {
 }
 
 int sos_sys_write(int file, char *buf, size_t nbyte) {
+    // TODO : REMOVE ME (dup reply cap issues encountered in SOS after removal?!)
     if (file < 0 || buf == NULL || nbyte == 0) return 0;
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
@@ -154,12 +148,10 @@ int64_t sos_sys_time_stamp(void) {
 }
 
 int sos_stat(const char *path, sos_stat_t *buf) {
-    if (!path || !buf) return -1;
-    int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
-    if (strlen(path) > MAX_FILE_PATH_LENGTH) {
-        sos_debug_print("file name longer than 256\n");
+    if (path == NULL) {
         return -1;
     }
+    int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2+len);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_STAT); 
@@ -173,8 +165,6 @@ int sos_stat(const char *path, sos_stat_t *buf) {
 }
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {
-    if (!name) return -1;
-    if (nbyte == 0) return 0;
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_GETDIRENT); 
@@ -182,10 +172,11 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
     seL4_SetMR(2, (seL4_Word)name); 
     seL4_SetMR(3, nbyte); 
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
-    if(seL4_MessageInfo_get_label(reply) == seL4_NoFault)
+    if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
         return seL4_GetMR(0);
-    else
+    } else {
         return -1;
+    }
 }
 
 size_t sos_write(void *data, size_t count) {

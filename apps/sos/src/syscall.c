@@ -51,10 +51,6 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     seL4_SetMR(0, retval);
     seL4_SetTag(reply);
     assert(proc->cont.reply_cap != seL4_CapNull);
-    assert(proc->cont.reply_cap != seL4_CapNull);
-    timestamp_t  elapsed = time_stamp() - start_time;
-    dprintf(0, "%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", retval, elapsed, (double)elapsed/retval, (double)elapsed/PKGS(retval));
-    dprintf(0, " %llu\n", end_time-start_time);
     seL4_Send(proc->cont.reply_cap, reply);
     iov = proc->cont.iov;
     while(iov) {
@@ -204,27 +200,17 @@ static io_device_t* device_handler_fd(int fd) {
     return curproc->fd_table[fd]->io;
 }
 
-static int translate_fcntl_mode(int mode) {
-    switch(mode) {
-    case 2:
-        return 6;
-    case 1:
-        return 2;
-    case 0:
-        return 4;
-    default:
-        return 0;
-    }
-}
-
 int sos__sys_open(const char *path, int mode) {
     io_device_t *dev = device_handler_str(path);
-    int fmode = translate_fcntl_mode(mode);
     assert(dev);
-    return dev->open(path, fmode);
+    return dev->open(path, mode);
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
+    if (nbyte == 0) {
+        syscall_end_continuation(current_process(), 0, true);
+        return 0;
+    }
     of_entry_t *of = fd_lookup(current_process(), file);
     if (of == NULL) {
         return 1;
@@ -249,8 +235,11 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
         return 1;
     }
     if (!(of->mode & FM_WRITE)) {
-        printf("Check of mode %d failed\n", of->mode);
         return EPERM;
+    }
+    if (nbyte == 0) {
+        syscall_end_continuation(current_process(), 0, true);
+        return 0;
     }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
@@ -267,7 +256,7 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
 
 int sos__sys_stat(char *path, client_vaddr buf) {
     iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
-    if (iov == NULL) {
+    if (iov == NULL || path == NULL) {
         // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;

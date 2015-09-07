@@ -146,8 +146,6 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     proc->cont.fd = fd;
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
-    int err = 0, nvec = 0; 
-    int oldoffset = of->offset;
     dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
     prevt = time_stamp();
     return nfs_read(of->fhandle, of->offset, proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
