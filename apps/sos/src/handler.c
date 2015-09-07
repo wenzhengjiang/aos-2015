@@ -13,7 +13,7 @@
 #include "syscall.h"
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 

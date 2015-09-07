@@ -20,6 +20,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <utils/time.h>
+#include <stdbool.h>
 
 /* Your OS header file */
 #include <sos.h>
@@ -27,6 +28,7 @@
 #define BUF_SIZ   4*1024
 #define MAX_ARGS   32
 #define BENCHMARK_BUF_SIZ (1048576)
+#define MAX_SAMPLES 5
 
 static char benchmark_buf[BENCHMARK_BUF_SIZ] = {0};
 
@@ -218,32 +220,40 @@ static int benchmark(int argc,char *argv[]) {
     int buf_size = 1;
     struct timeval start_time, end_time;
 
-    int file = open("output", O_WRONLY);
     if (argc != 2) {
         printf("usage: %s <mode>\n", argv[0]);
         return 1;
     }
-
-    if(strcmp(argv[1], "write") == 0) {
+    bool is_write = (strcmp(argv[1], "write") == 0);
+    bool is_read = (strcmp(argv[1], "read") == 0);
+    if (is_write)
         printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
-        for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
-            gettimeofday(&start_time, NULL);
-            int cnt = write(file, benchmark_buf, (size_t)buf_size);
-            gettimeofday(&end_time, NULL);
-            uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-            printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
-        }
-    } else if(strcmp(argv[1], "read") == 0) {
+    else if (is_read)
         printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
-        for(buf_size = 1; buf_size <= max_buf_size; buf_size *= 2) {
-            gettimeofday(&start_time, NULL);
-            int cnt = read(file, benchmark_buf, (size_t)buf_size);
-            gettimeofday(&end_time, NULL);
-            uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-            printf("%d %llu us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
-        }
-    } else {
+    else {
         printf("Unknown benchmark: %s\n",argv[1]);
+        return 0;
+    }
+    for(buf_size = 128; buf_size <= max_buf_size; buf_size *= 2) {
+        int file = open("output", O_WRONLY);
+        int n = MAX_SAMPLES;
+        int64_t elapsed = 0;
+        int cnt = 0;
+        double ave_elapsed = 0;
+        int ave_cnt  = 0;
+        while (n--) {
+            gettimeofday(&start_time, NULL);
+            cnt = is_write ? write(file, benchmark_buf, (size_t)buf_size) : read(file, benchmark_buf, (size_t)buf_size);
+            gettimeofday(&end_time, NULL);
+            elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+            printf("%d %.2lf us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+            ave_cnt += cnt;
+            ave_elapsed += elapsed;
+        }
+        ave_elapsed /= MAX_SAMPLES;
+        ave_cnt /= MAX_SAMPLES;
+        printf("ave: %d %.2lf us, %0.2lf/byte, %0.2lf/pkg\n", ave_cnt, ave_elapsed, (double)ave_elapsed/ave_cnt, (double)ave_elapsed/PKGS(ave_cnt));
+        close(file);
     }
     return 0;
 }

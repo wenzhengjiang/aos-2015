@@ -16,7 +16,7 @@
 #include "frametable.h"
 #include "serial.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -123,6 +123,6 @@ int fd_free(sos_proc_t* proc, int fd) {
     }
     proc->fd_table[fd]->io = NULL;
     proc->fd_table[fd] = NULL;
-    printf("fd %d closed okay\n", fd);
+    dprintf(3, "fd %d closed okay\n", fd);
     return 0;
 }
