@@ -206,15 +206,33 @@ static io_device_t* device_handler_fd(int fd) {
     return curproc->fd_table[fd]->io;
 }
 
-int sos__sys_open(const char *path, fmode_t mode) {
+static int translate_fcntl_mode(int mode) {
+    switch(mode) {
+    case 2:
+        return 6;
+    case 1:
+        return 2;
+    case 0:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+int sos__sys_open(const char *path, int mode) {
     io_device_t *dev = device_handler_str(path);
+    int fmode = translate_fcntl_mode(mode);
     assert(dev);
-    return dev->open(path, mode);
+    return dev->open(path, fmode);
 }
 
 int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
-    if (fd_lookup(current_process(), file) == NULL) {
+    of_entry_t *of = fd_lookup(current_process(), file);
+    if (of == NULL) {
         return 1;
+    }
+    if (!(of->mode & FM_READ)) {
+        return EPERM;
     }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
@@ -228,8 +246,13 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
 }
 
 int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
-    if (fd_lookup(current_process(), file) == NULL) {
-        return EINVAL;
+    of_entry_t *of = fd_lookup(current_process(), file);
+    if (of == NULL) {
+        return 1;
+    }
+    if (!(of->mode & FM_WRITE)) {
+        printf("Check of mode %d failed\n", of->mode);
+        return EPERM;
     }
     io_device_t *dev = device_handler_fd(file);
     iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);

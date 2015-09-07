@@ -189,11 +189,11 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
 }
 
 size_t sos_write(void *data, size_t count) {
-    return sos_sys_write(STDIN_FD , (char*)data, count);
+    return sos_sys_write(STDOUT_FD , (char*)data, count);
 }
 
 size_t sos_read(void *vData, size_t count) {
-    return sos_sys_read(STDOUT_FD, vData, count);
+    return sos_sys_read(STDIN_FD, vData, count);
 }
 
 pid_t sos_process_create(const char *path) {
