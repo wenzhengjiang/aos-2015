@@ -329,7 +329,12 @@ static void m5_test(void) {
     file = open("tmp1", O_RDONLY);
     assert(file > 0);
     r = read(file, buf, BUF_SIZ);
-    assert(r == 13);
+    assert(r == strlen("hello, world") + 1);
+    r = close(file);
+    file = open("bootimg.elf", O_RDONLY);
+    assert(file > 0);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == BUF_SIZ);
     r = close(file);
     assert(r == 0);
     r = read(500, buf, BUF_SIZ);

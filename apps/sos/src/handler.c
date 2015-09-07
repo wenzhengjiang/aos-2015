@@ -13,7 +13,7 @@
 #include "syscall.h"
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -102,17 +102,17 @@ static int open_handler (seL4_CPtr reply_cap) {
     dprintf(4, "SYS OPEN %s\n", path);
     fmode_t mode = seL4_GetMR(1);
     memset(path, 0, sizeof(path));
-    ipc_read(OPEN_MESSAGE_START, path); 
-    cur_proc->cont.reply_cap = reply_cap; 
+    ipc_read(OPEN_MESSAGE_START, path);
+    cur_proc->cont.reply_cap = reply_cap;
     return sos__sys_open(path, mode);
 }
- 
+
 static int read_handler (seL4_CPtr reply_cap) {
     dprintf(4, "SYS READ\n");
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t) seL4_GetMR(3);
-    cur_proc->cont.reply_cap = reply_cap; 
+    cur_proc->cont.reply_cap = reply_cap;
 
     return sos__sys_read(file, buf, nbyte);
 }
@@ -122,7 +122,7 @@ static int write_handler (seL4_CPtr reply_cap) {
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t) seL4_GetMR(3);
-    cur_proc->cont.reply_cap = reply_cap; 
+    cur_proc->cont.reply_cap = reply_cap;
 
     return sos__sys_write(file, buf, nbyte);
 }
@@ -132,7 +132,7 @@ static int getdirent_handler (seL4_CPtr reply_cap) {
     dprintf(4, "SYS GETDIRENT %u\n", pos);
     client_vaddr name = (client_vaddr)seL4_GetMR(2);
     size_t nbyte = seL4_GetMR(3);
-    cur_proc->cont.reply_cap = reply_cap; 
+    cur_proc->cont.reply_cap = reply_cap;
 
     return sos__sys_getdirent(pos, name, nbyte);
 }
@@ -141,7 +141,7 @@ static int stat_handler (seL4_CPtr reply_cap) {
     client_vaddr buf = (client_vaddr) seL4_GetMR(1);
     ipc_read(STAT_MESSAGE_START, path);
     dprintf(4, "SYS STAT %s\n", path);
-    cur_proc->cont.reply_cap = reply_cap; 
+    cur_proc->cont.reply_cap = reply_cap;
 
     return sos__sys_stat(path, buf);
 }
@@ -165,7 +165,7 @@ static int close_handler (seL4_CPtr reply_cap) {
 
 void register_handlers(void) {
     assert(handlers[SOS_SYSCALL_BRK] == NULL);
-    handlers[SOS_SYSCALL_BRK] = brk_handler; 
+    handlers[SOS_SYSCALL_BRK] = brk_handler;
 
     assert(handlers[SOS_SYSCALL_USLEEP] == NULL);
     handlers[SOS_SYSCALL_USLEEP]  = usleep_handler;
