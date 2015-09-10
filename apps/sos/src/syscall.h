@@ -1,32 +1,32 @@
 #ifndef _SOS_SYSCALL_H_
 #define _SOS_SYSCALL_H_
 
-#include <stdint.h>
 #include <sos.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <serial/serial.h>
-#include "process.h"
 #include "addrspace.h"
-
-#define MAX_FILE_PATH_LENGTH (256)
-
-typedef struct iovec {
-    sos_vaddr start;
-    size_t sz;
-    struct iovec *next;
-} iovec_t;
+#include "process.h"
 
 size_t sys_print(size_t num_args);
 
-int sos__sys_open(const char *path, fmode_t mode, int *ret);
+int sos__sys_open(const char *path, fmode_t mode);
 
-int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret);
+int sos__sys_read(int file, client_vaddr buf, size_t nbyte);
 
-int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret);
+int sos__sys_write(int file, client_vaddr buf, size_t nbyte);
+
+int sos__sys_stat(char *path, client_vaddr buf) ;
+
+int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte);
+
+int sos__sys_close(int fd);
 
 void ipc_read(int start, char *buf);
 
-extern seL4_CPtr reader_cap;
+void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 
-void iov_free(iovec_t *);
-
+extern int pkg_size;
+extern int pkg_num;
+extern bool pkg_nfs;
 #endif

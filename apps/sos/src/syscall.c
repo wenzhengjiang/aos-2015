@@ -11,52 +11,85 @@
 #include "serial.h"
 #include "frametable.h"
 #include "process.h"
+#include "file.h"
 #include "addrspace.h"
 #include "syscall.h"
-#include "io_device.h"
 #include <assert.h>
 #include <sos.h>
+#include <syscallno.h>
+#include <clock/clock.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
 #define PRINT_MESSAGE_START (2)
 
 extern io_device_t serial_io;
-device_map_t dev_map[DEVICE_NUM] = {{&serial_io, "console"}};
+extern io_device_t nfs_io;
 
-typedef enum iop_direction {READ, WRITE} iop_direction_t;
+int pkg_size, pkg_num;
+bool nfs_pkg = false; 
+typedef enum iop_direction {READ, WRITE, NONE} iop_direction_t;
 
 static inline unsigned CONST umin(unsigned a, unsigned b)
 {
     return (a < b) ? a : b;
 }
+timestamp_t start_time, end_time;
+
+void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
+    if (nfs_pkg) {
+        printf("pkg_size = %d\n", pkg_size );
+        nfs_pkg = false;
+    }
+    iovec_t *iov;
+    seL4_MessageInfo_t reply;
+    dprintf(4, "ENDING SYSCALL\n", retval);
+    dprintf(4, "[SYSEND] Returning %d\n", retval);
+    if (success) {
+        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    } else {
+        reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
+    }
+    seL4_SetMR(0, retval);
+    seL4_SetTag(reply);
+    assert(proc->cont.reply_cap != seL4_CapNull);
+    seL4_Send(proc->cont.reply_cap, reply);
+    iov = proc->cont.iov;
+    while(iov) {
+        if (iov) {
+            proc->cont.iov = iov->next;
+        }
+        free(iov);
+        iov = proc->cont.iov;
+    }
+    memset(&proc->cont, 0, sizeof(cont_t));
+    dprintf(4, "SYSCALL ENDED\n", retval);
+}
 
 static sos_vaddr
 check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
-    // Ensure client process has the page mapped
-    sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
-    if (saddr == 0) {
+    sos_region_t* reg = as_vaddr_region(as, buf);
+    if (!reg) {
         return 0;
     }
     // Ensure client process has correct permissions to the page
-    sos_region_t* reg = as_vaddr_region(as, buf);
     if (!(reg->rights & seL4_CanWrite) && dir == WRITE) {
         return 0;
     } else if (!(reg->rights & seL4_CanRead) && dir == READ) {
         return 0;
     }
-    return saddr;
-}
 
-void iov_free(iovec_t *iov) {
-    iovec_t *cur;
-    while(iov) {
-        cur = iov;
-        iov = iov->next;
-        free(cur);
+    // Ensure client process has the page mapped
+    sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
+    if (saddr == 0) {
+        int err = as_create_page(as, buf, reg->rights);
+        if (err) return 0;
     }
+    saddr = as_lookup_sos_vaddr(as, buf);
+
+    return saddr;
 }
 
 /**
@@ -82,47 +115,17 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
 
 void ipc_read(int start, char *buf) {
     assert(buf && start > 0);
-    int k = 0;
-    for (int i = start; i < seL4_MsgMaxLength; i++) {
+    int k = 0, i ;
+    for (i = start; i < seL4_MsgMaxLength; i++) {
        int len = unpack_word(buf+k, seL4_GetMR(i)); 
        k += len;
-       if (k < sizeof(seL4_Word)) break;
+       if (len < sizeof(seL4_Word)) break;
     }
     if (k < MAX_FILE_PATH_LENGTH)
         buf[k] = 0;
 }
-/**
- * @param num_args number of IPC args supplied
- * @returns length of the message printed
- */
-size_t sys_print(size_t num_args) {
-    size_t i,unpack_len,send_len;
-    size_t total_unpack = 0;
-    seL4_Word packed_data;
-    char *msgBuf = malloc(seL4_MsgMaxLength * sizeof(seL4_Word));
-    char *bufPtr = msgBuf;
-    char req_count = seL4_GetMR(1);
-    memset(msgBuf, 0, seL4_MsgMaxLength * sizeof(seL4_Word));
-    for (i = 0; i < num_args - PRINT_MESSAGE_START + 1; i++) {
-        packed_data = seL4_GetMR(i + PRINT_MESSAGE_START);
-        unpack_len = unpack_word(bufPtr, packed_data);
-        total_unpack += unpack_len;
-        bufPtr += unpack_len;
-        /* Unpack was short the expected amount, so we signal the end. */
-        if (unpack_len < sizeof(seL4_Word)) {
-            break;
-        }
-    }
-    iovec_t iov = { .start = (sos_vaddr)msgBuf,
-                    .sz = umin(req_count, total_unpack), 
-                    .next = NULL};
-    send_len = sos_serial_write(&iov);
-    free(msgBuf);
-    return send_len;
-}
 
-static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **iotail) {
-    printf("iov_create: %u, %u\n", start ,sz);
+static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t *iotail) {
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -131,82 +134,168 @@ static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t **i
     ionew->start = start;
     ionew->sz = sz;
     ionew->next = NULL;
+
     if (iohead == NULL) {
         return ionew;
     } else {
-        assert(*iotail);
-        (*iotail)->next = ionew;
-        *iotail = ionew;
+        iotail->next = ionew;
         return iohead;
     }
 }
 
 static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
+    sos_vaddr saddr;
     size_t remaining = nbyte;
     iovec_t *iohead = NULL;
-    iovec_t **iotail = &iohead;
+    iovec_t *iotail = NULL;
     sos_addrspace_t* as = current_as();
-    while(remaining) {
-        size_t offset = ((unsigned)buf % PAGE_SIZE);
-        size_t buf_delta = umin((PAGE_SIZE - offset), remaining);
-        sos_vaddr saddr = check_page(as, buf, dir);
+    if (remaining == 0) {
+        saddr = check_page(as, buf, dir);
         if (saddr == 0) {
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
-        iohead = iov_create(saddr+offset, buf_delta, iohead, iotail);
+        iohead = iov_create(saddr, 0, NULL, NULL);
+        return iohead;
+    }
+    dprintf(1, "cbuf_to_iov: %d bytes\n", nbyte);
+    while(remaining) {
+        size_t offset = ((unsigned)buf % PAGE_SIZE);
+        size_t buf_delta = umin((PAGE_SIZE - offset), remaining);
+        saddr = check_page(as, buf, dir);
+        if (saddr == 0) {
+            ERR("Client page lookup %x failed\n", buf);
+            return NULL;
+        }
+        dprintf(1, "cbuf_to_iov: delta=%d\n", buf_delta);
+        iohead = iov_create(saddr, buf_delta, iohead, iotail);
+        if (iotail == NULL) iotail = iohead;
+        else iotail = iotail->next;
+
         if (iohead == NULL) {
             ERR("Insufficient memory to create new iovec\n");
             return NULL;
         }
+        assert(iotail);
         remaining -= buf_delta;
         buf += buf_delta;
     }
+    int cnt = 0;
+    for (iovec_t* iov = iohead; iov; iov = iov->next) {
+       cnt += iov->sz; 
+    }
+    dprintf(1, "cbuf_to_iov: iov=%d, nbyte=%d\n", cnt, nbyte);
+    assert(cnt == nbyte);
     return iohead;
 }
 
-static io_device_t* device_handler(const char* filename) {
-    for (int i = 0; i < DEVICE_NUM; i++) {
-        if (strcmp(filename, dev_map[i].name) == 0)
-            return dev_map[i].handler;
+static io_device_t* device_handler_str(const char* filename) {
+    if (strcmp(filename, "console") == 0) {
+        return &serial_io;
+    } else {
+        return &nfs_io;
     }
-    return NULL;
 }
 
-int sos__sys_open(const char *path, fmode_t mode, int *ret) {
-    printf("Open %s\n", path);
-    io_device_t *dev = device_handler(path); //TODO removd hardcode
-    if (dev) {
-        *ret = dev->open();
-    } else 
-        assert(!"only support console");
-
-    return 0;
+static io_device_t* device_handler_fd(int fd) {
+    sos_proc_t *curproc = current_process();
+    assert(curproc);
+    assert(curproc->fd_table);
+    return curproc->fd_table[fd]->io;
 }
 
-int sos__sys_read(int file, client_vaddr buf, size_t nbyte, int *ret){
-    printf("sos__sys_read: enter %08x\n", buf);
-    io_device_t *dev = device_handler("console"); //TODO removd hardcode
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
+int sos__sys_open(const char *path, int mode) {
+    io_device_t *dev = device_handler_str(path);
+    assert(dev);
+    return dev->open(path, mode);
+}
+
+int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
+    if (nbyte == 0) {
+        syscall_end_continuation(current_process(), 0, true);
+        return 0;
+    }
+    of_entry_t *of = fd_lookup(current_process(), file);
+    if (of == NULL) {
+        return 1;
+    }
+    if (!(of->mode & FM_READ)) {
+        return EPERM;
+    }
+    io_device_t *dev = device_handler_fd(file);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (iov == NULL) {
+        // TODO: Kill bad client
         assert(!"illegal buf addr");
         return EINVAL;
     }
-    if (dev) {
-        *ret = dev->read(iov);
-    } else 
-        assert(!"only support console");
-    printf("sos__sys_read: leave\n");
-    return 0;
+    assert(dev);
+    return dev->read(iov, file, nbyte);
 }
 
-int sos__sys_write(int file, client_vaddr buf, size_t nbyte, int *ret) {
-    io_device_t *dev = device_handler("console"); //TODO removd hardcode
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
-    if (dev) {
-        *ret = dev->write(iov);
-    } else 
-        assert(!"only support console");
-    iov_free(iov);
-    return 0;
+int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
+    of_entry_t *of = fd_lookup(current_process(), file);
+    if (of == NULL) {
+        return 1;
+    }
+    if (!(of->mode & FM_WRITE)) {
+        return EPERM;
+    }
+    if (nbyte == 0) {
+        syscall_end_continuation(current_process(), 0, true);
+        return 0;
+    }
+    io_device_t *dev = device_handler_fd(file);
+    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
+    if (iov == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+    assert(dev);
+    dprintf(0, "write nbytes %u ", nbyte);
+    start_time = time_stamp();
+    return dev->write(iov, file, nbyte);
+}
+
+int sos__sys_stat(char *path, client_vaddr buf) {
+    iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
+    if (iov == NULL || path == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+
+    return nfs_io.stat(path, iov);
+}
+
+int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
+    iovec_t *iov = cbuf_to_iov(name, nbyte, WRITE);
+    if (iov == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
+    return nfs_io.getdirent(pos, iov);
+}
+
+/**
+ * Close an open file.
+ * Should not block the caller.
+ */
+int sos__sys_close(int file) {
+    if (fd_lookup(current_process(), file) == NULL) {
+        return EINVAL;
+    }
+    int res;
+    of_entry_t* of = fd_lookup(current_process(), file);
+    io_device_t *io = of->io;
+    if (io == NULL) {
+        res = fd_free(current_process(), file);
+    } else if (io->close == NULL) {
+        res = fd_free(current_process(), file);
+    } else {
+        res = io->close(file);
+    }
+    return res;
 }

@@ -20,12 +20,17 @@
 #include <time.h>
 #include <sys/time.h>
 #include <utils/time.h>
+#include <stdbool.h>
 
 /* Your OS header file */
 #include <sos.h>
 
-#define BUF_SIZ   128
+#define BUF_SIZ   4*1024
 #define MAX_ARGS   32
+#define BENCHMARK_BUF_SIZ (1048576)
+#define MAX_SAMPLES 5
+
+static char benchmark_buf[BENCHMARK_BUF_SIZ] = {0};
 
 static int in;
 static sos_stat_t sbuf;
@@ -76,6 +81,7 @@ static int cp(int argc, char **argv) {
     char *file1, *file2;
     char buf[BUF_SIZ];
     int num_read, num_written = 0;
+    struct timeval start_time, end_time;
 
     if (argc != 3) {
         printf("Usage: cp from to\n");
@@ -90,11 +96,17 @@ static int cp(int argc, char **argv) {
 
     assert(fd >= 0);
 
-    while ((num_read = read(fd, buf, BUF_SIZ)) > 0)
+    printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
+        gettimeofday(&start_time, NULL);
         num_written = write(fd_out, buf, num_read);
+        gettimeofday(&end_time, NULL);
+        uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+        printf("%llu ", elapsed);
+    }
 
     if (num_read == -1 || num_written == -1) {
-        printf("error on cp\n");
+        printf("error on cp %d, %d\n", num_read, num_written);
         return 1;
     }
 
@@ -201,6 +213,52 @@ static int dir(int argc, char **argv) {
     return 0;
 }
 
+const int pkg_size = 1284;
+#define PKGS(n) ((n+pkg_size-1)/pkg_size)
+static int benchmark(int argc,char *argv[]) {
+    int max_buf_size = 1024 * 1024;
+    int buf_size = 1;
+    struct timeval start_time, end_time;
+
+    if (argc != 2) {
+        printf("usage: %s <mode>\n", argv[0]);
+        return 1;
+    }
+    bool is_write = (strcmp(argv[1], "write") == 0);
+    bool is_read = (strcmp(argv[1], "read") == 0);
+    if (is_write)
+        printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    else if (is_read)
+        printf("\n\n=== READ PERFORMANCE RESULTS ===\n");
+    else {
+        printf("Unknown benchmark: %s\n",argv[1]);
+        return 0;
+    }
+    for(buf_size = 128; buf_size <= max_buf_size; buf_size *= 2) {
+        int file = open("output", O_WRONLY);
+        int n = MAX_SAMPLES;
+        int64_t elapsed = 0;
+        int cnt = 0;
+        double ave_elapsed = 0;
+        int ave_cnt  = 0;
+        while (n--) {
+            gettimeofday(&start_time, NULL);
+            cnt = is_write ? write(file, benchmark_buf, (size_t)buf_size) : read(file, benchmark_buf, (size_t)buf_size);
+            gettimeofday(&end_time, NULL);
+            elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
+            printf("%d %.2lf us, %0.2lf/byte, %0.2lf/pkg\n", cnt, elapsed, (double)elapsed/cnt, (double)elapsed/PKGS(cnt));
+            ave_cnt += cnt;
+            ave_elapsed += elapsed;
+        }
+        ave_elapsed /= MAX_SAMPLES;
+        ave_cnt /= MAX_SAMPLES;
+        printf("ave: %d %.2lf us, %0.2lf/byte, %0.2lf/pkg\n", ave_cnt, ave_elapsed, (double)ave_elapsed/ave_cnt, (double)ave_elapsed/PKGS(ave_cnt));
+        close(file);
+    }
+    return 0;
+}
+
+
 static int second_sleep(int argc,char *argv[]) {
     if (argc != 2) {
         printf("Usage %s seconds\n", argv[0]);
@@ -244,20 +302,69 @@ struct command {
     int (*command)(int argc, char **argv);
 };
 
-struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
+struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
         {"time", second_time}, {"mtime", micro_time} };
 
 
+static void create_tmpfiles(void) {
+
+
+}
+
+// TODO: Remove this once satisfied all is okay.
+static void m5_test(void) {
+    int file, r;
+    char buf[BUF_SIZ];
+    file = open("readnonexistent", O_RDONLY);
+    assert(file == -1);
+    close(file);
+    file = open("readnonexistentVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVLONGSTRINGVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV", O_RDONLY);
+    assert(file == -1);
+    close(file);
+    r = sos_getdirent(-1, buf, BUF_SIZ);
+    assert(r == -1);
+
+    // Small buf size
+    buf[0] = 0;
+    r = sos_getdirent(0, buf, 0);
+    assert(r != -1);
+    assert(buf[0] == 0);
+    // No such file
+    r = sos_getdirent(100000, buf, BUF_SIZ);
+    assert(r == 0);
+    r = sos_stat(NULL, &sbuf);
+    assert(r == -1);
+    file = open("tmp1", O_RDWR);
+    char *msg = "hello, world";
+    r = write(file, msg, strlen(msg));
+    assert(r == strlen(msg));
+    close(file);
+    file = open("tmp1", O_RDONLY);
+    assert(file > 0);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == strlen("hello, world"));
+    r = close(file);
+    file = open("bootimg.elf", O_RDONLY);
+    assert(file > 0);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == BUF_SIZ);
+    r = close(file);
+    assert(r == 0);
+    r = read(500, buf, BUF_SIZ);
+    assert(r == -1);
+    r = read(file, buf, BUF_SIZ);
+    assert(r == -1);
+}
 
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
     int i, r, done, found, new, argc;
     char *bp, *p;
-
+    create_tmpfiles();
+    m5_test();
     in = open("console", O_RDONLY);
-
     assert(in >= 0);
     bp = buf;
     done = 0;

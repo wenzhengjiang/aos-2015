@@ -60,6 +60,7 @@ struct callback {
 
 typedef struct callback callback_t;
 
+static tick_callback_t tick_callbacks[MAX_CALLBACK_ID+1];
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
 static sync_mutex_t callback_m;
 static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
@@ -161,6 +162,21 @@ int start_timer(seL4_CPtr interrupt_ep) {
     return 0;
 }
 
+uint32_t register_tick_event(tick_callback_t callback_fun) {
+    int i;
+    for (i = 0; i < MAX_CALLBACK_ID + 1; i++) {
+        if (tick_callbacks[i] == NULL) {
+            break;
+        }
+    }
+    if (i == MAX_CALLBACK_ID + 1) {
+        ERR("Not registering new tick callback. Limit exceeded.");
+        return 1;
+    }
+    tick_callbacks[i] = callback_fun;
+    return 0;
+}
+
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
         dprintf(1, "invalid callback_fun\n");
@@ -213,14 +229,21 @@ int remove_timer(uint32_t id) {
  */
 int timer_interrupt(void) {
     int err;
+    int i;
     handling_interrupt = true;
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
         gpt_reg->sr &= GPT_SR_OF1;
+        for (i = 0; i < MAX_CALLBACK_ID; i++) {
+            if (tick_callbacks[i] == NULL) {
+                break;
+            }
+            tick_callbacks[i]();
+        }
     }
     if (gpt_reg->sr & GPT_SR_OF2) {
         assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
-        for (int i = 0; i < 5; i++) {
+        for (i = 0; i < 5; i++) {
         }
         while (next_cb < MAX_CALLBACK_ID) {
             callback_t *c = ordered_callbacks[next_cb];

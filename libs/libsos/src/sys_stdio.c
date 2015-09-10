@@ -25,10 +25,11 @@
 #include <sys/resource.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <sys/syscall.h>
-#include "ttyout.h"
+//#include "ttyout.h"
 
 #define STDIN_FD 0
 #define STDOUT_FD 1
@@ -165,10 +166,6 @@ sys_open(va_list ap)
 long
 sys_close(va_list ap)
 {
-    assert(!"Not implemented");
-    return 0;
-#if 0
     int fd = va_arg(ap, int);
     return sos_sys_close(fd);
-#endif
 }

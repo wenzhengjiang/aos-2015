@@ -11,7 +11,7 @@
 #include "addrspace.h"
 #include <assert.h>
 
-#define verbose 2
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -28,6 +28,10 @@
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
 
+static inline unsigned CONST umin(unsigned a, unsigned b)
+{
+    return (a < b) ? a : b;
+}
 /**
  * Lookup a sos vaddr (SOS frametable address) given a client vaddr
  * @param as address space
@@ -39,7 +43,7 @@ sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     if (as->pd[pd_idx]) {
-        return as->pd[pd_idx][pt_idx];
+        return (as->pd[pd_idx][pt_idx] + (0x00000fff & vaddr));
     }
     return 0;
 }
@@ -291,3 +295,26 @@ sos_addrspace_t* as_create(void) {
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;
 }
+
+int iov_read(iovec_t *iov, char *buf, int count) {
+    //if (!iov || !buf || count < 0) return -1;
+    int i = 0;
+    for (iovec_t *v = iov; v && i < count; v = v->next) {
+        size_t n = umin((unsigned)count - (unsigned)i, v->sz);
+        memcpy((char*)v->start, buf+i, (size_t)n);
+        i += n;
+    }
+    assert(i <= count);
+    return 0;
+}
+
+void iov_free(iovec_t *iov) {
+    iovec_t *cur;
+    while(iov) {
+        cur = iov;
+        iov = iov->next;
+        free(cur);
+    }
+}
+
+

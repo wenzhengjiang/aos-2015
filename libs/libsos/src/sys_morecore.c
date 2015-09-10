@@ -17,7 +17,7 @@
 #include <assert.h>
 #include <sel4/sel4.h>
 
-#include <syscall.h>
+#include <syscallno.h>
 
 /*
  * Statically allocated morecore area.

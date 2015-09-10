@@ -9,21 +9,23 @@
 #include <ut/ut.h>
 #include <device/mapping.h>
 #include <string.h>
+#include <nfs/nfs.h>
 
 #include "process.h"
 #include "addrspace.h"
 #include "frametable.h"
+#include "serial.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
 /* This is the index where a clients syscall enpoint will
  * be stored in the clients cspace. */
-#define USER_EP_CAP          (1)
-#define TEST_PRIORITY         (0)
-#define TEST_EP_BADGE         (101)
-#define FD_TABLE_SIZE    1024
+#define USER_EP_CAP         (1)
+#define TEST_PRIORITY       (0)
+#define TEST_EP_BADGE       (101)
+#define FD_TABLE_SIZE       (1024)
 
 sos_proc_t test_proc;
 sos_proc_t *curproc = &test_proc;
@@ -34,13 +36,6 @@ static void init_cspace(sos_proc_t *proc) {
     assert(proc->cspace != NULL);
 }
 
-static int init_fd_table(sos_proc_t *proc) {
-    seL4_Word fdt_addr;
-    frame_alloc(&fdt_addr);
-    
-    return 0;
-}
-
 static void init_tcb(sos_proc_t *proc) {
     int err;
 
@@ -48,18 +43,18 @@ static void init_tcb(sos_proc_t *proc) {
     proc->tcb_addr = ut_alloc(seL4_TCBBits);
     conditional_panic(!proc->tcb_addr, "No memory for new TCB");
     err =  cspace_ut_retype_addr(proc->tcb_addr,
-                                 seL4_TCBObject,
-                                 seL4_TCBBits,
-                                 cur_cspace,
-                                 &proc->tcb_cap);
+            seL4_TCBObject,
+            seL4_TCBBits,
+            cur_cspace,
+            &proc->tcb_cap);
     conditional_panic(err, "Failed to create TCB");
 
     /* Configure the TCB */
     seL4_CPtr ipc_cap = frame_cap(proc->vspace->sos_ipc_buf_addr);
     err = seL4_TCB_Configure(proc->tcb_cap, proc->user_ep_cap, TEST_PRIORITY,
-                             proc->cspace->root_cnode, seL4_NilData,
-                             proc->vspace->sos_pd_cap, seL4_NilData,
-                             PROCESS_IPC_BUFFER, ipc_cap);
+            proc->cspace->root_cnode, seL4_NilData,
+            proc->vspace->sos_pd_cap, seL4_NilData,
+            PROCESS_IPC_BUFFER, ipc_cap);
     conditional_panic(err, "Unable to configure new TCB");
 }
 
@@ -75,10 +70,10 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
 
     /* Copy the fault endpoint to the user app to enable IPC */
     user_ep_cap = cspace_mint_cap(proc->cspace,
-                                  cur_cspace,
-                                  fault_ep,
-                                  seL4_AllRights,
-                                  seL4_CapData_Badge_new(TEST_EP_BADGE));
+            cur_cspace,
+            fault_ep,
+            seL4_AllRights,
+            seL4_CapData_Badge_new(TEST_EP_BADGE));
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
     assert(user_ep_cap == USER_EP_CAP);
@@ -90,10 +85,12 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
  * @return error code or 0 for success
  */
 int process_create(seL4_CPtr fault_ep) {
+    curproc->pid = 0;
     curproc->vspace = as_create();
     init_cspace(curproc);
     curproc->user_ep_cap = init_ep(curproc, fault_ep);
     init_tcb(curproc);
+    init_fd_table();
     return 0;
 }
 
@@ -103,4 +100,29 @@ sos_addrspace_t *current_as(void) {
 
 sos_proc_t *current_process(void) {
     return curproc;
+}
+
+
+of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
+    assert(proc);
+    return proc->fd_table[fd];
+}
+
+sos_proc_t *process_lookup(pid_t pid) {
+    (void)pid;
+    // TODO: Implement me
+    return &test_proc;
+}
+
+int fd_free(sos_proc_t* proc, int fd) {
+    assert(proc);
+    assert(proc->fd_table[fd]);
+    if (proc->fd_table[fd] == NULL) {
+        printf("fd %d not found to close\n", fd);
+        return -1;
+    }
+    proc->fd_table[fd]->io = NULL;
+    proc->fd_table[fd] = NULL;
+    dprintf(3, "fd %d closed okay\n", fd);
+    return 0;
 }
