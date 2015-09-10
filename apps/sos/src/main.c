@@ -35,6 +35,8 @@
 #include "network.h"
 #include "elf.h"
 #include "sos_nfs.h"
+#include "swap.h"
+
 #include <device/mapping.h>
 #include <syscallno.h>
 
@@ -332,6 +334,8 @@ int main(void) {
     sos_serial_init();
     /* Start the user application */
     start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
+
+    test_setjmp();
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
