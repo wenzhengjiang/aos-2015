@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <setjmp.h>
 #include <string.h>
 #include <stdio.h>
@@ -22,6 +23,7 @@
 
 static fhandle_t swap_handle;
 static jmp_buf read_env, write_env, open_env;
+static bool inited = false;
 
 static swap_entry_t * free_list;
 static swap_entry_t * swap_table;
@@ -56,7 +58,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
     longjmp(open_env, SUCC);
 }
 
-void sos_swap_open(void) {
+static void sos_swap_open(void) {
     int ret ;
     uint32_t clock_upper = time_stamp() >> 32;
     uint32_t clock_lower = (time_stamp() << 32) >> 32;
@@ -99,6 +101,10 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 }
 
 swap_addr sos_swap_write(sos_vaddr page) {
+    if (!inited) {
+        sos_swap_open();
+        inited = true;
+    }
     src_vaddr = page;
     swap_offset = swap_alloc();
     if (swap_offset < 0) 
@@ -119,6 +125,7 @@ static void
 swap_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
     (void)fattr;
+    assert(inited);
     if (status != NFS_OK) {
         dprintf(5, "failed to read from swap file");
         longjmp(read_env, FAIL);
@@ -150,5 +157,4 @@ void swap_init(void * vaddr) {
         swap_table[i].next_free = &swap_table[i+1];
     }
     swap_table[NSWAP-1].next_free = NULL;
-    sos_swap_open();
 }
