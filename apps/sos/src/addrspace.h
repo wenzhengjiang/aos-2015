@@ -4,6 +4,7 @@
 #define _ADDRSPACE_H_
 
 #include <cspace/cspace.h>
+#include <stdbool.h>
 
 typedef seL4_Word sos_vaddr;
 typedef seL4_Word client_vaddr;
@@ -22,7 +23,12 @@ typedef struct kernel_page_table {
     struct kernel_page_table *next;
 } kpt_t;
 
-typedef seL4_Word *pt_t;
+typedef struct page_table_entry {
+    sos_vaddr addr;
+    bool refd;
+} pte_t;
+
+typedef pte_t **pt_t;
 
 // Allocated using malloc
 typedef struct address_space {

@@ -42,8 +42,8 @@ sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
     assert(as);
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
-    if (as->pd[pd_idx]) {
-        return (as->pd[pd_idx][pt_idx] + (0x00000fff & vaddr));
+    if (as->pd[pd_idx] && as->pd[pd_idx][pt_idx]) {
+        return (as->pd[pd_idx][pt_idx]->addr + (0x00000fff & vaddr));
     }
     return 0;
 }
@@ -162,7 +162,11 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vadd
             return ENOMEM;
         }
     }
-    as->pd[pd_idx][pt_idx] = *sos_vaddr;
+    as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
+    // TODO: kill the process
+    conditional_panic(as->pd[pd_idx][pt_idx] == NULL, "Out of Memory!");
+    as->pd[pd_idx][pt_idx]->addr = *sos_vaddr;
+    as->pd[pd_idx][pt_idx]->refd = true;
     return 0;
 }
 
