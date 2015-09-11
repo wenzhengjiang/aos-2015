@@ -56,41 +56,19 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
     longjmp(open_env, SUCC);
 }
 
-static void
-sos_nfs_swap_open_callback(uintptr_t token, enum nfs_stat status,
-                      fhandle_t* fh, fattr_t* fattr) {
-    if (status != NFS_OK) {
-        dprintf(5, "failed to open swap file");
-        longjmp(open_env, FAIL);
-    }
-
-    if (status == NFSERR_NOENT) {
-        // TODO: Implement time stamps
-        uint32_t clock_upper = time_stamp() >> 32;
-        uint32_t clock_lower = (time_stamp() << 32) >> 32;
-
-        struct sattr default_attr = {.mode = 0x7,
+void sos_swap_open(void) {
+    int ret ;
+    uint32_t clock_upper = time_stamp() >> 32;
+    uint32_t clock_lower = (time_stamp() << 32) >> 32;
+    struct sattr default_attr = {.mode = 0x7,
                                      .uid = 0,
                                      .gid = 0,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
-        dprintf(2, "sos_nfs_open_swap_callback %s %d\n");
-        int err = nfs_create(&mnt_point, SWAP_FILE, &default_attr, sos_nfs_swap_create_callback, 0);
-        if (err) {
-            dprintf(5, "failed to create swap file");
-            longjmp(open_env, FAIL);
-        }
-    } else { 
-        swap_handle = *fh;
-        longjmp(open_env, SUCC);
-    }
-}
 
-void sos_swap_open(void) {
-    int ret ;
     if ((ret = setjmp(open_env)) == 0) {
-        nfs_lookup(&mnt_point, SWAP_FILE, sos_nfs_swap_open_callback,0);
+        nfs_create(&mnt_point, SWAP_FILE, &default_attr, sos_nfs_swap_create_callback, 0);
         while (1);
     } 
     assert(ret == SUCC);
