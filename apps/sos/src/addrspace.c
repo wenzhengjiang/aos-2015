@@ -356,6 +356,7 @@ int as_evict_page(sos_addrspace_t *as) {
     frame_free(victim->addr);
     if (victim->swaddr == (unsigned)-1) {
         // TODO: Flesh out error handling
+        assert(!"Swap write failed");
         return 1;
     }
     return 0;
@@ -374,6 +375,7 @@ int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     victim->swaddr = swap_write(victim->addr);
     if (victim->swaddr == (unsigned)-1) {
         // TODO: Flesh out error handling
+        assert(!"Swap write failed");
         return 1;
     }
     memset((void*)victim->addr, 0, PAGE_SIZE);
@@ -385,6 +387,7 @@ int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     int err = swap_read(victim->addr, to_load->swaddr);
     if (err) {
         // TODO: Flesh out error handling
+        assert(!"Swap read failed");
         return 1;
     }
     to_load->swaddr = (unsigned)-1;
