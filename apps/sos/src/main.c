@@ -335,8 +335,6 @@ int main(void) {
     /* Start the user application */
     start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
 
-    test_setjmp();
-
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "frametable.h"
+#include "swap.h"
 
 #define verbose 5
 #include <log/debug.h>
@@ -158,6 +159,13 @@ void frame_init(void) {
         assert(frame_map_page(i) == 0);
         frame_table[i].next_free = NULL;
     }
+    // Init swap table
+    int swap_table = i;
+    for (int j = 0; j*PAGE_SIZE < SWAP_TABLE_SIZE; j++,i++) {
+        assert(frame_map_page(i) == 0);
+        frame_table[i].next_free = NULL;
+    }
+    swap_init((void*)FADDR_TO_VADDR(swap_table));
     // Init next_free list
     assert(i > 0 && i < nframes);
     free_list = &frame_table[i];

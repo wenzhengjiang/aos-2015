@@ -29,12 +29,7 @@ io_device_t nfs_io = {
     .getdirent = sos_nfs_readdir
 };
 
-static timestamp_t prevt;
 /* FILE OPENING */
-
-extern int pkg_size;
-extern int pkg_num;
-extern bool nfs_pkg;
 
 static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
@@ -109,9 +104,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
-    if (count > pkg_size) pkg_size = count;
     (void)fattr;
-    prevt = time_stamp();
     sos_proc_t *proc;
     int fd;
     proc = process_lookup((int)token);
@@ -152,9 +145,6 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
     dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
-    prevt = time_stamp();
-    pkg_size = pkg_num = 0;
-    nfs_pkg = true;
     return nfs_read(of->fhandle, of->offset, proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
@@ -162,10 +152,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
-    if (count > pkg_size) pkg_size = count;
 
-    dprintf(5, "write_callback %d %llu\n",  count, time_stamp()-prevt);
-    prevt = time_stamp();
     sos_proc_t *proc = proc = process_lookup(token);
     int fd = proc->cont.fd;
 
@@ -208,9 +195,6 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     proc->cont.iov = iov;
     proc->cont.fd = fd;
     dprintf(2, "Writing to offset: %u %d (%d)bytes\n", of->offset, count, iov->sz);
-    prevt = time_stamp();
-    pkg_size = pkg_num = 0;
-    nfs_pkg = true;
     int err = nfs_write(of->fhandle, of->offset, iov->sz,
                         (const void*)iov->start, nfs_write_callback,
                         (unsigned)pid);
