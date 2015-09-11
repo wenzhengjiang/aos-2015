@@ -48,7 +48,9 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
     if (as_page_exists(as, faultaddr)) {
         printf("page exists\n");
-        if (is_referenced(as, faultaddr)) {
+        if (is_swapped_page(as, faultaddr)) {
+            as_replace_page(as, faultaddr);
+        } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");

@@ -25,13 +25,16 @@ typedef struct kernel_page_table {
 } kpt_t;
 
 // TODO: Temporary.  Remove me.
-typedef seL4_Word swap_addr;
+typedef seL4_Word swap_vaddr;
 
 typedef struct page_table_entry {
     sos_vaddr addr;
-    swap_addr swaddr;
-    bool refd;
+    swap_vaddr swaddr;
     seL4_CPtr page_cap;
+    struct page_table_entry *next;
+    bool refd;
+    // Indicates the page has been free'd.
+    bool valid;
 } pte_t;
 
 typedef pte_t **pt_t;
@@ -48,6 +51,9 @@ typedef struct address_space {
     sos_vaddr sos_pd_addr;
     sos_vaddr sos_ipc_buf_addr;
     kpt_t *kpts;
+
+    pte_t* replbuf_head;
+    pte_t* replbuf_tail;
 } sos_addrspace_t;
 
 typedef struct iovec {
@@ -69,5 +75,8 @@ bool as_page_exists(sos_addrspace_t *as, client_vaddr vaddr);
 int iov_read(iovec_t *, char* buf, int count);
 void iov_free(iovec_t *);
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
+int as_replace_page(sos_addrspace_t* as, client_vaddr target);
+int as_evict_page(sos_addrspace_t *as);
+bool is_swapped_page(sos_addrspace_t* as, client_vaddr addr);
 
 #endif

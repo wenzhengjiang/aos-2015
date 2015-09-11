@@ -9,6 +9,7 @@
 #include <device/mapping.h>
 #include "frametable.h"
 #include "addrspace.h"
+#include "swap.h"
 #include <assert.h>
 
 #define verbose 0
@@ -28,8 +29,7 @@
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
 
-static inline unsigned CONST umin(unsigned a, unsigned b)
-{
+static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;
 }
 
@@ -147,6 +147,11 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, client_vaddr vaddr) {
  */
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
+
+    if (!frame_available_frames()) {
+        as_evict_page(as);
+    }
+
     // Create a frame
     frame_alloc(sos_vaddr);
     conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
@@ -205,11 +210,23 @@ static int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_va
         }
     }
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
-    if (as->pd[pd_idx][pt_idx] == NULL) {
+    pte_t* pt = as->pd[pd_idx][pt_idx];
+    if (pt == NULL) {
         return ENOMEM;
     }
-    as->pd[pd_idx][pt_idx]->refd = false;
-    as->pd[pd_idx][pt_idx]->addr = sos_vaddr;
+    pt->refd = false;
+    pt->valid = true;
+    pt->addr = sos_vaddr;
+    pt->swaddr = (unsigned)(-1);
+
+    if (as->replbuf_tail == NULL) {
+        assert(as->replbuf_head == NULL);
+        as->replbuf_head = pt;
+    } else {
+        as->replbuf_tail->next = pt;
+    }
+    as->replbuf_tail = pt;
+    pt->next = as->replbuf_head;
     return 0;
 }
 
@@ -291,12 +308,6 @@ static int create_non_segment_regions(sos_addrspace_t *as) {
     return 0;
 }
 
-void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
-    pte_t* pte = as_lookup_pte(as, vaddr);
-    seL4_CPtr cap = frame_cap(pte->addr);
-    as_map_page(as, vaddr, cap, rights);
-}
-
 /**
  * Alter the heap brk point, or if passed a newbrk of zero, return the current brk
  * @param as the address space to act upon
@@ -309,6 +320,70 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
     } else if (newbrk < as->stack_region->start && newbrk >= as->heap_region->start) {
         return (as->heap_region->end = newbrk);
     }
+    return 0;
+}
+
+/** --- PAGE REPLACEMENT --- **/
+
+void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    seL4_CPtr cap = frame_cap(pte->addr);
+    as_map_page(as, vaddr, cap, rights);
+}
+
+static pte_t* as_choose_replacement_page(sos_addrspace_t* as) {
+    while(1) {
+        if(as->replbuf_head->refd) {
+            as->replbuf_tail = as->replbuf_head;
+            as->replbuf_head = as->replbuf_head->next;
+            as->replbuf_tail->refd = false;
+        } else {
+            as->replbuf_tail = as->replbuf_head;
+            as->replbuf_head = as->replbuf_head->next;
+            return as->replbuf_tail;
+        }
+    }
+    assert(!"This can never happen");
+}
+
+int as_evict_page(sos_addrspace_t *as) {
+    pte_t* victim = as_choose_replacement_page(as);
+    victim->swaddr = swap_write(victim->addr);
+    frame_free(victim->addr);
+    if (victim->swaddr == (unsigned)-1) {
+        // TODO: Flesh out error handling
+        return 1;
+    }
+    return 0;
+}
+
+bool is_swapped_page(sos_addrspace_t* as, client_vaddr addr) {
+    pte_t *pt = as_lookup_pte(as, addr);
+    return (pt->swaddr != (unsigned)-1);
+}
+
+int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
+    // TODO: Probably need to kill the process.  So much memory contention
+    // that we have no room to allocate ANY pages for the new process!
+    assert(as->replbuf_head && as->replbuf_tail);
+    pte_t* victim = as_choose_replacement_page(as);
+    victim->swaddr = swap_write(victim->addr);
+    if (victim->swaddr == (unsigned)-1) {
+        // TODO: Flesh out error handling
+        return 1;
+    }
+    memset((void*)victim->addr, 0, PAGE_SIZE);
+    seL4_ARM_Page_Unmap(victim->page_cap);
+    cspace_delete_cap(cur_cspace, victim->page_cap);
+
+    pte_t *to_load = as_lookup_pte(as, readin);
+    int err = swap_read(victim->addr, to_load->swaddr);
+    if (err) {
+        // TODO: Flesh out error handling
+        return 1;
+    }
+    to_load->swaddr = (unsigned)-1;
+    to_load->refd = true;
     return 0;
 }
 

@@ -6,6 +6,7 @@
 #include <ut/ut.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
@@ -143,6 +144,13 @@ static int frame_map_page(unsigned idx) {
     frame_table[idx].paddr = paddr;
     frame_table[idx].map_req_count++;
     return 0;
+}
+
+bool frame_available_frames(void) {
+    if (free_list == NULL) {
+        return false;
+    }
+    return true;
 }
 
 /**
