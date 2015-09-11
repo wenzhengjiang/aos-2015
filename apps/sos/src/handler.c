@@ -26,7 +26,11 @@ static cont_t empty_cont;
 
 static char path[MAX_FILE_PATH_LENGTH];
 
-int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
+static bool is_read_fault(seL4_Word faulttype) {
+    return (faulttype & (1 << 11)) == 0;
+}
+
+int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     sos_addrspace_t *as = proc_as(current_process());
     if (as == NULL) {
         return EFAULT;
@@ -36,15 +40,27 @@ int sos_vm_fault(seL4_Word read_fault, seL4_Word faultaddr) {
     if (!reg) {
         return EFAULT;
     }
-    if (read_fault && !(reg->rights & seL4_CanRead)) {
+    if (is_read_fault(faulttype) && !(reg->rights & seL4_CanRead)) {
         return EACCES;
     }
-    if (!read_fault && !(reg->rights & seL4_CanWrite)) {
+    if (!is_read_fault(faulttype) && !(reg->rights & seL4_CanWrite)) {
         return EACCES;
     }
-    int err = as_create_page(as, faultaddr, reg->rights);
-    if (err) {
-        return err;
+    if (as_page_exists(as, faultaddr)) {
+        printf("page exists\n");
+        if (is_referenced(as, faultaddr)) {
+            // Page exists, referenced bit is set (so it must be mapped w/
+            // correct permissions), yet it faulted?!
+            assert(!"This shouldn't happen");
+        } else {
+            printf("referencing\n");
+            as_reference_page(as, faultaddr, reg->rights);
+        }
+    } else {
+        int err = as_create_page(as, faultaddr, reg->rights);
+        if (err) {
+            return err;
+        }
     }
     return 0;
 }

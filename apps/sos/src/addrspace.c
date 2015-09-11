@@ -32,20 +32,54 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 {
     return (a < b) ? a : b;
 }
-/**
- * Lookup a sos vaddr (SOS frametable address) given a client vaddr
- * @param as address space
- * @param vaddr client virtual address
- * @return sos vaddr corresponding to the vaddr, or 0 in the event of failure
- */
-sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
+
+static pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr) {
     assert(as);
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     if (as->pd[pd_idx] && as->pd[pd_idx][pt_idx]) {
-        return (as->pd[pd_idx][pt_idx]->addr + (0x00000fff & vaddr));
+        return (as->pd[pd_idx][pt_idx]);
     }
-    return 0;
+    return NULL;
+}
+
+bool as_page_exists(sos_addrspace_t *as, client_vaddr vaddr) {
+    assert(as);
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Lookup a sos vaddr (SOS frametable address) given a client vaddr
+ * @param as address space
+ * @param vaddr client virtual address
+ * @return sos_vaddr corresponding to the vaddr, or 0 in the event of failure
+ */
+sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
+    assert(as);
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        return 0;
+    }
+    return (pte->addr + (0x00000fff & vaddr));
+}
+
+/**
+ * Check whether a page has been referenced between pgae replacement attempts
+ * @param as address space
+ * @param vaddr client virtual address
+ * @return bool indicating whether the page has been referenced
+ */
+bool is_referenced(sos_addrspace_t *as, client_vaddr vaddr) {
+    assert(as);
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        return false;
+    }
+    return pte->refd;
 }
 
 /**
@@ -116,7 +150,6 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     // Create a frame
     frame_alloc(sos_vaddr);
     conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
-    //sos_unmap_frame(*sos_vaddr);
 
     // Retrieve the Cap for the newly created frame
     seL4_CPtr fc = frame_cap(*sos_vaddr);
@@ -128,13 +161,14 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
  * Map a page into the address space
  * @param as the address space
  * @param vaddr the location to map the page
- * @param sos_vaddr the address of the corresponding frame
  * @param fc the frame cap
  * @param rights the rights to assign to the page
  * @return 0 on success, non-zero on failure.
  */
-static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vaddr, seL4_CPtr fc, seL4_CapRights rights) {
+static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_CapRights rights) {
     int err;
+    unsigned pt_idx = PT_LOOKUP(vaddr);
+
     // Copy the cap so we can map it into the process' PD
     seL4_CPtr proc_fc = cspace_copy_cap(cur_cspace,
                                         cur_cspace,
@@ -154,6 +188,14 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vadd
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
     assert(!err);
+    as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
+    as->pd[pd_idx][pt_idx]->refd = true;
+    return 0;
+}
+
+static int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
+    int err;
+    seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     assert(pt_idx < PT_SIZE && pt_idx >= 0);
     if (as->pd[pd_idx] == NULL) {
@@ -163,10 +205,11 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_Word* sos_vadd
         }
     }
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
-    // TODO: kill the process
-    conditional_panic(as->pd[pd_idx][pt_idx] == NULL, "Out of Memory!");
-    as->pd[pd_idx][pt_idx]->addr = *sos_vaddr;
-    as->pd[pd_idx][pt_idx]->refd = true;
+    if (as->pd[pd_idx][pt_idx] == NULL) {
+        return ENOMEM;
+    }
+    as->pd[pd_idx][pt_idx]->refd = false;
+    as->pd[pd_idx][pt_idx]->addr = sos_vaddr;
     return 0;
 }
 
@@ -181,7 +224,11 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
     seL4_CPtr cap;
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
-    return as_map_page(as, vaddr, &sos_vaddr, cap, rights);
+    int err = as_add_page(as, vaddr, sos_vaddr);
+    if (err) {
+        return err;
+    }
+    return as_map_page(as, vaddr, cap, rights);
 }
 
 /**  ---  REGION HANDLING  --- **/
@@ -244,6 +291,12 @@ static int create_non_segment_regions(sos_addrspace_t *as) {
     return 0;
 }
 
+void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    seL4_CPtr cap = frame_cap(pte->addr);
+    as_map_page(as, vaddr, cap, rights);
+}
+
 /**
  * Alter the heap brk point, or if passed a newbrk of zero, return the current brk
  * @param as the address space to act upon
@@ -270,9 +323,7 @@ void as_activate(sos_addrspace_t* as) {
     int err;
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
-    seL4_CPtr ipc_cap = frame_cap(as->sos_ipc_buf_addr);
-    sos_region_t *region = as_vaddr_region(as, PROCESS_IPC_BUFFER);
-    as_map_page(as, PROCESS_IPC_BUFFER, &as->sos_ipc_buf_addr, ipc_cap, region->rights);
+    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
 }
 
 /**
