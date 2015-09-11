@@ -103,7 +103,7 @@ void syscall_loop(seL4_CPtr ep) {
             dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-            int err = sos_vm_fault(seL4_GetMR(2), seL4_GetMR(1));
+            int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed\n");
             } else {
