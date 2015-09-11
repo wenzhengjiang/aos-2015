@@ -352,7 +352,7 @@ static pte_t* as_choose_replacement_page(sos_addrspace_t* as) {
 
 int as_evict_page(sos_addrspace_t *as) {
     pte_t* victim = as_choose_replacement_page(as);
-    victim->swaddr = swap_write(victim->addr);
+    victim->swaddr = sos_swap_write(victim->addr);
     frame_free(victim->addr);
     if (victim->swaddr == (unsigned)-1) {
         // TODO: Flesh out error handling
@@ -372,7 +372,7 @@ int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     // that we have no room to allocate ANY pages for the new process!
     assert(as->repllist_head && as->repllist_tail);
     pte_t* victim = as_choose_replacement_page(as);
-    victim->swaddr = swap_write(victim->addr);
+    victim->swaddr = sos_swap_write(victim->addr);
     if (victim->swaddr == (unsigned)-1) {
         // TODO: Flesh out error handling
         assert(!"Swap write failed");
@@ -384,7 +384,7 @@ int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     assert(victim->refd == false);
 
     pte_t *to_load = as_lookup_pte(as, readin);
-    int err = swap_read(victim->addr, to_load->swaddr);
+    int err = sos_swap_read(victim->addr, to_load->swaddr);
     if (err) {
         // TODO: Flesh out error handling
         assert(!"Swap read failed");

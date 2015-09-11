@@ -7,7 +7,6 @@
 #include <clock/clock.h>
 
 #include "swap.h"
-#include "addrspace.h"
 #include "process.h"
 #include "network.h"
 
@@ -38,7 +37,7 @@ static swap_addr swap_alloc(void) {
 }
 
 static void swap_free(swap_addr saddr) {
-    assert(ALIGNED(saddr));
+   assert(ALIGNED(saddr));
    swap_table[saddr/PAGE_SIZE].next_free = free_list; 
    free_list = &swap_table[saddr/PAGE_SIZE];
 }

@@ -6,9 +6,7 @@
 #include <cspace/cspace.h>
 #include <stdbool.h>
 #include "swap.h"
-
-typedef seL4_Word sos_vaddr;
-typedef seL4_Word client_vaddr;
+#include "sos_type.h"
 
 // Allocated using malloc
 typedef struct region {

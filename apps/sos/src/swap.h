@@ -2,7 +2,7 @@
 #define _SOS_SWAP_H_
 
 #include <nfs/nfs.h>
-#include "addrspace.h"
+#include "sos_type.h"
 
 typedef struct swap_entry {
     struct swap_entry * next_free;
