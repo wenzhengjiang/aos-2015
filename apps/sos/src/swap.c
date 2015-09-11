@@ -125,7 +125,6 @@ static void
 swap_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
     (void)fattr;
-    assert(inited);
     if (status != NFS_OK) {
         dprintf(5, "failed to read from swap file");
         longjmp(read_env, FAIL);
@@ -138,6 +137,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
 int sos_swap_read(sos_vaddr page, swap_addr pos) {
     assert(ALIGNED(page));
     dest_vaddr = page;
+    assert(inited);
     int err ; 
     if ((err = setjmp(read_env)) == 0) {
         nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, 0);    
