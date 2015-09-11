@@ -219,14 +219,14 @@ static int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_va
     pt->addr = sos_vaddr;
     pt->swaddr = (unsigned)(-1);
 
-    if (as->replbuf_tail == NULL) {
-        assert(as->replbuf_head == NULL);
-        as->replbuf_head = pt;
+    if (as->repllist_tail == NULL) {
+        assert(as->repllist_head == NULL);
+        as->repllist_head = pt;
     } else {
-        as->replbuf_tail->next = pt;
+        as->repllist_tail->next = pt;
     }
-    as->replbuf_tail = pt;
-    pt->next = as->replbuf_head;
+    as->repllist_tail = pt;
+    pt->next = as->repllist_head;
     return 0;
 }
 
@@ -327,20 +327,24 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
 
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
     pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        assert(!"Page does not exist to be mapped");
+    }
     seL4_CPtr cap = frame_cap(pte->addr);
+    assert(cap != seL4_CapNull);
     as_map_page(as, vaddr, cap, rights);
 }
 
 static pte_t* as_choose_replacement_page(sos_addrspace_t* as) {
     while(1) {
-        if(as->replbuf_head->refd) {
-            as->replbuf_tail = as->replbuf_head;
-            as->replbuf_head = as->replbuf_head->next;
-            as->replbuf_tail->refd = false;
+        if(as->repllist_head->refd) {
+            as->repllist_tail = as->repllist_head;
+            as->repllist_head = as->repllist_head->next;
+            as->repllist_tail->refd = false;
         } else {
-            as->replbuf_tail = as->replbuf_head;
-            as->replbuf_head = as->replbuf_head->next;
-            return as->replbuf_tail;
+            as->repllist_tail = as->repllist_head;
+            as->repllist_head = as->repllist_head->next;
+            return as->repllist_tail;
         }
     }
     assert(!"This can never happen");
@@ -365,7 +369,7 @@ bool is_swapped_page(sos_addrspace_t* as, client_vaddr addr) {
 int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     // TODO: Probably need to kill the process.  So much memory contention
     // that we have no room to allocate ANY pages for the new process!
-    assert(as->replbuf_head && as->replbuf_tail);
+    assert(as->repllist_head && as->repllist_tail);
     pte_t* victim = as_choose_replacement_page(as);
     victim->swaddr = swap_write(victim->addr);
     if (victim->swaddr == (unsigned)-1) {
@@ -375,6 +379,7 @@ int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     memset((void*)victim->addr, 0, PAGE_SIZE);
     seL4_ARM_Page_Unmap(victim->page_cap);
     cspace_delete_cap(cur_cspace, victim->page_cap);
+    assert(victim->refd == false);
 
     pte_t *to_load = as_lookup_pte(as, readin);
     int err = swap_read(victim->addr, to_load->swaddr);

@@ -52,8 +52,8 @@ typedef struct address_space {
     sos_vaddr sos_ipc_buf_addr;
     kpt_t *kpts;
 
-    pte_t* replbuf_head;
-    pte_t* replbuf_tail;
+    pte_t* repllist_head;
+    pte_t* repllist_tail;
 } sos_addrspace_t;
 
 typedef struct iovec {
