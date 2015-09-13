@@ -174,11 +174,12 @@ void frame_init(void) {
         frame_table[i].next_free = NULL;
     }
     swap_init((void*)FADDR_TO_VADDR(swap_table));
+
     // Init next_free list
     assert(i > 0 && i < nframes);
     free_list = &frame_table[i];
-    for (; i < nframes; i++) {
-        if (i < nframes-1) {
+    for (; i < MIN(nframes, MAX_FRAMES); i++) {
+        if (i < MIN(nframes, MAX_FRAMES)-1) {
             frame_table[i].next_free = &frame_table[i+1];
         }
         else {
