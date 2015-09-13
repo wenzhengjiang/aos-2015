@@ -17,7 +17,10 @@ typedef struct continuation {
     iovec_t* iov;
     int target;
     char *filename;
-}cont_t;
+    sos_vaddr swap_page;
+    size_t swap_file_offset;
+    size_t swap_cnt;
+} cont_t;
 
 typedef struct process {
     int pid;
