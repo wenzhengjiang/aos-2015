@@ -22,7 +22,6 @@
 #define FAIL 2
 
 static fhandle_t swap_handle;
-static jmp_buf read_env, write_env, open_env;
 static bool inited = false;
 
 static swap_entry_t * free_list;

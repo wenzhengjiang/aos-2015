@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <cspace/cspace.h>
+#include <setjmp.h>
 
 #include <cpio/cpio.h>
 #include <nfs/nfs.h>
@@ -67,6 +68,8 @@
 extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
+jmp_buf ipc_event_env;
+
 /*
  * A dummy starting syscall
  */
@@ -81,15 +84,26 @@ static inline int CONST min(int a, int b)
 }
 
 void syscall_loop(seL4_CPtr ep) {
-
+    sos_proc_t *proc;
     register_handlers();
+    int pid = setjmp(ipc_event_env);
     while (1) {
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;
 
-        message = seL4_Wait(ep, &badge);
-        label = seL4_MessageInfo_get_label(message);
+        if (pid) {
+            // m7 TODO: Need to update the current process
+            proc = process_lookup(pid);
+            message = proc->cont.ipc_message;
+            label = proc->cont.ipc_label;
+            badge = 0;
+        } else {
+            proc = current_process();
+            message = seL4_Wait(ep, &badge);
+            label = seL4_MessageInfo_get_label(message);
+        }
+
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
@@ -100,27 +114,28 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
-                    seL4_GetMR(0),
-                    seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-            int err = sos_vm_fault(seL4_GetMR(3), seL4_GetMR(1));
+            // Only print out debugging information before the first fault attempt
+            if (!pid || !proc->cont.initiations) {
+                dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
+                        seL4_GetMR(0),
+                        seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
+            }
+            proc->cont.vm_fault_type = seL4_GetMR(3);
+            proc->cont.vm_fault_addr = seL4_GetMR(1);
+            int err = sos_vm_fault(proc->cont.vm_fault_type, proc->cont.vm_fault_addr);
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed\n");
             } else {
-                seL4_CPtr reply_cap = cspace_save_reply_cap(cur_cspace);
-                assert(reply_cap != CSPACE_NULL);
-                seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-                seL4_SetTag(reply);
-                seL4_Send(reply_cap, reply);
+                syscall_end_continuation(proc, 0, true);
             }
-            //assert(!"Unable to handle vm faults");
         }else if(label == seL4_NoFault) {
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
-
         }else{
             printf("Rootserver got an unknown message\n");
         }
+
+        pid = 0;
     }
 }
 

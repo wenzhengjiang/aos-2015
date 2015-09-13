@@ -13,6 +13,7 @@
 
 #include "process.h"
 #include "addrspace.h"
+#include "page_replacement.h"
 #include "frametable.h"
 #include "serial.h"
 
@@ -102,6 +103,23 @@ sos_proc_t *current_process(void) {
     return curproc;
 }
 
+void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
+    sos_addrspace_t* as = current_process()->vspace;
+    sos_proc_t* proc = current_process();
+    pte_t* victim;
+    if (!frame_available_frames()) {
+        printf("Evicting the page!\n");
+        as_evict_page(as);
+    }
+    if (proc->cont.page_replacement_victim) {
+        assert(victim);
+        frame_free(victim->addr);
+        if (victim->swaddr == (unsigned)-1) {
+            assert(!"Victim has no swap address!");
+        }
+    }
+    as_create_page(as, vaddr, rights);
+}
 
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
     assert(proc);

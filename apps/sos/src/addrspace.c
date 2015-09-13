@@ -82,6 +82,16 @@ bool is_referenced(sos_addrspace_t *as, client_vaddr vaddr) {
     return pte->refd;
 }
 
+void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        assert(!"Page does not exist to be mapped");
+    }
+    seL4_CPtr cap = frame_cap(pte->addr);
+    assert(cap != seL4_CapNull);
+    as_map_page(as, vaddr, cap, rights);
+}
+
 /**
  * Lookup a region given a vaddr
  * @param as the address space
@@ -147,10 +157,6 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, client_vaddr vaddr) {
  */
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
-
-    if (!frame_available_frames()) {
-        as_evict_page(as);
-    }
 
     // Create a frame
     frame_alloc(sos_vaddr);
@@ -320,78 +326,6 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
     } else if (newbrk < as->stack_region->start && newbrk >= as->heap_region->start) {
         return (as->heap_region->end = newbrk);
     }
-    return 0;
-}
-
-/** --- PAGE REPLACEMENT --- **/
-
-void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
-    pte_t* pte = as_lookup_pte(as, vaddr);
-    if (pte == NULL) {
-        assert(!"Page does not exist to be mapped");
-    }
-    seL4_CPtr cap = frame_cap(pte->addr);
-    assert(cap != seL4_CapNull);
-    as_map_page(as, vaddr, cap, rights);
-}
-
-static pte_t* as_choose_replacement_page(sos_addrspace_t* as) {
-    while(1) {
-        if(as->repllist_head->refd) {
-            as->repllist_tail = as->repllist_head;
-            as->repllist_head = as->repllist_head->next;
-            as->repllist_tail->refd = false;
-        } else {
-            as->repllist_tail = as->repllist_head;
-            as->repllist_head = as->repllist_head->next;
-            return as->repllist_tail;
-        }
-    }
-    assert(!"This can never happen");
-}
-
-int as_evict_page(sos_addrspace_t *as) {
-    pte_t* victim = as_choose_replacement_page(as);
-    victim->swaddr = sos_swap_write(victim->addr);
-    frame_free(victim->addr);
-    if (victim->swaddr == (unsigned)-1) {
-        // TODO: Flesh out error handling
-        assert(!"Swap write failed");
-        return 1;
-    }
-    return 0;
-}
-
-bool is_swapped_page(sos_addrspace_t* as, client_vaddr addr) {
-    pte_t *pt = as_lookup_pte(as, addr);
-    return (pt->swaddr != (unsigned)-1);
-}
-
-int as_replace_page(sos_addrspace_t* as, client_vaddr readin) {
-    // TODO: Probably need to kill the process.  So much memory contention
-    // that we have no room to allocate ANY pages for the new process!
-    assert(as->repllist_head && as->repllist_tail);
-    pte_t* victim = as_choose_replacement_page(as);
-    victim->swaddr = sos_swap_write(victim->addr);
-    if (victim->swaddr == (unsigned)-1) {
-        // TODO: Flesh out error handling
-        assert(!"Swap write failed");
-        return 1;
-    }
-    memset((void*)victim->addr, 0, PAGE_SIZE);
-    seL4_ARM_Page_Unmap(victim->page_cap);
-    cspace_delete_cap(cur_cspace, victim->page_cap);
-    assert(victim->refd == false);
-
-    pte_t *to_load = as_lookup_pte(as, readin);
-    int err = sos_swap_read(victim->addr, to_load->swaddr);
-    if (err) {
-        // TODO: Flesh out error handling
-        assert(!"Swap read failed");
-        return 1;
-    }
-    to_load->swaddr = (unsigned)-1;
-    to_load->refd = true;
     return 0;
 }
 

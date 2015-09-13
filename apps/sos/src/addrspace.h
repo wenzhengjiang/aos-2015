@@ -73,8 +73,5 @@ bool as_page_exists(sos_addrspace_t *as, client_vaddr vaddr);
 int iov_read(iovec_t *, char* buf, int count);
 void iov_free(iovec_t *);
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
-int as_replace_page(sos_addrspace_t* as, client_vaddr target);
-int as_evict_page(sos_addrspace_t *as);
-bool is_swapped_page(sos_addrspace_t* as, client_vaddr addr);
 
 #endif

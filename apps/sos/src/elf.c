@@ -112,7 +112,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         kvpage = PAGE_ALIGN(kdst);
 
         /* First we need to create a frame */
-        err = as_create_page(as, vpage, permissions);
+        err = process_create_page(vpage, permissions);
         conditional_panic(err, "Failed to map to tty address space");
 
         kdst   = as_lookup_sos_vaddr(as, dst);

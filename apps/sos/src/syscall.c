@@ -84,8 +84,7 @@ check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
     // Ensure client process has the page mapped
     sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
     if (saddr == 0) {
-        int err = as_create_page(as, buf, reg->rights);
-        if (err) return 0;
+        process_create_page(buf, reg->rights);
     }
     saddr = as_lookup_sos_vaddr(as, buf);
 

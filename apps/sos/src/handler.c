@@ -31,7 +31,8 @@ static bool is_read_fault(seL4_Word faulttype) {
 }
 
 int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
-    sos_addrspace_t *as = proc_as(current_process());
+    sos_proc_t *proc = current_process();
+    sos_addrspace_t *as = proc_as(proc);
     if (as == NULL) {
         return EFAULT;
     }
@@ -48,18 +49,18 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
     if (as_page_exists(as, faultaddr)) {
         printf("page exists\n");
-        if (is_swapped_page(as, faultaddr)) {
-            as_replace_page(as, faultaddr);
+        if (swap_is_page_swapped(as, faultaddr)) {
+            swap_replace_page(proc, as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
             printf("referencing\n");
-            as_reference_page(as, faultaddr, reg->rights);
+            swap_reference_page(as, faultaddr, reg->rights);
         }
     } else {
-        int err = as_create_page(as, faultaddr, reg->rights);
+        int err = process_create_page(faultaddr, reg->rights);
         if (err) {
             return err;
         }

@@ -5,6 +5,7 @@
 
 #include <nfs/nfs.h>
 #include <cspace/cspace.h>
+#include <stdbool.h>
 #include "addrspace.h"
 #include "file.h"
 
@@ -17,6 +18,14 @@ typedef struct continuation {
     iovec_t* iov;
     int target;
     char *filename;
+    seL4_Word ipc_label;
+    seL4_MessageInfo_t ipc_message;
+    seL4_Word vm_fault_type;
+    seL4_Word vm_fault_addr;
+    seL4_Word page_replacement_request;
+    pte_t* page_replacement_victim;
+    // Number of times a continuation has been started
+    int initiations;
 }cont_t;
 
 typedef struct process {
@@ -37,5 +46,6 @@ sos_proc_t *current_process(void);
 sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
 int fd_free(sos_proc_t* proc, int fd);
+void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
 
 #endif
