@@ -24,9 +24,12 @@ typedef struct continuation {
     seL4_Word vm_fault_addr;
     seL4_Word page_replacement_request;
     pte_t* page_replacement_victim;
+    sos_vaddr swap_page;
+    size_t swap_file_offset;
+    size_t swap_cnt;
     // Number of times a continuation has been started
     int initiations;
-}cont_t;
+} cont_t;
 
 typedef struct process {
     int pid;

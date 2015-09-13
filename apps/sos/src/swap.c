@@ -10,6 +10,7 @@
 #include "swap.h"
 #include "process.h"
 #include "network.h"
+#include "syscall.h"
 
 #define verbose 0
 #include <log/debug.h>
@@ -18,18 +19,19 @@
 #define SWAP_FILE ".sos_swap"
 #define ALIGNED(page) (page % PAGE_SIZE == 0)
 #define VADDR_TO_SADDR(vaddr) ((vaddr-swap_table)*PAGE_SIZE)
-#define SUCC 1
-#define FAIL 2
+#define ERR -1
+#define OPEN -1
 
 static fhandle_t swap_handle;
 static bool inited = false;
 
 static swap_entry_t * free_list;
 static swap_entry_t * swap_table;
+extern jmp_buf ipc_event_env;
 
 // return offset in swap file
 static swap_addr swap_alloc(void) {
-    if (free_list == NULL) return -1;        
+    if (free_list == NULL) return ERR;        
     else {
         swap_addr ret = VADDR_TO_SADDR(free_list);
         free_list = free_list->next_free;
@@ -46,19 +48,19 @@ static void swap_free(swap_addr saddr) {
 static void
 sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
-    (void)token;
     if (status != NFS_OK) {
         dprintf(5, "failed to create swap file");
-        longjmp(open_env, FAIL);
+        longjmp(ipc_event_env, ERR);
     }
 
     swap_handle = *fh;
     dprintf(2, "sos_nfs_swap_create_callback");
-    longjmp(open_env, SUCC);
+    inited = true;
+
+    longjmp(ipc_event_env, token);
 }
 
 static void sos_swap_open(void) {
-    int ret ;
     uint32_t clock_upper = time_stamp() >> 32;
     uint32_t clock_lower = (time_stamp() << 32) >> 32;
     struct sattr default_attr = {.mode = 0x7,
@@ -68,56 +70,57 @@ static void sos_swap_open(void) {
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
 
-    if ((ret = setjmp(open_env)) == 0) {
-        nfs_create(&mnt_point, SWAP_FILE, &default_attr, sos_nfs_swap_create_callback, 0);
-        while (1);
-    } 
-    assert(ret == SUCC);
-}
+    sos_proc_t *proc = current_process();
+    pid_t pid = proc->pid;
 
-// stupid names
-static sos_vaddr src_vaddr, dest_vaddr;
-static swap_addr swap_offset;
-static int write_cnt ;
+    if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
+                sos_nfs_swap_create_callback, pid)) {
+        longjmp(ipc_event_env, ERR);
+    }
+}
 
 static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
+    sos_proc_t *proc = process_lookup(token);
+
     if (status != NFS_OK) {
         dprintf(5, "faile to write to swap file");
-        longjmp(write_env, FAIL);
+        longjmp(ipc_event_env, ERR);
     }
-    write_cnt += count;
-    if (write_cnt == PAGE_SIZE) {
-        longjmp(write_env, SUCC); 
+    proc->cont.swap_cnt += count;
+    if (proc->cont.swap_cnt == PAGE_SIZE) {
+        longjmp(ipc_event_env, token);
     } else {
-        src_vaddr += count;
-        swap_offset += count;
-        int err = nfs_write(&swap_handle, swap_offset, PAGE_SIZE - write_cnt,
-                        (const void*)src_vaddr, swap_write_callback,
-                        0);
-        if (err) longjmp(write_env, FAIL);
+        int cnt = proc->cont.swap_cnt;
+        if(nfs_write(&swap_handle, proc->cont.swap_file_offset+cnt, PAGE_SIZE-cnt,
+                        (const void*)proc->cont.swap_page+cnt, swap_write_callback,
+                        token)) {
+            longjmp(ipc_event_env, ERR);
+        }
+        longjmp(ipc_event_env, token);
     }
 }
 
 swap_addr sos_swap_write(sos_vaddr page) {
     if (!inited) {
         sos_swap_open();
-        inited = true;
+        return OPEN;
     }
-    src_vaddr = page;
-    swap_offset = swap_alloc();
-    if (swap_offset < 0) 
-        return -1;
-    swap_addr ret = swap_offset;
-    write_cnt = 0;
-    int err;
-    if ((err = setjmp(write_env)) == 0) {
-        err = nfs_write(&swap_handle, swap_offset, PAGE_SIZE,
-                        (const void*)src_vaddr, swap_write_callback, 0);
-        if (err) return -1;
-        while (1) ;
-    } else 
-        return err == SUCC ?  ret : -1;
+    sos_proc_t *proc = current_process();
+    pid_t pid = proc->pid;
+
+    proc->cont.swap_page = page;
+    proc->cont.swap_file_offset = swap_alloc();
+    assert(proc->cont.swap_cnt == 0);
+    if (proc->cont.swap_file_offset < 0) {
+        longjmp(ipc_event_env, ERR);
+    }
+
+    if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE, (const void*)proc->cont.swap_page, swap_write_callback, pid)) {
+        longjmp(ipc_event_env, ERR);
+    }  else  {
+        return proc->cont.swap_file_offset;
+    }
 }
 
 static void
@@ -126,34 +129,33 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     (void)fattr;
     if (status != NFS_OK) {
         dprintf(5, "failed to read from swap file");
-        longjmp(read_env, FAIL);
+        longjmp(ipc_event_env, ERR);
     }
     assert(count == PAGE_SIZE);
-    memcpy((char*)dest_vaddr, (char*)data, count);
-    longjmp(read_env, SUCC); 
+    sos_proc_t *proc = process_lookup(token);
+    memcpy((char*)proc->cont.swap_page, (char*)data, count);
+    swap_free(proc->cont.swap_file_offset);
+
+    longjmp(ipc_event_env, token); 
 }
 
-int sos_swap_read(sos_vaddr page, swap_addr pos) {
-    assert(ALIGNED(page));
-    dest_vaddr = page;
+void sos_swap_read(sos_vaddr page, swap_addr pos) {
     assert(inited);
-    int err ; 
-    if ((err = setjmp(read_env)) == 0) {
-        nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, 0);    
-        while (1);
-    } else if (err == FAIL) {
-        return -1;
-    } else {
-        swap_free(pos);
-        return 0;
-    }
+    assert(ALIGNED(page));
+    sos_proc_t *proc = current_process();
+    proc->cont.swap_page = page;
+    proc->cont.swap_file_offset = pos;
+
+    if(nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, proc->pid)) 
+        longjmp(ipc_event_env, ERR);
+    return ;
 }
 
 void swap_init(void * vaddr) {
     swap_table = (swap_entry_t*) vaddr;
     free_list = swap_table;
-    for (int i = 0; i < NSWAP-1; i++) {
+    for (int i = 0; i < NSWAPERR; i++) {
         swap_table[i].next_free = &swap_table[i+1];
     }
-    swap_table[NSWAP-1].next_free = NULL;
+    swap_table[NSWAPERR].next_free = NULL;
 }
