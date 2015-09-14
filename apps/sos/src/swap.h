@@ -13,6 +13,10 @@ typedef struct swap_entry {
 #define NSWAP (SWAP_FILE_SIZE / PAGE_SIZE) // nunber of entries in swap table
 #define SWAP_TABLE_SIZE (NSWAP * sizeof(swap_entry_t)) 
 
+#define SWAP_SUCCESS (1)
+#define SWAP_RUNNING (0)
+#define SWAP_FAILED  (-1)
+
 typedef seL4_Word swap_addr;
 
 void swap_init(void *);

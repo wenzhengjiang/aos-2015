@@ -20,6 +20,8 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
         if(as->repllist_head->refd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
+            seL4_ARM_Page_Unmap(as->repllist_tail->page_cap);
+            cspace_delete_cap(cur_cspace, as->repllist_tail->page_cap);
             as->repllist_tail->refd = false;
         } else {
             as->repllist_tail = as->repllist_head;
@@ -33,18 +35,21 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
 int swap_evict_page(sos_addrspace_t *as) {
     sos_proc_t *proc = current_process();
     pte_t *victim;
-    printf("EVICTING\n");
     if (!proc->cont.page_replacement_victim) {
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
     }
     if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         victim = proc->cont.page_replacement_victim;
-        printf("evict about to call SSW\n");
         victim->swaddr = sos_swap_write(victim->addr);
-        printf("SSW returned.  Jumping.\n");
+        printf("page_to_evict: %x, writing to: %u\n", proc->cont.page_replacement_victim,
+               proc->cont.page_replacement_victim->swaddr);
         longjmp(ipc_event_env, -1);
     }
-    return 0;
+    if (proc->cont.swap_status == SWAP_SUCCESS) {
+        return 0;
+    } else {
+        longjmp(ipc_event_env, -1);
+    }
 }
 
 bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
@@ -58,28 +63,27 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     printf("REPLACING\n");
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
-    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
-        pte_t* victim = swap_choose_replacement_page(as);
-        proc->cont.page_replacement_victim = victim;
-        victim->swaddr = sos_swap_write(victim->addr);
-        longjmp(ipc_event_env, -1);
-    }
+    swap_evict_page(as);
 
-    memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
-    seL4_ARM_Page_Unmap(proc->cont.page_replacement_victim->page_cap);
-    cspace_delete_cap(cur_cspace, proc->cont.page_replacement_victim->page_cap);
-    assert(proc->cont.page_replacement_victim->refd == false);
-
+    assert(proc->cont.page_replacement_victim->swaddr != -1);
     pte_t *to_load = as_lookup_pte(as, readin);
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
+            printf("reading in new page from address %u\n", to_load->swaddr);
             sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
             longjmp(ipc_event_env, -1);
         } else {
             assert(!"Did not find page");
         }
     }
-    to_load->swaddr = (unsigned)-1;
-    return 0;
+    if (proc->cont.swap_status == SWAP_SUCCESS) {
+        to_load->swaddr = (unsigned)-1;
+        seL4_CPtr fc = frame_cap(to_load->addr);
+        seL4_ARM_Page_Unify_Instruction(fc, 0, PAGESIZE);
+        //printf("NEW PAGE LOADED OKAY\n");
+        return 0;
+    } else {
+        longjmp(ipc_event_env, -1);
+    }
 }

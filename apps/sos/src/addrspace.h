@@ -71,5 +71,6 @@ int iov_read(iovec_t *, char* buf, int count);
 void iov_free(iovec_t *);
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
 pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr);
+int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr);
 
 #endif

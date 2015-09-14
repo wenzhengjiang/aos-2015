@@ -30,6 +30,7 @@ typedef struct continuation {
     size_t swap_cnt;
     // Number of times a continuation has been started
     int syscall_loop_initiations;
+    bool swap_status;
 } cont_t;
 
 typedef struct process {

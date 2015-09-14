@@ -119,6 +119,8 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge & IRQ_BADGE_NETWORK) {
                 printf("NETINTER\n");
                 network_irq();
+                pid = 1;
+                continue;
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
@@ -157,7 +159,6 @@ void syscall_loop(seL4_CPtr ep) {
         }else{
             printf("Rootserver got an unknown message\n");
         }
-
         pid = 0;
     }
 }

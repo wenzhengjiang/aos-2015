@@ -106,11 +106,15 @@ int sos_unmap_frame(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     frame_entry_t *cur_frame = &frame_table[idx];
     cur_frame->map_req_count--;
-    if (!cur_frame->map_req_count == 0) {
-        frame_free(vaddr);
+    if (cur_frame->map_req_count == 0) {
+        printf("FREEING FRAME\n");
+        if (frame_free(vaddr)) {
+            printf("ERR during frame_Free\n");
+        }
         return 0;
     }
-    return seL4_ARM_Page_Unmap(cur_frame->cap);
+    seL4_ARM_Page_Unmap(cur_frame->cap);
+    return 0;
 }
 
 static int frame_map_page(unsigned idx) {
@@ -132,7 +136,7 @@ static int frame_map_page(unsigned idx) {
         cur_cspace,
         &cap);
     if (cerr != seL4_NoError) {
-        ERR("Unable to retype address\n");
+        ERR("Unable to retype address: %d\n", cerr);
         ut_free(paddr, seL4_PageBits);
         return EINVAL;
     }
@@ -241,7 +245,9 @@ int frame_free(seL4_Word vaddr) {
     if (cur_frame->map_req_count != 0) {
         return EPERM;
     }
+    printf("about to unmap page\n");
     seL4_ARM_Page_Unmap(cur_frame->cap);
+    cspace_revoke_cap(cur_cspace, cur_frame->cap);
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
     if (err != CSPACE_NOERROR) {
         ERR("frame_free: failed to delete CAP\n");
@@ -250,5 +256,6 @@ int frame_free(seL4_Word vaddr) {
     ut_free(cur_frame->paddr, seL4_PageBits);
     cur_frame->next_free = free_list;
     free_list = cur_frame;
+    printf("Unmap complete\n");
     return 0;
 }

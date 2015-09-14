@@ -86,7 +86,7 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
  * @return error code or 0 for success
  */
 int process_create(seL4_CPtr fault_ep) {
-    curproc->pid = 0;
+    curproc->pid = 1;
     curproc->vspace = as_create();
     init_cspace(curproc);
     curproc->user_ep_cap = init_ep(curproc, fault_ep);
@@ -111,8 +111,7 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
         swap_evict_page(as);
     }
     if (proc->cont.page_replacement_victim) {
-        assert(proc->cont.page_replacement_victim);
-        frame_free(proc->cont.page_replacement_victim->addr);
+        sos_unmap_frame(proc->cont.page_replacement_victim->addr);
         if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
             assert(!"Victim has no swap address!");
         }
