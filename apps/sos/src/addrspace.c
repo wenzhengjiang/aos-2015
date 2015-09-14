@@ -33,7 +33,7 @@ static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;
 }
 
-static pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr) {
+pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr) {
     assert(as);
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
@@ -65,31 +65,6 @@ sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
         return 0;
     }
     return (pte->addr + (0x00000fff & vaddr));
-}
-
-/**
- * Check whether a page has been referenced between pgae replacement attempts
- * @param as address space
- * @param vaddr client virtual address
- * @return bool indicating whether the page has been referenced
- */
-bool is_referenced(sos_addrspace_t *as, client_vaddr vaddr) {
-    assert(as);
-    pte_t* pte = as_lookup_pte(as, vaddr);
-    if (pte == NULL) {
-        return false;
-    }
-    return pte->refd;
-}
-
-void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
-    pte_t* pte = as_lookup_pte(as, vaddr);
-    if (pte == NULL) {
-        assert(!"Page does not exist to be mapped");
-    }
-    seL4_CPtr cap = frame_cap(pte->addr);
-    assert(cap != seL4_CapNull);
-    as_map_page(as, vaddr, cap, rights);
 }
 
 /**
@@ -281,6 +256,31 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     new_region->next = as->regions;
     as->regions = new_region;
     return new_region;
+}
+
+/**
+ * Check whether a page has been referenced between pgae replacement attempts
+ * @param as address space
+ * @param vaddr client virtual address
+ * @return bool indicating whether the page has been referenced
+ */
+bool is_referenced(sos_addrspace_t *as, client_vaddr vaddr) {
+    assert(as);
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        return false;
+    }
+    return pte->refd;
+}
+
+void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights) {
+    pte_t* pte = as_lookup_pte(as, vaddr);
+    if (pte == NULL) {
+        assert(!"Page does not exist to be mapped");
+    }
+    seL4_CPtr cap = frame_cap(pte->addr);
+    assert(cap != seL4_CapNull);
+    as_map_page(as, vaddr, cap, rights);
 }
 
 /**

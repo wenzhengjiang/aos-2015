@@ -106,15 +106,14 @@ sos_proc_t *current_process(void) {
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
     sos_addrspace_t* as = current_process()->vspace;
     sos_proc_t* proc = current_process();
-    pte_t* victim;
     if (!frame_available_frames()) {
         printf("Evicting the page!\n");
-        as_evict_page(as);
+        swap_evict_page(as);
     }
     if (proc->cont.page_replacement_victim) {
-        assert(victim);
-        frame_free(victim->addr);
-        if (victim->swaddr == (unsigned)-1) {
+        assert(proc->cont.page_replacement_victim);
+        frame_free(proc->cont.page_replacement_victim->addr);
+        if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
             assert(!"Victim has no swap address!");
         }
     }

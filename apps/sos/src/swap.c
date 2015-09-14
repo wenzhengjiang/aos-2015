@@ -19,7 +19,7 @@
 #define SWAP_FILE ".sos_swap"
 #define ALIGNED(page) (page % PAGE_SIZE == 0)
 #define VADDR_TO_SADDR(vaddr) ((vaddr-swap_table)*PAGE_SIZE)
-#define ERR -1
+static const swap_generic_error = -1;
 #define OPEN -1
 
 static fhandle_t swap_handle;
@@ -31,7 +31,7 @@ extern jmp_buf ipc_event_env;
 
 // return offset in swap file
 static swap_addr swap_alloc(void) {
-    if (free_list == NULL) return ERR;        
+    if (free_list == NULL) return swap_generic_error;        
     else {
         swap_addr ret = VADDR_TO_SADDR(free_list);
         free_list = free_list->next_free;
@@ -50,7 +50,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
                         fattr_t *fattr) {
     if (status != NFS_OK) {
         dprintf(5, "failed to create swap file");
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }
 
     swap_handle = *fh;
@@ -75,7 +75,7 @@ static void sos_swap_open(void) {
 
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
                 sos_nfs_swap_create_callback, pid)) {
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }
 }
 
@@ -85,7 +85,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 
     if (status != NFS_OK) {
         dprintf(5, "faile to write to swap file");
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }
     proc->cont.swap_cnt += count;
     if (proc->cont.swap_cnt == PAGE_SIZE) {
@@ -95,7 +95,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
         if(nfs_write(&swap_handle, proc->cont.swap_file_offset+cnt, PAGE_SIZE-cnt,
                         (const void*)proc->cont.swap_page+cnt, swap_write_callback,
                         token)) {
-            longjmp(ipc_event_env, ERR);
+            longjmp(ipc_event_env, swap_generic_error);
         }
         longjmp(ipc_event_env, token);
     }
@@ -104,7 +104,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 swap_addr sos_swap_write(sos_vaddr page) {
     if (!inited) {
         sos_swap_open();
-        return OPEN;
+        longjmp(ipc_event_env, 0);
     }
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
@@ -113,11 +113,11 @@ swap_addr sos_swap_write(sos_vaddr page) {
     proc->cont.swap_file_offset = swap_alloc();
     assert(proc->cont.swap_cnt == 0);
     if (proc->cont.swap_file_offset < 0) {
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }
 
     if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE, (const void*)proc->cont.swap_page, swap_write_callback, pid)) {
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }  else  {
         return proc->cont.swap_file_offset;
     }
@@ -129,7 +129,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     (void)fattr;
     if (status != NFS_OK) {
         dprintf(5, "failed to read from swap file");
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     }
     assert(count == PAGE_SIZE);
     sos_proc_t *proc = process_lookup(token);
@@ -147,15 +147,15 @@ void sos_swap_read(sos_vaddr page, swap_addr pos) {
     proc->cont.swap_file_offset = pos;
 
     if(nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, proc->pid)) 
-        longjmp(ipc_event_env, ERR);
+        longjmp(ipc_event_env, swap_generic_error);
     return ;
 }
 
 void swap_init(void * vaddr) {
     swap_table = (swap_entry_t*) vaddr;
     free_list = swap_table;
-    for (int i = 0; i < NSWAPERR; i++) {
+    for (int i = 0; i < NSWAP; i++) {
         swap_table[i].next_free = &swap_table[i+1];
     }
-    swap_table[NSWAPERR].next_free = NULL;
+    swap_table[NSWAP].next_free = NULL;
 }

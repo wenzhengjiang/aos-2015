@@ -22,12 +22,9 @@ typedef struct kernel_page_table {
     struct kernel_page_table *next;
 } kpt_t;
 
-// TODO: Temporary.  Remove me.
-typedef seL4_Word swap_vaddr;
-
 typedef struct page_table_entry {
     sos_vaddr addr;
-    swap_vaddr swaddr;
+    swap_addr swaddr;
     seL4_CPtr page_cap;
     struct page_table_entry *next;
     bool refd;
@@ -73,5 +70,6 @@ bool as_page_exists(sos_addrspace_t *as, client_vaddr vaddr);
 int iov_read(iovec_t *, char* buf, int count);
 void iov_free(iovec_t *);
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
+pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr);
 
 #endif

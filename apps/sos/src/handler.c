@@ -9,6 +9,7 @@
 
 #include "handler.h"
 #include "addrspace.h"
+#include "page_replacement.h"
 #include "process.h"
 #include "syscall.h"
 
@@ -50,20 +51,17 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     if (as_page_exists(as, faultaddr)) {
         printf("page exists\n");
         if (swap_is_page_swapped(as, faultaddr)) {
-            swap_replace_page(proc, as, faultaddr);
+            swap_replace_page(as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
             printf("referencing\n");
-            swap_reference_page(as, faultaddr, reg->rights);
+            as_reference_page(as, faultaddr, reg->rights);
         }
     } else {
-        int err = process_create_page(faultaddr, reg->rights);
-        if (err) {
-            return err;
-        }
+        process_create_page(faultaddr, reg->rights);
     }
     return 0;
 }

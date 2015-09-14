@@ -106,14 +106,12 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         seL4_Word vpage, kvpage;
         unsigned long kdst;
         int nbytes;
-        int err;
 
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
 
         /* First we need to create a frame */
-        err = process_create_page(vpage, permissions);
-        conditional_panic(err, "Failed to map to tty address space");
+        process_create_page(vpage, permissions);
 
         kdst   = as_lookup_sos_vaddr(as, dst);
         sos_cap = frame_cap(kdst);

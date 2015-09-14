@@ -5,6 +5,7 @@
 #include <limits.h>
 #include "frametable.h"
 #include "addrspace.h"
+#include "page_replacement.h"
 #include "process.h"
 #include "swap.h"
 #include "handler.h"
@@ -33,7 +34,7 @@ int swap_evict_page(sos_addrspace_t *as) {
     sos_proc_t *proc = current_process();
     pte_t *victim;
     printf("EVICTING\n");
-    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == -1) {
+    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
         victim = proc->cont.page_replacement_victim;
         victim->swaddr = sos_swap_write(victim->addr);
@@ -53,7 +54,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     printf("REPLACING\n");
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
-    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == -1) {
+    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         pte_t* victim = swap_choose_replacement_page(as);
         proc->cont.page_replacement_victim = victim;
         victim->swaddr = sos_swap_write(victim->addr);
@@ -69,7 +70,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
-            sos_swap_read(proc->cont.page_replacement_victim, to_load->swaddr);
+            sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
             longjmp(ipc_event_env, 0);
         } else {
             assert(!"Did not find page");
