@@ -88,40 +88,56 @@ void syscall_loop(seL4_CPtr ep) {
     register_handlers();
     int pid = setjmp(ipc_event_env);
     while (1) {
-        seL4_Word badge;
+        seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
 
-        if (pid) {
+        printf("Pid received: %d\n", pid);
+        if (pid > 0) {
             // m7 TODO: Need to update the current process
             proc = process_lookup(pid);
             message = proc->cont.ipc_message;
             label = proc->cont.ipc_label;
-            badge = 0;
+        } else if (pid < -1) {
+            printf("SOME KIND OF ERROR\n");
+            continue;
         } else {
             proc = current_process();
-            message = seL4_Wait(ep, &badge);
-            label = seL4_MessageInfo_get_label(message);
+            if (proc->cont.syscall_loop_initiations == 0) {
+                printf("DOING ENV SETUP\n");
+                message = proc->cont.ipc_message = seL4_Wait(ep, &badge);
+                label = proc->cont.ipc_label = seL4_MessageInfo_get_label(proc->cont.ipc_message);
+            } else {
+                printf("Waiting for something\n");
+                message = seL4_Wait(ep, &badge);
+                label = seL4_MessageInfo_get_label(message);
+            }
         }
 
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
+                printf("NETINTER\n");
                 network_irq();
             }
             if (badge &  IRQ_BADGE_CLOCK) {
                 timer_interrupt();
             }
-        }else if(label == seL4_VMFault){
+        } else if(label == seL4_VMFault){
+            printf("FAULT\n");
             /* Page fault */
             // Only print out debugging information before the first fault attempt
-            if (!pid || !proc->cont.initiations) {
+            if (!pid || !proc->cont.syscall_loop_initiations) {
                 dprintf(4, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                         seL4_GetMR(0),
                         seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
             }
-            proc->cont.vm_fault_type = seL4_GetMR(3);
-            proc->cont.vm_fault_addr = seL4_GetMR(1);
+            if (proc->cont.syscall_loop_initiations == 0) {
+                proc->cont.vm_fault_type = seL4_GetMR(3);
+                proc->cont.vm_fault_addr = seL4_GetMR(1);
+                proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
+            }
+            proc->cont.syscall_loop_initiations++;
             int err = sos_vm_fault(proc->cont.vm_fault_type, proc->cont.vm_fault_addr);
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed\n");
@@ -129,8 +145,15 @@ void syscall_loop(seL4_CPtr ep) {
                 syscall_end_continuation(proc, 0, true);
             }
         }else if(label == seL4_NoFault) {
+            printf("SYSCALL\n");
+            if (proc->cont.syscall_loop_initiations == 0) {
+                proc->cont.syscall_number = seL4_GetMR(0);
+                proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
+            }
+            proc->cont.syscall_loop_initiations++;
             /* System call */
-            handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
+            handle_syscall(badge, seL4_MessageInfo_get_length(proc->cont.ipc_message) - 1,
+                           proc->cont.syscall_number);
         }else{
             printf("Rootserver got an unknown message\n");
         }

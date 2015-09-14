@@ -207,11 +207,10 @@ void register_handlers(void) {
     handlers[SOS_SYSCALL_CLOSE] = close_handler;
 }
 
-void handle_syscall(seL4_Word badge, int num_args) {
+void handle_syscall(seL4_Word badge, int num_args, seL4_Word syscall_number) {
     cur_proc = current_process();
-    seL4_Word syscall_number = seL4_GetMR(0);
     /* Save the caller */
-    seL4_CPtr reply_cap = cspace_save_reply_cap(cur_cspace);
+    seL4_CPtr reply_cap = cur_proc->cont.reply_cap;
     assert(reply_cap != CSPACE_NULL);
     seL4_MessageInfo_t reply;
 

@@ -12,14 +12,14 @@
 #include "network.h"
 #include "syscall.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
 #define SWAP_FILE ".sos_swap"
 #define ALIGNED(page) (page % PAGE_SIZE == 0)
 #define VADDR_TO_SADDR(vaddr) ((vaddr-swap_table)*PAGE_SIZE)
-static const swap_generic_error = -1;
+static const int swap_generic_error = -2;
 #define OPEN -1
 
 static fhandle_t swap_handle;
@@ -48,11 +48,12 @@ static void swap_free(swap_addr saddr) {
 static void
 sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
+    printf("Create callback\n");
     if (status != NFS_OK) {
-        dprintf(5, "failed to create swap file");
+        dprintf(4, "failed to create swap file");
         longjmp(ipc_event_env, swap_generic_error);
     }
-
+    printf("File opened\n");
     swap_handle = *fh;
     dprintf(2, "sos_nfs_swap_create_callback");
     inited = true;
@@ -72,17 +73,19 @@ static void sos_swap_open(void) {
 
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
-
+    printf("Doing SSO\n");
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
                 sos_nfs_swap_create_callback, pid)) {
+        printf("SSO FAILED\n");
         longjmp(ipc_event_env, swap_generic_error);
     }
+    printf("SSO okay\n");
 }
 
 static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     sos_proc_t *proc = process_lookup(token);
-
+    printf("WRITING FILE TO DISK\n");
     if (status != NFS_OK) {
         dprintf(5, "faile to write to swap file");
         longjmp(ipc_event_env, swap_generic_error);
@@ -102,10 +105,14 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 }
 
 swap_addr sos_swap_write(sos_vaddr page) {
+    printf("SSW Starting\n");
     if (!inited) {
+        printf("Calling SSO\n");
         sos_swap_open();
-        longjmp(ipc_event_env, 0);
+        printf("LONGJMP -1\n");
+        longjmp(ipc_event_env, -1);
     }
+    printf("Doing write\n");
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
 
@@ -116,9 +123,12 @@ swap_addr sos_swap_write(sos_vaddr page) {
         longjmp(ipc_event_env, swap_generic_error);
     }
 
-    if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE, (const void*)proc->cont.swap_page, swap_write_callback, pid)) {
+    if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
+                  (const void*)proc->cont.swap_page, swap_write_callback, pid)) {
+        printf("write failed\n");
         longjmp(ipc_event_env, swap_generic_error);
     }  else  {
+        printf("Swap write invoked\n");
         return proc->cont.swap_file_offset;
     }
 }

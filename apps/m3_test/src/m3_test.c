@@ -55,13 +55,13 @@ pt_test( void )
 
     /* stack test */
     do_pt_test(buf1);
-    printf("STATIC TESTS PASSED\n");
+    //printf("STATIC TESTS PASSED\n");
     /* heap test */
     buf2 = malloc(NPAGES * 4096);
     assert(buf2);
     do_pt_test(buf2);
     free(buf2);
-    printf("DYNAMIC TESTS PASSED\n");
+    //printf("DYNAMIC TESTS PASSED\n");
 }
 
 static void
@@ -74,7 +74,7 @@ thread_block(void){
 
 int main(void){
     do {
-        printf("M3 TEST\n");
+        //printf("M3 TEST\n");
         pt_test();
         thread_block();
         // sleep(1);	// Implement this as a syscall

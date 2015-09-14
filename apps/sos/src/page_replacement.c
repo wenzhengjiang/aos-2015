@@ -34,11 +34,15 @@ int swap_evict_page(sos_addrspace_t *as) {
     sos_proc_t *proc = current_process();
     pte_t *victim;
     printf("EVICTING\n");
-    if (proc->cont.page_replacement_victim && proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
+    if (!proc->cont.page_replacement_victim) {
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
+    }
+    if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         victim = proc->cont.page_replacement_victim;
+        printf("evict about to call SSW\n");
         victim->swaddr = sos_swap_write(victim->addr);
-        longjmp(ipc_event_env, 0);
+        printf("SSW returned.  Jumping.\n");
+        longjmp(ipc_event_env, -1);
     }
     return 0;
 }
@@ -58,7 +62,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
         pte_t* victim = swap_choose_replacement_page(as);
         proc->cont.page_replacement_victim = victim;
         victim->swaddr = sos_swap_write(victim->addr);
-        longjmp(ipc_event_env, 0);
+        longjmp(ipc_event_env, -1);
     }
 
     memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
@@ -71,7 +75,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
             sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
-            longjmp(ipc_event_env, 0);
+            longjmp(ipc_event_env, -1);
         } else {
             assert(!"Did not find page");
         }

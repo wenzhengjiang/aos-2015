@@ -20,6 +20,7 @@ typedef struct continuation {
     char *filename;
     seL4_Word ipc_label;
     seL4_MessageInfo_t ipc_message;
+    seL4_Word syscall_number;
     seL4_Word vm_fault_type;
     seL4_Word vm_fault_addr;
     seL4_Word page_replacement_request;
@@ -28,7 +29,7 @@ typedef struct continuation {
     size_t swap_file_offset;
     size_t swap_cnt;
     // Number of times a continuation has been started
-    int initiations;
+    int syscall_loop_initiations;
 } cont_t;
 
 typedef struct process {
