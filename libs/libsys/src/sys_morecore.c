@@ -39,6 +39,8 @@ sys_brk(va_list ap)
 
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
+    printf("malloc contention: %.2f%%, base: %x\n", (float)((float)(morecore_area[0] - morecore_base) / (float)(morecore_area[0] - (uintptr_t)&morecore_area[MORECORE_AREA_BYTE_SIZE - 1])),
+        morecore_base);
     assert(newbrk <= (uintptr_t)&morecore_area[MORECORE_AREA_BYTE_SIZE - 1]);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {

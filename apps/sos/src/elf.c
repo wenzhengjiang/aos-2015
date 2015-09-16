@@ -119,6 +119,16 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
         if (pos < file_size){
+            printf("Loading data into %x\n", vpage);
+            if (vpage == 0xa000) {
+                int zero_count = 0;
+                for (int i = 0; i < PAGESIZE; i++) {
+                    if (((char*)src)[i] == 0) {
+                        zero_count++;
+                    }
+                }
+                printf("zeroes: %d, going into: %x\n", zero_count, kdst);
+            }
             memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
         }
 

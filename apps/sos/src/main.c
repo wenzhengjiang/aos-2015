@@ -92,23 +92,21 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_Word label;
         seL4_MessageInfo_t message;
 
-        printf("Pid received: %d\n", pid);
         if (pid > 0) {
             // m7 TODO: Need to update the current process
             proc = process_lookup(pid);
             message = proc->cont.ipc_message;
             label = proc->cont.ipc_label;
         } else if (pid < -1) {
-            printf("SOME KIND OF ERROR\n");
             continue;
         } else {
             proc = current_process();
             if (proc->cont.syscall_loop_initiations == 0) {
-                printf("DOING ENV SETUP\n");
-                message = proc->cont.ipc_message = seL4_Wait(ep, &badge);
-                label = proc->cont.ipc_label = seL4_MessageInfo_get_label(proc->cont.ipc_message);
+                message = seL4_Wait(ep, &badge);
+                proc->cont.ipc_message = message;
+                label = seL4_MessageInfo_get_label(proc->cont.ipc_message);
+                proc->cont.ipc_label = label;
             } else {
-                printf("Waiting for something\n");
                 message = seL4_Wait(ep, &badge);
                 label = seL4_MessageInfo_get_label(message);
             }
@@ -117,7 +115,6 @@ void syscall_loop(seL4_CPtr ep) {
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
-                printf("NETINTER\n");
                 network_irq();
                 pid = 1;
                 continue;
@@ -126,7 +123,6 @@ void syscall_loop(seL4_CPtr ep) {
                 timer_interrupt();
             }
         } else if(label == seL4_VMFault){
-            printf("FAULT\n");
             /* Page fault */
             // Only print out debugging information before the first fault attempt
             if (!pid || !proc->cont.syscall_loop_initiations) {
@@ -146,19 +142,20 @@ void syscall_loop(seL4_CPtr ep) {
             } else {
                 syscall_end_continuation(proc, 0, true);
             }
-        }else if(label == seL4_NoFault) {
-            printf("SYSCALL\n");
-            if (proc->cont.syscall_loop_initiations == 0) {
-                proc->cont.syscall_number = seL4_GetMR(0);
-                proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
-            }
-            proc->cont.syscall_loop_initiations++;
-            /* System call */
-            handle_syscall(badge, seL4_MessageInfo_get_length(proc->cont.ipc_message) - 1,
-                           proc->cont.syscall_number);
-        }else{
-            printf("Rootserver got an unknown message\n");
         }
+        //else if(label == seL4_NoFault) {
+        //    printf("SYSCALL\n");
+        //    if (proc->cont.syscall_loop_initiations == 0) {
+        //        proc->cont.syscall_number = seL4_GetMR(0);
+        //        proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
+        //    }
+        //    proc->cont.syscall_loop_initiations++;
+        //    /* System call */
+        //    handle_syscall(badge, seL4_MessageInfo_get_length(proc->cont.ipc_message) - 1,
+        //                   proc->cont.syscall_number);
+        //}else{
+        //    printf("Rootserver got an unknown message\n");
+        //}
         pid = 0;
     }
 }

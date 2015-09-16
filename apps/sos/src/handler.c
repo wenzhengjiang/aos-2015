@@ -1,4 +1,4 @@
-#include <errno.h>
+o#include <errno.h>
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
@@ -49,7 +49,6 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         return EACCES;
     }
     if (as_page_exists(as, faultaddr)) {
-        printf("page exists\n");
         if (swap_is_page_swapped(as, faultaddr)) {
             swap_replace_page(as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
@@ -57,7 +56,6 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
-            printf("referencing\n");
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {

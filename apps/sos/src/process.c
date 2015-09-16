@@ -107,7 +107,6 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
     sos_addrspace_t* as = current_process()->vspace;
     sos_proc_t* proc = current_process();
     if (!frame_available_frames()) {
-        printf("Evicting the page!\n");
         swap_evict_page(as);
     }
     if (proc->cont.page_replacement_victim) {

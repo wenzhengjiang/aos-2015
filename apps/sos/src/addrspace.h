@@ -26,6 +26,7 @@ typedef struct page_table_entry {
     sos_vaddr addr;
     swap_addr swaddr;
     seL4_CPtr page_cap;
+    client_vaddr debug;
     struct page_table_entry *next;
     bool refd;
     // Indicates the page has been free'd.

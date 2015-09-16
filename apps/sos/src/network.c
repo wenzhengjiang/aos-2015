@@ -196,6 +196,7 @@ network_init(seL4_CPtr interrupt_ep) {
 
     /* Setup the network interface */
     lwip_init();
+    printf("network iov malloc\n");
     struct netif *netif = malloc(sizeof(*netif));
     assert(netif);
     lwip_iface->netif = netif_add(netif, &ipaddr, &netmask, &gw,
