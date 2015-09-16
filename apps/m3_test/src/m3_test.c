@@ -27,7 +27,7 @@
 
 #include <sel4/sel4.h>
 
-#define NPAGES 27
+#define NPAGES 25
 
 /* called from pt_test */
 static void

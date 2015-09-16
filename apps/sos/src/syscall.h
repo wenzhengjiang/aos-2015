@@ -29,4 +29,5 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 extern int pkg_size;
 extern int pkg_num;
 extern bool pkg_nfs;
+
 #endif

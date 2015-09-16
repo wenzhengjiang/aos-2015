@@ -152,6 +152,7 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
  * @return 0 on success, non-zero on failure.
  */
 static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_CapRights rights) {
+    dprintf(0, "as_map_page");
     int err;
     unsigned pt_idx = PT_LOOKUP(vaddr);
 
@@ -180,6 +181,7 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
 }
 
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
+    dprintf(0, "as_add_page");
     int err;
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
@@ -199,6 +201,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     pt->valid = true;
     pt->addr = sos_vaddr;
     pt->swaddr = (unsigned)(-1);
+    pt->caddr = vaddr;
 
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
@@ -219,6 +222,8 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
  * @return 0 on success, non-zero otherwise.
  */
 int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) {
+
+    dprintf(-1, "as_create_page\n");
     seL4_CPtr cap;
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
@@ -226,7 +231,7 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
     if (err) {
         return err;
     }
-    return as_map_page(as, vaddr, cap, rights);
+    return 0; //as_map_page(as, vaddr, cap, rights);
 }
 
 /**  ---  REGION HANDLING  --- **/

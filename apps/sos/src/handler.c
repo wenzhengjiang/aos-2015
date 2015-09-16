@@ -14,7 +14,7 @@
 #include "syscall.h"
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -32,6 +32,7 @@ static bool is_read_fault(seL4_Word faulttype) {
 }
 
 int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
+    
     sos_proc_t *proc = current_process();
     sos_addrspace_t *as = proc_as(proc);
     if (as == NULL) {
@@ -40,6 +41,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
 
     sos_region_t* reg = as_vaddr_region(as, faultaddr);
     if (!reg) {
+        printf("addr %x is not in the reg\n", faultaddr);
         return EFAULT;
     }
     if (is_read_fault(faulttype) && !(reg->rights & seL4_CanRead)) {
@@ -48,9 +50,11 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     if (!is_read_fault(faulttype) && !(reg->rights & seL4_CanWrite)) {
         return EACCES;
     }
+    dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
     if (as_page_exists(as, faultaddr)) {
-        printf("page exists\n");
-        if (swap_is_page_swapped(as, faultaddr)) {
+        dprintf(4, "page exists\n");
+        if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
+            printf("page is in disk\n");
             swap_replace_page(as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
@@ -61,6 +65,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {
+        dprintf(4, "create new page\n");
         process_create_page(faultaddr, reg->rights);
     }
     return 0;
@@ -122,6 +127,7 @@ static int open_handler (seL4_CPtr reply_cap) {
 }
 
 static int read_handler (seL4_CPtr reply_cap) {
+    assert(!"shouldn't be here");
     dprintf(4, "SYS READ: %d\n", reply_cap);
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
@@ -132,6 +138,7 @@ static int read_handler (seL4_CPtr reply_cap) {
 }
 
 static int write_handler (seL4_CPtr reply_cap) {
+    assert(!"shouldn't be here");
     dprintf(4, "SYS WRITE: %d\n", reply_cap);
     int file = (int) seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);

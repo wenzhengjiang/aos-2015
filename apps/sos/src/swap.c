@@ -28,6 +28,7 @@ static bool inited = false;
 static swap_entry_t * free_list;
 static swap_entry_t * swap_table;
 extern jmp_buf ipc_event_env;
+extern bool callback_done ;
 
 // return offset in swap file
 static swap_addr swap_alloc(void) {
@@ -59,6 +60,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
     swap_handle = *fh;
     dprintf(2, "sos_nfs_swap_create_callback");
     inited = true;
+    callback_done = true;
     return;
 }
 
@@ -75,33 +77,33 @@ static void sos_swap_open(void) {
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     pid_t pid = proc->pid;
-    printf("Doing SSO\n");
+    printf("swap_open\n");
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
                 sos_nfs_swap_create_callback, pid)) {
         proc->cont.swap_status = SWAP_FAILED;
         longjmp(ipc_event_env, swap_generic_error);
     }
-    printf("SSO okay\n");
 }
 
 static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     sos_proc_t *proc = process_lookup(token);
-    printf("WRITING FILE TO DISK\n");
     if (status != NFS_OK) {
         dprintf(4, "faile to write to swap file");
         proc->cont.swap_status = SWAP_FAILED;
         return;
     }
+    printf("WRITE callback addr=%x,pos=%d, cnt=%d\n", proc->cont.swap_page+proc->cont.swap_cnt, 
+            proc->cont.swap_file_offset+proc->cont.swap_cnt, count);
     proc->cont.swap_cnt += count;
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
-        printf("Finishing with write callback1\n");
+        callback_done = true;
+        //printf("Finishing with write callback1\n");
         return;
-        //longjmp(ipc_event_env, token);
     } else {
         int cnt = proc->cont.swap_cnt;
-        printf("firing new nfs_write\n");
+        //printf("firing new nfs_write\n");
         if (nfs_write(&swap_handle, proc->cont.swap_file_offset + cnt, PAGE_SIZE - cnt,
                      (const void*)proc->cont.swap_page+cnt, swap_write_callback,
                      token)) {
@@ -109,12 +111,11 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
             proc->cont.swap_status = SWAP_FAILED;
             return;
         }
-        printf("Finishing with write callback2\n");
+        //printf("Finishing with write callback2\n");
     }
 }
 
 swap_addr sos_swap_write(sos_vaddr page) {
-    printf("SSW Starting\n");
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     if (!inited) {
@@ -122,15 +123,18 @@ swap_addr sos_swap_write(sos_vaddr page) {
         sos_swap_open();
         longjmp(ipc_event_env, -1);
     }
-    printf("Doing write\n");
     pid_t pid = proc->pid;
 
     proc->cont.swap_page = page;
     proc->cont.swap_file_offset = swap_alloc();
+    if (proc->cont.swap_file_offset < 0) return proc->cont.swap_file_offset;
     assert(proc->cont.swap_cnt == 0);
 
-    printf("proc->cont.swap_file_offset: %u\n", proc->cont.swap_file_offset);
-    printf("proc->cont.swap_page: %x\n", proc->cont.swap_page);
+    int code = 0;
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        code += ((char*)page) + i;
+    }
+    printf("swap_write addr=%x,pos=%d, code=%08x\n", proc->cont.swap_page, proc->cont.swap_file_offset,code);
 
     if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
                   (const void*)proc->cont.swap_page, swap_write_callback, pid) != RPC_OK) {
@@ -138,7 +142,7 @@ swap_addr sos_swap_write(sos_vaddr page) {
         proc->cont.swap_status = SWAP_FAILED;
         longjmp(ipc_event_env, swap_generic_error);
     }  else  {
-        printf("Swap write invoked: %u\n", proc->cont.swap_file_offset);
+        //printf("Swap write invoked: %u\n", proc->cont.swap_file_offset);
         return proc->cont.swap_file_offset;
     }
 }
@@ -146,9 +150,9 @@ swap_addr sos_swap_write(sos_vaddr page) {
 static void
 swap_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
+    if (count == 0) return;
     (void)fattr;
     sos_proc_t *proc = process_lookup(token);
-    printf("READ callback\n");
     if (status != NFS_OK) {
         proc->cont.swap_status = SWAP_FAILED;
         dprintf(5, "failed to read from swap file");
@@ -156,7 +160,13 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     }
     assert(count == PAGE_SIZE);
     proc->cont.swap_status = SWAP_SUCCESS;
+    callback_done = true;
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
+    int code = 0;
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        code += ((char*)proc->cont.swap_page) + i;
+    }
+    printf("READ callback addr=%x,pos=%d,code=%08x\n", proc->cont.swap_page, proc->cont.swap_file_offset,code);
     swap_free(proc->cont.swap_file_offset);
 }
 
@@ -167,8 +177,11 @@ void sos_swap_read(sos_vaddr page, swap_addr pos) {
     proc->cont.swap_status = SWAP_RUNNING;
     proc->cont.swap_page = page;
     proc->cont.swap_file_offset = pos;
+    printf("swap_read addr=%x,pos=%d\n", page, pos);
     if(nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, proc->pid)) {
+        printf("read failed\n");
         proc->cont.swap_status = SWAP_FAILED;
+        longjmp(ipc_event_env, swap_generic_error);
     }
 }
 

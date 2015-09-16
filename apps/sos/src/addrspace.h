@@ -25,6 +25,7 @@ typedef struct kernel_page_table {
 typedef struct page_table_entry {
     sos_vaddr addr;
     swap_addr swaddr;
+    client_vaddr caddr;
     seL4_CPtr page_cap;
     struct page_table_entry *next;
     bool refd;

@@ -41,7 +41,7 @@ int swap_evict_page(sos_addrspace_t *as) {
     if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         victim = proc->cont.page_replacement_victim;
         victim->swaddr = sos_swap_write(victim->addr);
-        printf("page_to_evict: %x, writing to: %u\n", proc->cont.page_replacement_victim,
+        printf("page_to_evict: %08x, writing to: %u\n", proc->cont.page_replacement_victim->caddr,
                proc->cont.page_replacement_victim->swaddr);
         longjmp(ipc_event_env, -1);
     }
@@ -60,7 +60,7 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
 int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     // TODO: Probably need to kill the process.  So much memory contention
     // that we have no room to allocate ANY pages for the new process!
-    printf("REPLACING\n");
+    //printf("REPLACING\n");
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
     swap_evict_page(as);
@@ -70,7 +70,8 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
-            printf("reading in new page from address %u\n", to_load->swaddr);
+            printf("reading in new page %08x from address %u\n", readin, to_load->swaddr);
+            to_load->addr = proc->cont.page_replacement_victim->addr;
             sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
             longjmp(ipc_event_env, -1);
         } else {

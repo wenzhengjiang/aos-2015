@@ -86,6 +86,7 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
  * @return error code or 0 for success
  */
 int process_create(seL4_CPtr fault_ep) {
+    memset((void*)curproc, 0, sizeof(sos_proc_t));
     curproc->pid = 1;
     curproc->vspace = as_create();
     init_cspace(curproc);
@@ -110,12 +111,15 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
         printf("Evicting the page!\n");
         swap_evict_page(as);
     }
+    printf("start to create page\n");
     if (proc->cont.page_replacement_victim) {
+        printf("sos_unmap_frame, %x\n", proc->cont.page_replacement_victim->addr);
         sos_unmap_frame(proc->cont.page_replacement_victim->addr);
         if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
             assert(!"Victim has no swap address!");
         }
     }
+   // printf("as_create_page\n");
     as_create_page(as, vaddr, rights);
 }
 

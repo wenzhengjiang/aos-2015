@@ -102,10 +102,13 @@ int sos_map_frame(seL4_Word vaddr) {
  * @return 0 on success, non-zero on failure
  */
 int sos_unmap_frame(seL4_Word vaddr) {
+//    printf("sos_unmap_frame\n");
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+ //   printf("unmap_frame: %x %d\n",vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
     cur_frame->map_req_count--;
+    
     if (cur_frame->map_req_count == 0) {
         printf("FREEING FRAME\n");
         if (frame_free(vaddr)) {
@@ -114,6 +117,7 @@ int sos_unmap_frame(seL4_Word vaddr) {
         return 0;
     }
     seL4_ARM_Page_Unmap(cur_frame->cap);
+    seL4_ARM_Page_Unify_Instruction(cur_frame->cap, 0, PAGE_SIZE);
     return 0;
 }
 
@@ -157,10 +161,7 @@ static int frame_map_page(unsigned idx) {
 }
 
 bool frame_available_frames(void) {
-    if (free_list == NULL) {
-        return false;
-    }
-    return true;
+    return free_list != NULL;
 }
 
 /**
