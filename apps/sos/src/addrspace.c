@@ -94,6 +94,7 @@ static int
 _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, client_vaddr vaddr) {
     int err;
     assert(pd_idx < PD_SIZE && pd_idx >= 0);
+    printf("map pt malloc\n");
     kpt_t *new_pt = malloc(sizeof(kpt_t));
 
     new_pt->addr = ut_alloc(seL4_PageTableBits);
@@ -177,6 +178,7 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     assert(!err);
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
+    as->pd[pd_idx][pt_idx]->debug = vaddr;
     return 0;
 }
 
@@ -192,6 +194,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
             return ENOMEM;
         }
     }
+    printf("as add page malloc\n");
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
     if (pt == NULL) {
@@ -253,6 +256,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
         as_vaddr_region(as, PAGE_ALIGN_UP(end)) != 0) {
         return NULL;
     }
+    printf("as region create malloc\n");
     new_region = malloc(sizeof(sos_region_t));
     conditional_panic(!new_region, "Unable to create new region for process\n");
     new_region->start = PAGE_ALIGN(start);
@@ -355,6 +359,7 @@ void as_activate(sos_addrspace_t* as) {
  */
 sos_addrspace_t* as_create(void) {
     int err;
+    printf("addrspace malloc\n");
     sos_addrspace_t *as = malloc(sizeof(sos_addrspace_t));
     conditional_panic(!as, "No memory for address space");
     memset(as, 0, sizeof(sos_addrspace_t));

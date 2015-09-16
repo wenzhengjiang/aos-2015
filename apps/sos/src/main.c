@@ -94,7 +94,7 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_MessageInfo_t message;
 
 //        printf("Pid received: %d\n", pid);
-        if (pid > 0) { // come back from finished nfs_callback
+        if (pid > 0) {
             // m7 TODO: Need to update the current process
             proc = process_lookup(pid);
             //message = proc->cont.ipc_message;
@@ -107,6 +107,7 @@ void syscall_loop(seL4_CPtr ep) {
             //printf("Waiting for something\n");
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
+
         }
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
@@ -121,7 +122,7 @@ void syscall_loop(seL4_CPtr ep) {
                 timer_interrupt();
             }
         } else if(label == seL4_VMFault){
-            //printf("FAULT\n");
+
             /* Page fault */
             // Only print out debugging information before the first fault attempt
             if (!pid || !proc->cont.syscall_loop_initiations) {
@@ -155,6 +156,7 @@ void syscall_loop(seL4_CPtr ep) {
         }else{
             printf("Rootserver got an unknown message\n");
         }
+
         pid = 0;
     }
 }

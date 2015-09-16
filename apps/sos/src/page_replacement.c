@@ -60,7 +60,6 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
 int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     // TODO: Probably need to kill the process.  So much memory contention
     // that we have no room to allocate ANY pages for the new process!
-    //printf("REPLACING\n");
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
     swap_evict_page(as);

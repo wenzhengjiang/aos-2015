@@ -61,7 +61,6 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
-            printf("referencing\n");
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {

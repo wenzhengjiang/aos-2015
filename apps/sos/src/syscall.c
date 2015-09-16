@@ -125,6 +125,7 @@ void ipc_read(int start, char *buf) {
 }
 
 static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t *iotail) {
+    printf("syscall iov malloc\n");
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);

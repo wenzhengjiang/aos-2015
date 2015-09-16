@@ -12,7 +12,7 @@
 #include "network.h"
 #include "syscall.h"
 
-#define verbose 5
+#define verbose 1
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -50,13 +50,11 @@ static void
 sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     sos_proc_t *proc = current_process();
-    printf("CREATE callback\n");
     if (status != NFS_OK) {
         dprintf(4, "failed to create swap file");
         proc->cont.swap_status = SWAP_FAILED;
         return;
     }
-    printf("File opened\n");
     swap_handle = *fh;
     dprintf(2, "sos_nfs_swap_create_callback");
     inited = true;
@@ -77,7 +75,6 @@ static void sos_swap_open(void) {
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     pid_t pid = proc->pid;
-    printf("swap_open\n");
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
                 sos_nfs_swap_create_callback, pid)) {
         proc->cont.swap_status = SWAP_FAILED;
@@ -96,6 +93,14 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
     printf("WRITE callback addr=%x,pos=%d, cnt=%d\n", proc->cont.swap_page+proc->cont.swap_cnt, 
             proc->cont.swap_file_offset+proc->cont.swap_cnt, count);
     proc->cont.swap_cnt += count;
+    int zero_count = 0;
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        if (((char*)proc->cont.swap_page)[i] == 0) {
+            zero_count++;
+        }
+    }
+    printf("write callback: sos addr: %x, offset: %u, proc->cont.swap_cnt: %u, zeroes: %d, count: %d\n",proc->cont.swap_page,
+           proc->cont.swap_file_offset, proc->cont.swap_cnt, zero_count, count);
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
         callback_done = true;
@@ -103,15 +108,12 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
         return;
     } else {
         int cnt = proc->cont.swap_cnt;
-        //printf("firing new nfs_write\n");
         if (nfs_write(&swap_handle, proc->cont.swap_file_offset + cnt, PAGE_SIZE - cnt,
-                     (const void*)proc->cont.swap_page+cnt, swap_write_callback,
+                      (void*)(proc->cont.swap_page+cnt), swap_write_callback,
                      token)) {
-            printf("error writing\n");
             proc->cont.swap_status = SWAP_FAILED;
             return;
         }
-        //printf("Finishing with write callback2\n");
     }
 }
 
@@ -119,7 +121,6 @@ swap_addr sos_swap_write(sos_vaddr page) {
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     if (!inited) {
-        printf("Calling SSO\n");
         sos_swap_open();
         longjmp(ipc_event_env, -1);
     }
@@ -136,13 +137,11 @@ swap_addr sos_swap_write(sos_vaddr page) {
     }
     printf("swap_write addr=%x,pos=%d, code=%08x\n", proc->cont.swap_page, proc->cont.swap_file_offset,code);
 
-    if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
+   if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
                   (const void*)proc->cont.swap_page, swap_write_callback, pid) != RPC_OK) {
-        printf("write failed\n");
         proc->cont.swap_status = SWAP_FAILED;
         longjmp(ipc_event_env, swap_generic_error);
     }  else  {
-        //printf("Swap write invoked: %u\n", proc->cont.swap_file_offset);
         return proc->cont.swap_file_offset;
     }
 }
@@ -159,6 +158,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
         return;
     }
     assert(count == PAGE_SIZE);
+    assert(proc->cont.swap_status != SWAP_SUCCESS);
     proc->cont.swap_status = SWAP_SUCCESS;
     callback_done = true;
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
@@ -173,6 +173,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
 void sos_swap_read(sos_vaddr page, swap_addr pos) {
     assert(inited);
     assert(ALIGNED(page));
+    printf("Reading: %x from %u\n", page, pos);
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     proc->cont.swap_page = page;
