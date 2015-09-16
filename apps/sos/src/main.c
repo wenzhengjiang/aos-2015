@@ -93,18 +93,16 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_Word label;
         seL4_MessageInfo_t message;
 
-//        printf("Pid received: %d\n", pid);
         if (pid > 0) {
             // m7 TODO: Need to update the current process
             proc = process_lookup(pid);
             //message = proc->cont.ipc_message;
             label = proc->cont.ipc_label;
-        } else if (pid < -1) { // got error 
+        } else if (pid < -1) { // got error
             assert(!"SOME KIND OF ERROR\n");
             continue;
         } else {
             proc = current_process();
-            //printf("Waiting for something\n");
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
 
@@ -112,7 +110,6 @@ void syscall_loop(seL4_CPtr ep) {
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
- //               printf("NETINTER\n");
                 callback_done = false;
                 network_irq();
                 if(callback_done) pid = 1;

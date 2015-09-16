@@ -234,7 +234,7 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
     if (err) {
         return err;
     }
-    return 0; //as_map_page(as, vaddr, cap, rights);
+    return as_map_page(as, vaddr, cap, rights);
 }
 
 /**  ---  REGION HANDLING  --- **/
