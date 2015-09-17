@@ -31,6 +31,8 @@ void iov_ensure_loaded(iovec_t* iov);
 void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 
 iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir);
+void ipc_write(int start, char* msgdata, size_t length);
+io_device_t* device_handler_str(const char* filename);
 
 extern int pkg_size;
 extern int pkg_num;

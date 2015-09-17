@@ -23,8 +23,6 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
-#define STAE_MESSAGE_START 2
-
 static size_t sos_debug_print(char *data) {
     int count = strlen(data);
     for (int i = 0; i < count; i++) {
@@ -57,6 +55,28 @@ static void ipc_write(int start, const char* msgdata) {
     seL4_SetMR(mr_idx, 0);
 }
 
+static int unpack_word(char* msgBuf, seL4_Word packed_data) {
+    int length = 0;
+    int j = sizeof(seL4_Word);
+    while (j > 0) {
+        // Unpack data encoded 4-chars per word.
+        *msgBuf = (char)(packed_data >> ((--j) * 8));
+        length++;
+        msgBuf++;
+    }
+    return length;
+}
+
+static void ipc_read(int start, char *buf) {
+    assert(buf && start > 0);
+    size_t length = seL4_GetMR(start);
+    int k = 0, i;
+    for (i = start + 1; i < seL4_MsgMaxLength && k < length; i++) {
+       int len = unpack_word(buf+k, seL4_GetMR(i));
+       k += len;
+    }
+}
+
 fmode_t mode2fmode(unsigned mode) {
     fmode_t ret = 0;
     if (mode == 0 || (mode & O_RDWR)) {
@@ -74,7 +94,7 @@ int sos_sys_open(const char *path, fmode_t mode) {
     sos_debug_print("translated mode\n");
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
     seL4_SetTag(tag);
-    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN); 
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN);
     seL4_SetMR(1, (seL4_Word)mode);
     ipc_write(OPEN_MESSAGE_START, path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
@@ -87,7 +107,7 @@ int sos_sys_open(const char *path, fmode_t mode) {
 int sos_sys_read(int file, char *buf, size_t nbyte) {
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
-    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_READ); 
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_READ);
     seL4_SetMR(1, (seL4_Word)file);
     seL4_SetMR(2, (seL4_Word)buf);
     seL4_SetMR(3, (seL4_Word)nbyte);
@@ -154,25 +174,31 @@ int sos_stat(const char *path, sos_stat_t *buf) {
     int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2+len);
     seL4_SetTag(tag);
-    seL4_SetMR(0, SOS_SYSCALL_STAT); 
-    seL4_SetMR(1, (seL4_Word)buf); 
-    ipc_write(STAE_MESSAGE_START, path);
+    seL4_SetMR(0, SOS_SYSCALL_STAT);
+    seL4_SetMR(1, (seL4_Word)buf);
+    ipc_write(STAT_MESSAGE_START, path);
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
-    if(seL4_MessageInfo_get_label(reply) == seL4_NoFault)
+    if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
+        ipc_read(1, (char*)buf);
         return 0;
-    else
+    } else {
         return -1;
+    }
 }
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {
+    if (nbyte == 0) { return -1; }
+    if (name == NULL) { return -1; }
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_GETDIRENT); 
     seL4_SetMR(1, pos); 
     seL4_SetMR(2, (seL4_Word)name); 
-    seL4_SetMR(3, nbyte); 
+    seL4_SetMR(3, nbyte - 1); 
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
+        ipc_read(1, (char*)name);
+        name[nbyte] = 0;
         return seL4_GetMR(0);
     } else {
         return -1;

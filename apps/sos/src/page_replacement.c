@@ -56,6 +56,7 @@ int swap_evict_page(sos_addrspace_t *as) {
     }
     printf("Finishing up\n");
     if (proc->cont.swap_status == SWAP_SUCCESS) {
+        proc->cont.page_replacement_victim->valid = false;
         return 0;
     } else {
         longjmp(ipc_event_env, -1);

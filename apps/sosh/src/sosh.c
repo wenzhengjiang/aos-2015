@@ -331,9 +331,10 @@ static void m5_test(void) {
     // Small buf size
     buf[0] = 0;
     r = sos_getdirent(0, buf, 0);
-    assert(r != -1);
+    assert(r == -1);
     assert(buf[0] == 0);
     // No such file
+    printf("%u is nbyte\n", BUF_SIZ);
     r = sos_getdirent(100000, buf, BUF_SIZ);
     assert(r == 0);
     r = sos_stat(NULL, &sbuf);

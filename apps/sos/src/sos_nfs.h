@@ -15,7 +15,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count);
 
 int sos_nfs_write(iovec_t* iov, int fd, int count);
 
-int sos_nfs_getattr(char* filename, iovec_t* iov);
+int sos_nfs_getattr(void);
 
 int sos_nfs_readdir(void);
 

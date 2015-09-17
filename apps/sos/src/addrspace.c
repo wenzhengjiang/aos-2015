@@ -94,7 +94,6 @@ static int
 _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, client_vaddr vaddr) {
     int err;
     assert(pd_idx < PD_SIZE && pd_idx >= 0);
-    printf("map pt malloc\n");
     kpt_t *new_pt = malloc(sizeof(kpt_t));
 
     new_pt->addr = ut_alloc(seL4_PageTableBits);
@@ -154,7 +153,6 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
  */
 static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_CapRights rights) {
     dprintf(0, "as_map_page");
-    printf("as page map starting\n");
     int err;
     unsigned pt_idx = PT_LOOKUP(vaddr);
 
@@ -179,8 +177,8 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     assert(!err);
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
+    as->pd[pd_idx][pt_idx]->valid = true;
     as->pd[pd_idx][pt_idx]->debug = vaddr;
-    printf("as page mapped\n");
     return 0;
 }
 
@@ -196,7 +194,6 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
             return ENOMEM;
         }
     }
-    printf("as add page malloc\n");
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
     if (pt == NULL) {
@@ -216,7 +213,6 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     }
     as->repllist_tail = pt;
     pt->next = as->repllist_head;
-    printf("as page added\n");
     return 0;
 }
 
@@ -259,7 +255,6 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
         as_vaddr_region(as, PAGE_ALIGN_UP(end)) != 0) {
         return NULL;
     }
-    printf("as region create malloc\n");
     new_region = malloc(sizeof(sos_region_t));
     conditional_panic(!new_region, "Unable to create new region for process\n");
     new_region->start = PAGE_ALIGN(start);
@@ -362,7 +357,6 @@ void as_activate(sos_addrspace_t* as) {
  */
 sos_addrspace_t* as_create(void) {
     int err;
-    printf("addrspace malloc\n");
     sos_addrspace_t *as = malloc(sizeof(sos_addrspace_t));
     conditional_panic(!as, "No memory for address space");
     memset(as, 0, sizeof(sos_addrspace_t));
@@ -380,26 +374,3 @@ sos_addrspace_t* as_create(void) {
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     return as;
 }
-
-int iov_read(iovec_t *iov, char *buf, int count) {
-    //if (!iov || !buf || count < 0) return -1;
-    int i = 0;
-    for (iovec_t *v = iov; v && i < count; v = v->next) {
-        size_t n = umin((unsigned)count - (unsigned)i, v->sz);
-        memcpy((char*)v->start, buf+i, (size_t)n);
-        i += n;
-    }
-    assert(i <= count);
-    return 0;
-}
-
-void iov_free(iovec_t *iov) {
-    iovec_t *cur;
-    while(iov) {
-        cur = iov;
-        iov = iov->next;
-        free(cur);
-    }
-}
-
-

@@ -32,38 +32,44 @@ extern io_device_t nfs_io;
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
 
-static inline unsigned CONST umin(unsigned a, unsigned b)
-{
+static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;
 }
+
+static inline unsigned CONST umax(unsigned a, unsigned b) {
+    return (a > b) ? a : b;
+}
+
 timestamp_t start_time, end_time;
+
+static void iov_free(iovec_t *iov) {
+    iovec_t *cur;
+    while(iov) {
+        cur = iov;
+        iov = iov->next;
+        free(cur);
+    }
+}
 
 void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     if (nfs_pkg) {
         printf("pkg_size = %d\n", pkg_size );
         nfs_pkg = false;
     }
-    iovec_t *iov;
     seL4_MessageInfo_t reply;
     dprintf(4, "ENDING SYSCALL\n", retval);
     dprintf(4, "[SYSEND] Returning %d\n", retval);
+    size_t message_length = umax(proc->cont.reply_length, 1);
     if (success) {
-        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+        reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, message_length);
     } else {
-        reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
+        reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, message_length);
     }
     seL4_SetMR(0, retval);
     seL4_SetTag(reply);
     assert(proc->cont.reply_cap != seL4_CapNull);
     seL4_Send(proc->cont.reply_cap, reply);
-    iov = proc->cont.iov;
-    while(iov) {
-        if (iov) {
-            proc->cont.iov = iov->next;
-        }
-        free(iov);
-        iov = proc->cont.iov;
-    }
+    iov_free(proc->cont.iov);
     memset(&proc->cont, 0, sizeof(cont_t));
     dprintf(4, "SYSCALL ENDED\n", retval);
 }
@@ -83,6 +89,30 @@ static bool check_region(sos_addrspace_t *as, client_vaddr page, iop_direction_t
 }
 
 /**
+ * Pack characters of the message into seL4_words
+ * @param msgdata message to be printed
+ * @param count length of the message
+ * @returns the number of characters encoded
+ */
+void ipc_write(int start, char* msgdata, size_t length) {
+    size_t mr_idx,i,j;
+    seL4_Word pack;
+    i = 0;
+    seL4_SetMR(start, length);
+    mr_idx = start + 1;
+    while(i < length) {
+        pack = 0;
+        j = sizeof(seL4_Word);
+        while (j > 0 && i < length) {
+            pack = pack | ((seL4_Word)msgdata[i] << ((--j)*8));
+            i++;
+        }
+        seL4_SetMR(mr_idx, pack);
+        mr_idx++;
+    }
+}
+
+/**
  * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
  * @param msgBuf starting point of buffer to store contents.  Must have at
  * least 4 chars available.
@@ -94,7 +124,9 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
     while (j > 0) {
         // Unpack data encoded 4-chars per word.
         *msgBuf = (char)(packed_data >> ((--j) * 8));
+        printf("character unpacked is %c:\n", *msgBuf);
         if (*msgBuf == 0) {
+            printf("unpack Encountered NULL\n");
             return length;
         }
         length++;
@@ -111,8 +143,10 @@ void ipc_read(int start, char *buf) {
        k += len;
        if (len < sizeof(seL4_Word)) break;
     }
-    if (k < MAX_FILE_PATH_LENGTH)
+    if (k < MAX_FILE_PATH_LENGTH) {
         buf[k] = 0;
+    }
+    printf("length extracted: %u\n", k);
 }
 
 
@@ -131,7 +165,7 @@ void iov_ensure_loaded(iovec_t* iov) {
     }
 }
 
-static iovec_t* iov_create(size_t start, client_vaddr vstart, size_t sz, iovec_t *iohead, iovec_t *iotail) {
+static iovec_t* iov_create(client_vaddr vstart, size_t sz, iovec_t *iohead, iovec_t *iotail) {
     printf("syscall iov malloc\n");
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
@@ -139,7 +173,6 @@ static iovec_t* iov_create(size_t start, client_vaddr vstart, size_t sz, iovec_t
         return NULL;
     }
     ionew->vstart = vstart;
-    ionew->start = start;
     ionew->sz = sz;
     ionew->next = NULL;
 
@@ -152,7 +185,6 @@ static iovec_t* iov_create(size_t start, client_vaddr vstart, size_t sz, iovec_t
 }
 
 iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
-    sos_vaddr saddr;
     bool vstart_okay;
     size_t remaining = nbyte;
     iovec_t *iohead = NULL;
@@ -164,7 +196,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
-        iohead = iov_create(saddr, buf, 0, NULL, NULL);
+        iohead = iov_create(buf, 0, NULL, NULL);
         printf("Created iov\n");
         return iohead;
     }
@@ -178,7 +210,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
             return NULL;
         }
         dprintf(1, "cbuf_to_iov: delta=%d\n", buf_delta);
-        iohead = iov_create(saddr, buf, buf_delta, iohead, iotail);
+        iohead = iov_create(buf, buf_delta, iohead, iotail);
         if (iotail == NULL) iotail = iohead;
         else iotail = iotail->next;
 
@@ -199,7 +231,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
     return iohead;
 }
 
-static io_device_t* device_handler_str(const char* filename) {
+io_device_t* device_handler_str(const char* filename) {
     if (strcmp(filename, "console") == 0) {
         return &serial_io;
     } else {
@@ -218,6 +250,8 @@ int sos__sys_open(void) {
     const char *path = current_process()->cont.path;
     fmode_t mode = current_process()->cont.file_mode;
     io_device_t *dev = device_handler_str(path);
+    // TODO: Ensure all arguments are configured (for this and all other
+    // syscalls)
     assert(dev);
     return dev->open(path, mode);
 }
@@ -263,21 +297,11 @@ int sos__sys_write(void) {
 }
 
 int sos__sys_stat(void) {
-    char *path = current_process()->cont.path;
-    client_vaddr buf = current_process()->cont.client_addr;
-    iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
-    if (iov == NULL || path == NULL) {
-        // TODO: Kill bad client
-        assert(!"illegal buf addr");
-        return EINVAL;
-    }
-
-    return nfs_io.stat(path, iov);
+    return nfs_io.stat();
 }
 
 int sos__sys_getdirent(void) {
-    int pos = current_process()->cont.position_arg;
-    return nfs_io.getdirent(pos, current_process()->cont.iov);
+    return nfs_io.getdirent();
 }
 
 /**

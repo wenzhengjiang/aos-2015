@@ -55,7 +55,6 @@ typedef struct address_space {
 
 typedef struct iovec {
     client_vaddr vstart;
-    sos_vaddr start;
     size_t sz;
     struct iovec *next;
 } iovec_t;
@@ -71,7 +70,6 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk);
 bool is_referenced(sos_addrspace_t *as, client_vaddr vaddr);
 bool as_page_exists(sos_addrspace_t *as, client_vaddr vaddr);
 int iov_read(iovec_t *, char* buf, int count);
-void iov_free(iovec_t *);
 void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
 pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr);
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr);

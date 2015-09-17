@@ -29,11 +29,17 @@ io_device_t nfs_io = {
     .getdirent = sos_nfs_readdir
 };
 
+static inline unsigned CONST umin(unsigned a, unsigned b)
+{
+    return (a < b) ? a : b;
+}
+
 /* FILE OPENING */
 
 static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
+    callback_done = false;
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
@@ -58,6 +64,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
 static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
+    callback_done = false;
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
     of_entry_t *of = fd_lookup(proc, fd);
@@ -72,8 +79,8 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
-        dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.filename, proc->cont.fd);
-        nfs_create(&mnt_point, proc->cont.filename, &default_attr, sos_nfs_create_callback, proc->pid);
+        dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.path, proc->cont.fd);
+        nfs_create(&mnt_point, proc->cont.path, &default_attr, sos_nfs_create_callback, proc->pid);
         return;
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
@@ -90,9 +97,6 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
 
 int sos_nfs_open(const char* filename, fmode_t mode) {
     sos_proc_t *proc = current_process();
-    int fd = fd_create(proc->fd_table, NULL,  &nfs_io, mode);
-    proc->cont.fd = fd;
-    proc->cont.filename = filename;
     pid_t pid = current_process()->pid;
     dprintf(2, "sos_nfs_open %s %d\n", filename, proc->cont.fd);
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
@@ -172,7 +176,6 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         proc->cont.iov = iov->next;
         free(iov);
     } else {
-        iov->start += count;
         iov->vstart += count;
         iov->sz -= count;
     }
@@ -214,9 +217,11 @@ static void prstat(sos_stat_t sbuf) {
 }
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
+    callback_done = false;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        printf("NFS failed\n");
         return;
     }
     sos_stat_t sos_attr;
@@ -225,30 +230,37 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
     sos_attr.st_size = fattr->size;
     sos_attr.st_ctime = (long)fattr->ctime.seconds;
     sos_attr.st_atime = (long)fattr->atime.seconds;
-    iov_read(proc->cont.iov, (char*)(&sos_attr), sizeof(sos_stat_t));
+    ipc_write(1, (char*)&sos_attr, sizeof(sos_stat_t));
+    proc->cont.reply_length = 2 + ((sizeof(sos_stat_t) + sizeof(seL4_Word) - 1) >> 2);
     prstat(sos_attr);
     syscall_end_continuation(proc, status, true);
 }
 
 static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
                                     fhandle_t* fh, fattr_t* fattr) {
+    callback_done = false;
     pid_t pid = current_process()->pid;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        printf("Did not find file\n");
         return;
     }
     nfs_getattr(fh, sos_nfs_getattr_callback, (unsigned)pid);
 }
 
-int sos_nfs_getattr(char* filename, iovec_t* iov) {
-    sos_proc_t *proc =current_process();
+int sos_nfs_getattr(void) {
+    sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
-    proc->cont.iov = iov;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
-    return nfs_lookup(&mnt_point, filename, sos_nfs_lookup_for_attr,
-                      (unsigned)pid);
+    printf("filename: %s\n", current_process()->cont.path);
+    int err = nfs_lookup(&mnt_point, current_process()->cont.path, sos_nfs_lookup_for_attr,
+                       (unsigned)pid);
+    if (err) {
+        printf("NFS stat said: %d\n", err);
+    }
+    return err;
 }
 
 /* READ DIRECTORY */
@@ -257,41 +269,47 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     sos_proc_t *proc = process_lookup(token);
+    printf("readdir is finishing\n");
     if (status != NFS_OK) {
+        printf("not okay\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
-    if (proc->cont.target <= 0) {
+    if (proc->cont.position_arg <= 0) {
+        printf("bad target\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
-    dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.target, num_files);
-    if (proc->cont.target <= proc->cont.counter + num_files) {
-        char *file = file_names[proc->cont.target - proc->cont.counter - 1];
-        iovec_t *iov = proc->cont.iov;
-        iov_read(iov, file, strlen(file)+1);
-        syscall_end_continuation(proc, strlen(file)+1, true);
+    dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.position_arg, num_files);
+    if (proc->cont.position_arg <= proc->cont.counter + num_files) {
+        printf("readdir is happy and found\n");
+        char *file = file_names[proc->cont.position_arg - proc->cont.counter - 1];
+        printf("readdir Found: %s, now writing ipc of %u bytes\n", file, umin(strlen(file) + 1, proc->cont.length_arg));
+        size_t str_len = umin(strlen(file) + 1, proc->cont.length_arg);
+        ipc_write(1, file, str_len);
+        proc->cont.reply_length = 2 + ((str_len + sizeof(seL4_Word) - 1) >> 2);
+        syscall_end_continuation(proc, strlen(file) + 1, true);
         return;
     }
     proc->cont.counter += num_files;
+
     if (nfscookie == 0) {
+        printf("readdir is happy not found\n");
         syscall_end_continuation(proc, 0, true);
         return;
     }
-    if (nfs_readdir(&mnt_point, nfscookie, nfs_readdir_callback,
-                    (unsigned)proc->pid) != RPC_OK) {;
-        syscall_end_continuation(proc, SOS_NFS_ERR, false);
-        return;
-    }
-    return;
+    current_process()->cont.cookie = nfscookie;
+    callback_done = true;
 }
 
 int sos_nfs_readdir(void) {
     pid_t pid = current_process()->pid;
-    int err = nfs_readdir(&mnt_point, 0, nfs_readdir_callback, (unsigned)pid);
-    
+    if (current_process()->cont.length_arg == 0) {
+        return 1;
+    }
+    int err = nfs_readdir(&mnt_point, current_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
     if (err < 0) {
-        return err;
+        return -err;
     }
     return 0;
 }

@@ -12,8 +12,8 @@ typedef struct io_device {
     int (*close)(int fd);
     int (*read)(iovec_t*, int fd, int count);
     int (*write)(iovec_t*, int fd, int count);
-    int (*stat)(char*, iovec_t*);
-    int (*getdirent)(int, iovec_t*);
+    int (*stat)(void);
+    int (*getdirent)(void);
 } io_device_t;
 
 typedef struct open_file_entry {
