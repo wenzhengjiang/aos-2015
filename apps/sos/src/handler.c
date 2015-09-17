@@ -131,9 +131,17 @@ static int open_handler (void) {
 
 static int read_handler (void) {
     dprintf(4, "SYS READ\n");
+    client_vaddr buf = seL4_GetMR(2);
+    size_t nbyte = (size_t)seL4_GetMR(3);
     current_process()->cont.fd = (int)seL4_GetMR(1);
-    current_process()->cont.client_addr = seL4_GetMR(2);
-    current_process()->cont.length_arg = (size_t)seL4_GetMR(3);
+    current_process()->cont.client_addr = buf;
+    current_process()->cont.length_arg = nbyte;
+    current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
+    if (current_process()->cont.iov == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
     return 0;
 }
 
@@ -155,9 +163,17 @@ static int write_handler (void) {
 
 static int getdirent_handler (void) {
     dprintf(4, "SYS GETDIRENT\n");
-    current_process()->cont.position_arg = (int)seL4_GetMR(1);
-    current_process()->cont.client_addr = (client_vaddr)seL4_GetMR(2);
-    current_process()->cont.length_arg = seL4_GetMR(3);
+    client_vaddr name = (client_vaddr)seL4_GetMR(2);
+    size_t nbyte = (size_t)seL4_GetMR(3);
+    current_process()->cont.position_arg = (int)seL4_GetMR(1) + 1;
+    current_process()->cont.client_addr = name;
+    current_process()->cont.length_arg = nbyte;
+    current_process()->cont.iov = cbuf_to_iov(name, nbyte, WRITE);
+    if (current_process()->cont.iov == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
     return 0;
 }
 

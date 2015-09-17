@@ -9,7 +9,6 @@
 #include <sel4/types.h>
 #include <assert.h>
 #include <string.h>
-#include <sync/mutex.h>
 #include <stdlib.h>
 
 #define verbose 5
@@ -62,7 +61,6 @@ typedef struct callback callback_t;
 
 static tick_callback_t tick_callbacks[MAX_CALLBACK_ID+1];
 static callback_t callback_arr[MAX_CALLBACK_ID+1];
-static sync_mutex_t callback_m;
 static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
 
 static timestamp_t g_cur_time, next_timeout;
@@ -139,10 +137,6 @@ static void update_timeout() {
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
-    if (!(callback_m = sync_create_mutex())) {
-        printf("FAILING\n");
-        return CLOCK_R_FAIL;
-    }
     if (gpt_clock_addr == NULL) {
         gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(gpt_register_t));
         _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
@@ -186,7 +180,6 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         WARN("timer hasn't been initialised \n");
         return 0;
     }
-    sync_acquire(callback_m);
     callback_t *cb = NULL;
     timestamp_t cur = time_stamp();
 
@@ -203,7 +196,6 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
         }
     }
     update_timeout();
-    sync_release(callback_m);
     if (cb) return cb->id;
     else return 0;
 }
@@ -216,10 +208,9 @@ int remove_timer(uint32_t id) {
     if (!(gpt_reg->cr & GPT_CR_EN)) {
         return CLOCK_R_UINT;
     }
-    sync_acquire(callback_m);
     callback_arr[id].valid = false;
+
     update_timeout();
-    sync_release(callback_m);
     return CLOCK_R_OK;
 }
 
@@ -300,7 +291,6 @@ timestamp_t time_stamp(void) {
  * If called from within timer_interrupt, timer_interrupt will clean up later.
  */
 int stop_timer(void) {
-    sync_destroy_mutex(callback_m);
     gpt_reg->cr &= ~GPT_CR_EN;
     if (!handling_interrupt) {
         int err = seL4_IRQHandler_Clear(_timer_cap);

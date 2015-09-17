@@ -57,7 +57,10 @@ static inline void try_send_buffer(int i) {
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
         int n = min(buflen - pos, v->sz);
-        memcpy((char*)v->start, buf+pos, n);
+        // TODO: Work out how to handle iov_ensure here 
+        sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, v->vstart);
+        assert(dst);
+        memcpy((char*)dst, buf+pos, n);
         pos += n;
     }
     printf("end continuation\n");
@@ -124,7 +127,9 @@ int sos_serial_write(iovec_t* vec, int fd, int count) {
     int sent = 0;
     for (iovec_t *v = vec; v ; v = v->next) {
         assert(vec->sz);
-        sent += serial_send(serial, (char*)v->start, v->sz);
+        sos_vaddr src = as_lookup_sos_vaddr(current_process()->vspace, v->vstart);
+        assert(src);
+        sent += serial_send(serial, (char*)src, v->sz);
     }
     syscall_end_continuation(current_process(), sent, true);
     return 0;

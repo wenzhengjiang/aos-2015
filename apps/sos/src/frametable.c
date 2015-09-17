@@ -27,7 +27,8 @@
 /* Maximum number of frames which will fit in our region */
 #define SMALL_FT
 #ifdef SMALL_FT
-  #define MAX_FRAMES 1800
+//  TODO: 1750 causes interesting breakage
+  #define MAX_FRAMES 1755
 #else
   #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 #endif
@@ -78,7 +79,6 @@ seL4_Word frame_paddr(seL4_Word vaddr) {
  */
 int sos_map_frame(seL4_Word vaddr) {
     seL4_CPtr cap = frame_cap(vaddr);
-
     assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     frame_entry_t *cur_frame = &frame_table[idx];

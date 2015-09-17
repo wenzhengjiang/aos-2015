@@ -123,29 +123,31 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     if ((int)iov->sz != count) {
         dprintf(-1, "iovsz = %d, count = %d\n", iov->sz, count);
     }
-    memcpy((char*)iov->start, data, (size_t)count);
+
+    //TODO: Fix start -> vstart
+    sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
+    assert(dst);
+
+    memcpy((char*)dst, data, (size_t)count);
     proc->cont.iov = iov->next;
     free(iov);
     if (proc->cont.iov == NULL) {
         syscall_end_continuation(proc, proc->cont.counter, true);
-        return ;
-    }
-    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
-    int err = nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz,
-                       sos_nfs_read_callback, (unsigned)proc->pid);
-    if (err != RPC_OK) {
-        syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
+    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->vstart, of->offset);
+    callback_done = true;
 }
 
+// TODO: Tidy up these params
 int sos_nfs_read(iovec_t* vec, int fd, int count) {
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
-    proc->cont.fd = fd;
-    proc->cont.iov = vec;
     of_entry_t *of = fd_lookup(current_process(), fd);
-    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->start, of->offset);
+
+    iov_ensure_loaded(proc->cont.iov);
+
+    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->vstart, of->offset);
     return nfs_read(of->fhandle, of->offset, proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
@@ -186,8 +188,6 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     dprintf(2, "[WRITE] Using %x for fd %d\n", of, fd);
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
-    proc->cont.iov = iov;
-    proc->cont.fd = fd;
 
     iov_ensure_loaded(proc->cont.iov);
 
@@ -286,12 +286,10 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     return;
 }
 
-int sos_nfs_readdir(int stop_index, iovec_t *iov) {
-    sos_proc_t *proc = current_process();
+int sos_nfs_readdir(void) {
     pid_t pid = current_process()->pid;
-    proc->cont.target = stop_index + 1;
-    proc->cont.iov = iov;
     int err = nfs_readdir(&mnt_point, 0, nfs_readdir_callback, (unsigned)pid);
+    
     if (err < 0) {
         return err;
     }

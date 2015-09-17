@@ -82,29 +82,6 @@ static bool check_region(sos_addrspace_t *as, client_vaddr page, iop_direction_t
     return true;
 }
 
-static sos_vaddr
-check_page(sos_addrspace_t *as, client_vaddr buf, iop_direction_t dir) {
-    sos_region_t* reg = as_vaddr_region(as, buf);
-    if (!reg) {
-        return 0;
-    }
-    // Ensure client process has correct permissions to the page
-    if (!(reg->rights & seL4_CanWrite) && dir == WRITE) {
-        return 0;
-    } else if (!(reg->rights & seL4_CanRead) && dir == READ) {
-        return 0;
-    }
-
-    // Ensure client process has the page mapped
-    sos_vaddr saddr = as_lookup_sos_vaddr(as, buf);
-    if (saddr == 0) {
-        process_create_page(buf, reg->rights);
-    }
-    saddr = as_lookup_sos_vaddr(as, buf);
-
-    return saddr;
-}
-
 /**
  * Unpack characters from seL4_Words.  First char is most sig. 8 bits.
  * @param msgBuf starting point of buffer to store contents.  Must have at
@@ -137,6 +114,8 @@ void ipc_read(int start, char *buf) {
     if (k < MAX_FILE_PATH_LENGTH)
         buf[k] = 0;
 }
+
+
 
 void iov_ensure_loaded(iovec_t* iov) {
     sos_addrspace_t *as = current_process()->vspace;
@@ -180,11 +159,6 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
     iovec_t *iotail = NULL;
     sos_addrspace_t* as = current_as();
     if (remaining == 0) {
-        saddr = check_page(as, buf, dir);
-        if (saddr == 0) {
-            ERR("Client page lookup %x failed\n", buf);
-            return NULL;
-        }
         vstart_okay = check_region(as, buf, dir);
         if (vstart_okay == false) {
             ERR("Client page lookup %x failed\n", buf);
@@ -198,11 +172,6 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
     while(remaining) {
         size_t offset = ((unsigned)buf % PAGE_SIZE);
         size_t buf_delta = umin((PAGE_SIZE - offset), remaining);
-        saddr = check_page(as, buf, dir);
-        if (saddr == 0) {
-            ERR("Client page lookup %x failed\n", buf);
-            return NULL;
-        }
         vstart_okay = check_region(as, buf, dir);
         if (vstart_okay == false) {
             ERR("Client page lookup %x failed\n", buf);
@@ -255,7 +224,6 @@ int sos__sys_open(void) {
 
 int sos__sys_read(void){
     int file = current_process()->cont.fd;
-    client_vaddr buf = current_process()->cont.client_addr;
     size_t nbyte = current_process()->cont.length_arg;
     if (nbyte == 0) {
         syscall_end_continuation(current_process(), 0, true);
@@ -269,14 +237,8 @@ int sos__sys_read(void){
         return EPERM;
     }
     io_device_t *dev = device_handler_fd(file);
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, WRITE);
-    if (iov == NULL) {
-        // TODO: Kill bad client
-        assert(!"illegal buf addr");
-        return EINVAL;
-    }
     assert(dev);
-    return dev->read(iov, file, nbyte);
+    return dev->read(current_process()->cont.iov, file, nbyte);
 }
 
 int sos__sys_write(void) {
@@ -315,15 +277,7 @@ int sos__sys_stat(void) {
 
 int sos__sys_getdirent(void) {
     int pos = current_process()->cont.position_arg;
-    client_vaddr name = current_process()->cont.client_addr;
-    size_t nbyte = current_process()->cont.length_arg;
-    iovec_t *iov = cbuf_to_iov(name, nbyte, WRITE);
-    if (iov == NULL) {
-        // TODO: Kill bad client
-        assert(!"illegal buf addr");
-        return EINVAL;
-    }
-    return nfs_io.getdirent(pos, iov);
+    return nfs_io.getdirent(pos, current_process()->cont.iov);
 }
 
 /**

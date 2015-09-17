@@ -80,6 +80,9 @@ static int cp(int argc, char **argv) {
     int fd, fd_out;
     char *file1, *file2;
     char buf[BUF_SIZ];
+    size_t buf_size = 1024*100;
+    char *really_big_buf = malloc(buf_size);
+    assert(really_big_buf);
     int num_read, num_written = 0;
     struct timeval start_time, end_time;
 
@@ -95,11 +98,11 @@ static int cp(int argc, char **argv) {
     fd_out = open(file2, O_WRONLY);
 
     assert(fd >= 0);
-
+    int offset = 0 ;
     printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
-    while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
+    while ((num_read = read(fd, really_big_buf, buf_size)) > 0) {
         gettimeofday(&start_time, NULL);
-        num_written = write(fd_out, buf, num_read);
+        num_written = write(fd_out, really_big_buf, num_read);
         gettimeofday(&end_time, NULL);
         uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
         printf("%llu ", elapsed);

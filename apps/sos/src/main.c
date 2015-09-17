@@ -111,6 +111,12 @@ void syscall_loop(seL4_CPtr ep) {
         }
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
+            printf("badge: %x\n", badge);
+            if (badge &  IRQ_BADGE_CLOCK) {
+                printf("Timer interrupt\n");
+                timer_interrupt();
+                printf("Timer interrupt finished\n");
+            }
             if (badge & IRQ_BADGE_NETWORK) {
                 callback_done = false;
                 network_irq();
@@ -120,11 +126,6 @@ void syscall_loop(seL4_CPtr ep) {
                     pid = 0;
                 }
                 continue;
-            }
-            if (badge &  IRQ_BADGE_CLOCK) {
-                printf("Timer interrupt\n");
-                timer_interrupt();
-                printf("Timer interrupt finished\n");
             }
         } else if(label == seL4_VMFault){
             /* Page fault */

@@ -17,6 +17,11 @@
 
 static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
     while(1) {
+        if(!as->repllist_head->valid) {
+            as->repllist_tail = as->repllist_head;
+            as->repllist_head = as->repllist_head->next;
+            continue;
+        }
         if(as->repllist_head->refd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
