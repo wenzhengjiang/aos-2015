@@ -120,7 +120,7 @@ static int timestamp_handler (void) {
     return 0;
 }
 
-static int open_handler (void) {
+static int open_setup (void) {
     dprintf(4, "SYS OPEN\n");
     current_process()->cont.file_mode = (fmode_t)seL4_GetMR(1);
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
@@ -133,7 +133,7 @@ static int open_handler (void) {
     return 0;
 }
 
-static int read_handler (void) {
+static int read_setup (void) {
     dprintf(4, "SYS READ\n");
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t)seL4_GetMR(3);
@@ -149,7 +149,7 @@ static int read_handler (void) {
     return 0;
 }
 
-static int write_handler (void) {
+static int write_setup (void) {
     dprintf(4, "SYS WRITE\n");
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t)seL4_GetMR(3);
@@ -165,7 +165,7 @@ static int write_handler (void) {
     return 0;
 }
 
-static int getdirent_handler (void) {
+static int getdirent_setup (void) {
     dprintf(4, "SYS GETDIRENT\n");
     client_vaddr name = (client_vaddr)seL4_GetMR(2);
     size_t nbyte = (size_t)seL4_GetMR(3);
@@ -175,7 +175,7 @@ static int getdirent_handler (void) {
     return 0;
 }
 
-static int stat_handler (void) {
+static int stat_setup (void) {
     current_process()->cont.client_addr = (client_vaddr)seL4_GetMR(1);
     dprintf(4, "SYS STAT\n");
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
@@ -212,19 +212,19 @@ void register_handlers(void) {
     handlers[SOS_SYSCALL_TIMESTAMP][HANDLER_SETUP] = NULL;
     handlers[SOS_SYSCALL_TIMESTAMP][HANDLER_EXEC] = timestamp_handler;
 
-    handlers[SOS_SYSCALL_OPEN][HANDLER_SETUP] = open_handler;
+    handlers[SOS_SYSCALL_OPEN][HANDLER_SETUP] = open_setup;
     handlers[SOS_SYSCALL_OPEN][HANDLER_EXEC] = sos__sys_open;
 
-    handlers[SOS_SYSCALL_READ][HANDLER_SETUP] = read_handler;
+    handlers[SOS_SYSCALL_READ][HANDLER_SETUP] = read_setup;
     handlers[SOS_SYSCALL_READ][HANDLER_EXEC] = sos__sys_read;
 
-    handlers[SOS_SYSCALL_WRITE][HANDLER_SETUP] = write_handler;
+    handlers[SOS_SYSCALL_WRITE][HANDLER_SETUP] = write_setup;
     handlers[SOS_SYSCALL_WRITE][HANDLER_EXEC] = sos__sys_write;
 
-    handlers[SOS_SYSCALL_GETDIRENT][HANDLER_SETUP] = getdirent_handler;
+    handlers[SOS_SYSCALL_GETDIRENT][HANDLER_SETUP] = getdirent_setup;
     handlers[SOS_SYSCALL_GETDIRENT][HANDLER_EXEC] = sos__sys_getdirent;
 
-    handlers[SOS_SYSCALL_STAT][HANDLER_SETUP] = stat_handler;
+    handlers[SOS_SYSCALL_STAT][HANDLER_SETUP] = stat_setup;
     handlers[SOS_SYSCALL_STAT][HANDLER_EXEC] = sos__sys_stat;
 
     handlers[SOS_SYSCALL_CLOSE][HANDLER_SETUP] = NULL;
@@ -241,12 +241,12 @@ void handle_syscall(seL4_Word syscall_number) {
         !current_process()->cont.handler_initiated) {
         ret = handlers[syscall_number][HANDLER_SETUP]();
         assert(ret >= 0);
+        current_process()->cont.handler_initiated = true;
         if (ret > 0) {
             reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)ret);
             send_back(reply);
         }
-        current_process()->cont.handler_initiated = true;
     }
     if (handlers[syscall_number][HANDLER_EXEC]) {
         ret = handlers[syscall_number][HANDLER_EXEC]();
