@@ -10,6 +10,7 @@
 #include <limits.h>
 #include "serial.h"
 #include "frametable.h"
+#include "page_replacement.h"
 #include "process.h"
 #include "file.h"
 #include "addrspace.h"
@@ -30,7 +31,6 @@ extern io_device_t nfs_io;
 
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
-typedef enum iop_direction {READ, WRITE, NONE} iop_direction_t;
 
 static inline unsigned CONST umin(unsigned a, unsigned b)
 {
@@ -66,6 +66,20 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     }
     memset(&proc->cont, 0, sizeof(cont_t));
     dprintf(4, "SYSCALL ENDED\n", retval);
+}
+
+static bool check_region(sos_addrspace_t *as, client_vaddr page, iop_direction_t dir) {
+    sos_region_t* reg = as_vaddr_region(as, page);
+    if (!reg) {
+        return false;
+    }
+    // Ensure client process has correct permissions to the page
+    if (!(reg->rights & seL4_CanWrite) && dir == WRITE) {
+        return false;
+    } else if (!(reg->rights & seL4_CanRead) && dir == READ) {
+        return false;
+    }
+    return true;
 }
 
 static sos_vaddr
@@ -124,13 +138,28 @@ void ipc_read(int start, char *buf) {
         buf[k] = 0;
 }
 
-static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t *iotail) {
+void iov_ensure_loaded(iovec_t* iov) {
+    sos_addrspace_t *as = current_process()->vspace;
+    printf("iov->vstart %x\n", iov->vstart);
+    sos_region_t *reg = as_vaddr_region(as, iov->vstart);
+    if (as_page_exists(as, iov->vstart)) {
+        if (swap_is_page_swapped(as, iov->vstart)) { // page is in disk
+            swap_replace_page(as, iov->vstart);
+        }
+    } else {
+        assert(reg);
+        process_create_page(iov->vstart, reg->rights);
+    }
+}
+
+static iovec_t* iov_create(size_t start, client_vaddr vstart, size_t sz, iovec_t *iohead, iovec_t *iotail) {
     printf("syscall iov malloc\n");
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
         return NULL;
     }
+    ionew->vstart = vstart;
     ionew->start = start;
     ionew->sz = sz;
     ionew->next = NULL;
@@ -143,8 +172,9 @@ static iovec_t* iov_create(size_t start, size_t sz, iovec_t *iohead, iovec_t *io
     }
 }
 
-static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
+iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
     sos_vaddr saddr;
+    bool vstart_okay;
     size_t remaining = nbyte;
     iovec_t *iohead = NULL;
     iovec_t *iotail = NULL;
@@ -155,7 +185,12 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
-        iohead = iov_create(saddr, 0, NULL, NULL);
+        vstart_okay = check_region(as, buf, dir);
+        if (vstart_okay == false) {
+            ERR("Client page lookup %x failed\n", buf);
+            return NULL;
+        }
+        iohead = iov_create(saddr, buf, 0, NULL, NULL);
         printf("Created iov\n");
         return iohead;
     }
@@ -168,8 +203,13 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
+        vstart_okay = check_region(as, buf, dir);
+        if (vstart_okay == false) {
+            ERR("Client page lookup %x failed\n", buf);
+            return NULL;
+        }
         dprintf(1, "cbuf_to_iov: delta=%d\n", buf_delta);
-        iohead = iov_create(saddr, buf_delta, iohead, iotail);
+        iohead = iov_create(saddr, buf, buf_delta, iohead, iotail);
         if (iotail == NULL) iotail = iohead;
         else iotail = iotail->next;
 
@@ -242,7 +282,6 @@ int sos__sys_read(void){
 int sos__sys_write(void) {
     printf("calling sos__sys_write\n");
     int file = current_process()->cont.fd;
-    client_vaddr buf = current_process()->cont.client_addr;
     size_t nbyte = current_process()->cont.length_arg;
     of_entry_t *of = fd_lookup(current_process(), file);
     if (of == NULL) {
@@ -256,16 +295,9 @@ int sos__sys_write(void) {
         return 0;
     }
     io_device_t *dev = device_handler_fd(file);
-    iovec_t *iov = cbuf_to_iov(buf, nbyte, READ);
-    if (iov == NULL) {
-        // TODO: Kill bad client
-        assert(!"illegal buf addr");
-        return EINVAL;
-    }
     assert(dev);
-    dprintf(0, "write nbytes %u ", nbyte);
     start_time = time_stamp();
-    return dev->write(iov, file, nbyte);
+    return dev->write(current_process()->cont.iov, file,nbyte);
 }
 
 int sos__sys_stat(void) {

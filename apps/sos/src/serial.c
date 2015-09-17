@@ -34,13 +34,17 @@ static size_t line_buflen[2];
 static int bid = 0; // current line buffer
 
 static int reader_pid;
-
+extern bool callback_done;
 static inline unsigned CONST min(unsigned a, unsigned b)
 {
     return (a < b) ? a : b;
 }
 
 static inline void try_send_buffer(int i) {
+    printf("TRY SEND BUF\n");
+    if (reader_pid == 0) {
+        return;
+    }
     sos_proc_t *proc = process_lookup(reader_pid);
     assert(proc);
     if (line_buflen[i] == 0 || proc->cont.reply_cap == seL4_CapNull)
@@ -49,12 +53,14 @@ static inline void try_send_buffer(int i) {
     char *buf = line_buf[i];
     int buflen = line_buflen[i];
     int pos = 0;
+    printf("checking iovs\n");
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
         int n = min(buflen - pos, v->sz);
         memcpy((char*)v->start, buf+pos, n);
         pos += n;
     }
+    printf("end continuation\n");
     // reply to client reader
     syscall_end_continuation(current_process(), pos, true);
     reader_pid = 0;
@@ -100,6 +106,7 @@ int sos_serial_open(const char* filename, fmode_t mode) {
 }
 
 int sos_serial_read(iovec_t* vec, int fd, int count) {
+    printf("Serial read\n");
     (void)count;
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
@@ -110,6 +117,7 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
 }
 
 int sos_serial_write(iovec_t* vec, int fd, int count) {
+    printf("Serial write\n");
     (void)fd;
     (void)count;
     assert(vec);

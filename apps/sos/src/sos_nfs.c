@@ -17,7 +17,7 @@
 #define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
-
+extern bool callback_done;
 #define SOS_NFS_ERR (-1)
 
 io_device_t nfs_io = {
@@ -104,6 +104,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
+    printf("READ\n");
     (void)fattr;
     sos_proc_t *proc;
     int fd;
@@ -155,12 +156,10 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
 
     sos_proc_t *proc = proc = process_lookup(token);
     int fd = proc->cont.fd;
-
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
-
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
     dprintf(1, "[WRITE] for %d bytes\n", count);
@@ -172,19 +171,14 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         free(iov);
     } else {
         iov->start += count;
+        iov->vstart += count;
         iov->sz -= count;
     }
     if (proc->cont.iov == NULL) {
-        dprintf(2, "wrote %d bytes.  now at offset: %u\n", count, of->offset);
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
-    } else {
-        iov = proc->cont.iov;
-        if (nfs_write(of->fhandle, of->offset, iov->sz, (const void*)iov->start, nfs_write_callback, (unsigned)proc->pid) != RPC_OK) {
-            syscall_end_continuation(proc, SOS_NFS_ERR, false);
-            return;
-        }
     }
+    callback_done = true;
 }
 
 int sos_nfs_write(iovec_t* iov, int fd, int count) {
@@ -194,9 +188,14 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     pid_t pid = proc->pid;
     proc->cont.iov = iov;
     proc->cont.fd = fd;
+
+    iov_ensure_loaded(proc->cont.iov);
+
+    sos_vaddr src = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
+    assert(src);
     dprintf(2, "Writing to offset: %u %d (%d)bytes\n", of->offset, count, iov->sz);
     int err = nfs_write(of->fhandle, of->offset, iov->sz,
-                        (const void*)iov->start, nfs_write_callback,
+                        (const void*)src, nfs_write_callback,
                         (unsigned)pid);
     dprintf(3, "Result from nfs write: %d\n", err);
     return 0;

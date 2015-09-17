@@ -139,9 +139,17 @@ static int read_handler (void) {
 
 static int write_handler (void) {
     dprintf(4, "SYS WRITE\n");
+    client_vaddr buf = seL4_GetMR(2);
+    size_t nbyte = (size_t)seL4_GetMR(3);
     current_process()->cont.fd = (int)seL4_GetMR(1);
-    current_process()->cont.client_addr = seL4_GetMR(2);
-    current_process()->cont.length_arg = (size_t)seL4_GetMR(3);
+    current_process()->cont.client_addr = buf;
+    current_process()->cont.length_arg = nbyte;
+    current_process()->cont.iov = cbuf_to_iov(buf, nbyte, READ);
+    if (current_process()->cont.iov == NULL) {
+        // TODO: Kill bad client
+        assert(!"illegal buf addr");
+        return EINVAL;
+    }
     return 0;
 }
 

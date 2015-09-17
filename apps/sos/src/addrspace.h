@@ -54,6 +54,7 @@ typedef struct address_space {
 } sos_addrspace_t;
 
 typedef struct iovec {
+    client_vaddr vstart;
     sos_vaddr start;
     size_t sz;
     struct iovec *next;
