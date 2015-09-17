@@ -8,9 +8,11 @@
 #include <stdbool.h>
 #include "addrspace.h"
 #include "file.h"
+#include <syscallno.h>
 
 #define TEST_PROCESS_NAME             CONFIG_SOS_STARTUP_APP
 
+// TODO: This should now be backed by a dedicated sel4 frame as is big
 typedef struct continuation {
     seL4_CPtr reply_cap;
     int fd;
@@ -22,15 +24,20 @@ typedef struct continuation {
     seL4_MessageInfo_t ipc_message;
     seL4_Word syscall_number;
     seL4_Word vm_fault_type;
-    seL4_Word vm_fault_addr;
+    seL4_Word client_addr;
     seL4_Word page_replacement_request;
     pte_t* page_replacement_victim;
+    size_t length_arg;
+    int position_arg;
+    fmode_t file_mode;
     sos_vaddr swap_page;
     size_t swap_file_offset;
     size_t swap_cnt;
     // Number of times a continuation has been started
     int syscall_loop_initiations;
+    bool handler_initiated;
     bool swap_status;
+    char path[MAX_FILE_PATH_LENGTH];
 } cont_t;
 
 typedef struct process {

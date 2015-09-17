@@ -10,17 +10,17 @@
 
 size_t sys_print(size_t num_args);
 
-int sos__sys_open(const char *path, fmode_t mode);
+int sos__sys_open(void);
 
-int sos__sys_read(int file, client_vaddr buf, size_t nbyte);
+int sos__sys_read(void);
 
-int sos__sys_write(int file, client_vaddr buf, size_t nbyte);
+int sos__sys_write(void);
 
-int sos__sys_stat(char *path, client_vaddr buf) ;
+int sos__sys_stat(void) ;
 
-int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte);
+int sos__sys_getdirent(void);
 
-int sos__sys_close(int fd);
+int sos__sys_close(void);
 
 void ipc_read(int start, char *buf);
 

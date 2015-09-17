@@ -138,6 +138,7 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         pos += nbytes;
         dst += nbytes;
         src += nbytes;
+        printf("page loaded\n");
     }
     return 0;
 }

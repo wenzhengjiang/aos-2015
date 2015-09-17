@@ -154,6 +154,7 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
  */
 static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_CapRights rights) {
     dprintf(0, "as_map_page");
+    printf("as page map starting\n");
     int err;
     unsigned pt_idx = PT_LOOKUP(vaddr);
 
@@ -179,6 +180,7 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
     as->pd[pd_idx][pt_idx]->debug = vaddr;
+    printf("as page mapped\n");
     return 0;
 }
 
@@ -214,6 +216,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     }
     as->repllist_tail = pt;
     pt->next = as->repllist_head;
+    printf("as page added\n");
     return 0;
 }
 

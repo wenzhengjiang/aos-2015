@@ -119,7 +119,6 @@ void syscall_loop(seL4_CPtr ep) {
                 timer_interrupt();
             }
         } else if(label == seL4_VMFault){
-
             /* Page fault */
             // Only print out debugging information before the first fault attempt
             if (!pid || !proc->cont.syscall_loop_initiations) {
@@ -129,12 +128,12 @@ void syscall_loop(seL4_CPtr ep) {
             }
             if (proc->cont.syscall_loop_initiations == 0) {
                 proc->cont.vm_fault_type = seL4_GetMR(3);
-                proc->cont.vm_fault_addr = seL4_GetMR(1);
+                proc->cont.client_addr = seL4_GetMR(1);
                 proc->cont.ipc_label = seL4_VMFault;
                 proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
             }
             proc->cont.syscall_loop_initiations++;
-            int err = sos_vm_fault(proc->cont.vm_fault_type, proc->cont.vm_fault_addr);
+            int err = sos_vm_fault(proc->cont.vm_fault_type, proc->cont.client_addr);
             if (err) {
                 dprintf(0, "vm_fault couldn't be handled, process is killed %d \n", err);
             } else {
@@ -148,8 +147,7 @@ void syscall_loop(seL4_CPtr ep) {
             }
             proc->cont.syscall_loop_initiations++;
             /* System call */
-            handle_syscall(badge, seL4_MessageInfo_get_length(proc->cont.ipc_message) - 1,
-                    proc->cont.syscall_number);
+            handle_syscall(proc->cont.syscall_number);
         }else{
             printf("Rootserver got an unknown message\n");
         }

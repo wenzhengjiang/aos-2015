@@ -204,13 +204,18 @@ static io_device_t* device_handler_fd(int fd) {
     return curproc->fd_table[fd]->io;
 }
 
-int sos__sys_open(const char *path, int mode) {
+int sos__sys_open(void) {
+    const char *path = current_process()->cont.path;
+    fmode_t mode = current_process()->cont.file_mode;
     io_device_t *dev = device_handler_str(path);
     assert(dev);
     return dev->open(path, mode);
 }
 
-int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
+int sos__sys_read(void){
+    int file = current_process()->cont.fd;
+    client_vaddr buf = current_process()->cont.client_addr;
+    size_t nbyte = current_process()->cont.length_arg;
     if (nbyte == 0) {
         syscall_end_continuation(current_process(), 0, true);
         return 0;
@@ -233,7 +238,10 @@ int sos__sys_read(int file, client_vaddr buf, size_t nbyte){
     return dev->read(iov, file, nbyte);
 }
 
-int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
+int sos__sys_write(void) {
+    int file = current_process()->cont.fd;
+    client_vaddr buf = current_process()->cont.client_addr;
+    size_t nbyte = current_process()->cont.length_arg;
     of_entry_t *of = fd_lookup(current_process(), file);
     if (of == NULL) {
         return 1;
@@ -258,7 +266,9 @@ int sos__sys_write(int file, client_vaddr buf, size_t nbyte) {
     return dev->write(iov, file, nbyte);
 }
 
-int sos__sys_stat(char *path, client_vaddr buf) {
+int sos__sys_stat(void) {
+    char *path = current_process()->cont.path;
+    client_vaddr buf = current_process()->cont.client_addr;
     iovec_t *iov = cbuf_to_iov(buf, sizeof(sos_stat_t), WRITE);
     if (iov == NULL || path == NULL) {
         // TODO: Kill bad client
@@ -269,7 +279,10 @@ int sos__sys_stat(char *path, client_vaddr buf) {
     return nfs_io.stat(path, iov);
 }
 
-int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
+int sos__sys_getdirent(void) {
+    int pos = current_process()->cont.position_arg;
+    client_vaddr name = current_process()->cont.client_addr;
+    size_t nbyte = current_process()->cont.length_arg;
     iovec_t *iov = cbuf_to_iov(name, nbyte, WRITE);
     if (iov == NULL) {
         // TODO: Kill bad client
@@ -283,7 +296,8 @@ int sos__sys_getdirent(int pos, client_vaddr name, size_t nbyte) {
  * Close an open file.
  * Should not block the caller.
  */
-int sos__sys_close(int file) {
+int sos__sys_close(void) {
+    int file = current_process()->cont.fd;
     if (fd_lookup(current_process(), file) == NULL) {
         return EINVAL;
     }
