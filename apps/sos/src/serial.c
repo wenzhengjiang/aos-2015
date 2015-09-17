@@ -33,8 +33,7 @@ static char line_buf[2][SERIAL_BUF_SIZE];
 static size_t line_buflen[2];
 static int bid = 0; // current line buffer
 
-static seL4_CPtr reader_cap;
-static iovec_t *reader_iov;
+static int reader_pid;
 
 static inline unsigned CONST min(unsigned a, unsigned b)
 {
@@ -42,26 +41,23 @@ static inline unsigned CONST min(unsigned a, unsigned b)
 }
 
 static inline void try_send_buffer(int i) {
-    if (line_buflen[i] == 0 || reader_cap == 0)
+    sos_proc_t *proc = process_lookup(reader_pid);
+    assert(proc);
+    if (line_buflen[i] == 0 || proc->cont.reply_cap == seL4_CapNull)
         return ;
-    assert(reader_iov);
+    assert(proc->cont.iov);
     char *buf = line_buf[i];
     int buflen = line_buflen[i];
     int pos = 0;
-    for (iovec_t *v = reader_iov; v && pos < buflen; v = v->next) {
+    for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
         int n = min(buflen - pos, v->sz);
         memcpy((char*)v->start, buf+pos, n);
         pos += n;
     }
     // reply to client reader
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
-    seL4_SetMR(0, pos);
-    seL4_Send(reader_cap, reply);
-    cspace_free_slot(cur_cspace, reader_cap);
-    reader_cap = 0;
-    iov_free(reader_iov);
-    reader_iov = NULL;
+    syscall_end_continuation(current_process(), pos, true);
+    reader_pid = 0;
 
     if (pos < buflen) {
         memmove(buf, buf + pos, buflen - pos);
@@ -108,10 +104,8 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
     cont_t *cont = &(proc->cont);
+    reader_pid = current_process()->pid;
     cont->iov = vec;
-    reader_iov = cont->iov;
-    reader_cap = cont->reply_cap;
-
     return 0;
 }
 
@@ -124,10 +118,7 @@ int sos_serial_write(iovec_t* vec, int fd, int count) {
         assert(vec->sz);
         sent += serial_send(serial, (char*)v->start, v->sz);
     }
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault, 0,0,1);
-    seL4_SetMR(0, (seL4_Word)sent);
-    seL4_SetTag(reply);
-    seL4_Send(current_process()->cont.reply_cap, reply);
+    syscall_end_continuation(current_process(), sent, true);
     return 0;
 }
 

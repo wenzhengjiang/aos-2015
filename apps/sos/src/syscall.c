@@ -156,6 +156,7 @@ static iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir)
             return NULL;
         }
         iohead = iov_create(saddr, 0, NULL, NULL);
+        printf("Created iov\n");
         return iohead;
     }
     dprintf(1, "cbuf_to_iov: %d bytes\n", nbyte);
@@ -239,6 +240,7 @@ int sos__sys_read(void){
 }
 
 int sos__sys_write(void) {
+    printf("calling sos__sys_write\n");
     int file = current_process()->cont.fd;
     client_vaddr buf = current_process()->cont.client_addr;
     size_t nbyte = current_process()->cont.length_arg;

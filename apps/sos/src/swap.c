@@ -50,6 +50,7 @@ static void
 sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     sos_proc_t *proc = current_process();
+    printf("nfs_create callback\n");
     if (status != NFS_OK) {
         dprintf(4, "failed to create swap file");
         proc->cont.swap_status = SWAP_FAILED;
@@ -75,8 +76,10 @@ static void sos_swap_open(void) {
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     pid_t pid = proc->pid;
+    printf("Calling nfs_create\n");
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr,
                 sos_nfs_swap_create_callback, pid)) {
+        printf("nfs_create failed\n");
         proc->cont.swap_status = SWAP_FAILED;
         longjmp(ipc_event_env, swap_generic_error);
     }
@@ -120,10 +123,14 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 swap_addr sos_swap_write(sos_vaddr page) {
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
+    printf("In SSW\n");
     if (!inited) {
+        printf("opening\n");
         sos_swap_open();
+        printf("jumping\n");
         longjmp(ipc_event_env, -1);
     }
+    printf("Is open\n");
     pid_t pid = proc->pid;
 
     proc->cont.swap_page = page;

@@ -107,7 +107,9 @@ sos_proc_t *current_process(void) {
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
     sos_addrspace_t* as = current_process()->vspace;
     sos_proc_t* proc = current_process();
+    printf("Creating page\n");
     if (!frame_available_frames()) {
+        printf("evicting\n");
         swap_evict_page(as);
     }
     printf("start to create page\n");
@@ -118,7 +120,6 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
             assert(!"Victim has no swap address!");
         }
     }
-   // printf("as_create_page\n");
     as_create_page(as, vaddr, rights);
 }
 
