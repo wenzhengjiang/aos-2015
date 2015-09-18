@@ -106,15 +106,12 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         seL4_Word vpage, kvpage;
         unsigned long kdst;
         int nbytes;
-        printf("loading next page...\n");
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
-        printf("vpage: %x, kdst: %x", vpage, kdst);
         /* First we need to create a frame */
         process_create_page(vpage, permissions);
 
         kdst   = as_lookup_sos_vaddr(as, dst);
-        printf("getting frame cap...\n");
         sos_cap = frame_cap(kdst);
         assert(sos_cap != seL4_CapNull);
         /* Now copy our data into the destination vspace. */
@@ -129,7 +126,6 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         pos += nbytes;
         dst += nbytes;
         src += nbytes;
-        printf("page loaded\n");
     }
     return 0;
 }

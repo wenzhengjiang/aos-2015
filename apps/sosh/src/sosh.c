@@ -83,6 +83,8 @@ static int cp(int argc, char **argv) {
     size_t buf_size = 1024*100;
     char *really_big_buf = malloc(buf_size);
     assert(really_big_buf);
+    memset(really_big_buf, 0, buf_size);
+
     int num_read, num_written = 0;
     struct timeval start_time, end_time;
 

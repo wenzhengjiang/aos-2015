@@ -13,7 +13,7 @@
 #include "frametable.h"
 #include "swap.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -27,8 +27,7 @@
 /* Maximum number of frames which will fit in our region */
 #define SMALL_FT
 #ifdef SMALL_FT
-//  TODO: 1750 causes interesting breakage
-  #define MAX_FRAMES 1755
+  #define MAX_FRAMES 1600
 #else
   #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 #endif

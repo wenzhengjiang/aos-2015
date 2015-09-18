@@ -17,6 +17,7 @@
 
 static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
     while(1) {
+        dprintf(4, "[PRCLOCK] Tick\n");
         if(!as->repllist_head->valid) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
@@ -52,7 +53,9 @@ int swap_evict_page(sos_addrspace_t *as) {
         longjmp(ipc_event_env, -1);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
-        memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
+        dprintf(4, "[PR] Evicted. Tidying up.\n");
+        //memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
+        assert(!proc->cont.page_replacement_victim->refd);
         proc->cont.page_replacement_victim->valid = false;
         return 0;
     } else {

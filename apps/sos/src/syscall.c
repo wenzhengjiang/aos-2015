@@ -20,7 +20,7 @@
 #include <syscallno.h>
 #include <clock/clock.h>
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -124,9 +124,7 @@ static int unpack_word(char* msgBuf, seL4_Word packed_data) {
     while (j > 0) {
         // Unpack data encoded 4-chars per word.
         *msgBuf = (char)(packed_data >> ((--j) * 8));
-        printf("character unpacked is %c:\n", *msgBuf);
         if (*msgBuf == 0) {
-            printf("unpack Encountered NULL\n");
             return length;
         }
         length++;
@@ -146,14 +144,12 @@ void ipc_read(int start, char *buf) {
     if (k < MAX_FILE_PATH_LENGTH) {
         buf[k] = 0;
     }
-    printf("length extracted: %u\n", k);
 }
 
 
 
 void iov_ensure_loaded(iovec_t* iov) {
     sos_addrspace_t *as = current_process()->vspace;
-    printf("iov->vstart %x\n", iov->vstart);
     sos_region_t *reg = as_vaddr_region(as, iov->vstart);
     if (as_page_exists(as, iov->vstart)) {
         if (swap_is_page_swapped(as, iov->vstart)) { // page is in disk
@@ -166,7 +162,6 @@ void iov_ensure_loaded(iovec_t* iov) {
 }
 
 static iovec_t* iov_create(client_vaddr vstart, size_t sz, iovec_t *iohead, iovec_t *iotail) {
-    printf("syscall iov malloc\n");
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -197,7 +192,6 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
             return NULL;
         }
         iohead = iov_create(buf, 0, NULL, NULL);
-        printf("Created iov\n");
         return iohead;
     }
     dprintf(1, "cbuf_to_iov: %d bytes\n", nbyte);
@@ -276,7 +270,6 @@ int sos__sys_read(void){
 }
 
 int sos__sys_write(void) {
-    printf("calling sos__sys_write\n");
     int file = current_process()->cont.fd;
     size_t nbyte = current_process()->cont.length_arg;
     of_entry_t *of = fd_lookup(current_process(), file);

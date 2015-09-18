@@ -19,7 +19,7 @@
 #define HANDLER_EXEC   (1)
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -62,6 +62,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
+            printf("referencing page: %x\n", faultaddr);
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {
@@ -73,11 +74,9 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
 
 inline static void send_back(seL4_MessageInfo_t reply) {
     seL4_CPtr reply_cap = current_process()->cont.reply_cap;
-    printf("current_process()->cont.reply_cap: %u\n", current_process()->cont.reply_cap);
     assert(reply_cap != seL4_CapNull);
     seL4_SetTag(reply);
     seL4_Send(reply_cap, reply);
-    printf("current_process()->cont.reply_cap: %u\n", current_process()->cont.reply_cap);
     cspace_free_slot(cur_cspace, reply_cap);
     current_process()->cont = empty_cont;
 }
@@ -180,8 +179,6 @@ static int stat_setup (void) {
     dprintf(4, "SYS STAT\n");
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
     ipc_read(STAT_MESSAGE_START, current_process()->cont.path);
-    printf("current_process()->cont.path: %s, %u", current_process()->cont.path,seL4_GetMR(STAT_MESSAGE_START));
-    printf("Setup complete\n");
     return 0;
 }
 
@@ -236,7 +233,6 @@ void handle_syscall(seL4_Word syscall_number) {
     seL4_MessageInfo_t reply;
     int ret;
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
-    printf("syscallno: %d\n", syscall_number);
     if (handlers[syscall_number][HANDLER_SETUP] != NULL &&
         !current_process()->cont.handler_initiated) {
         ret = handlers[syscall_number][HANDLER_SETUP]();
@@ -250,14 +246,12 @@ void handle_syscall(seL4_Word syscall_number) {
     }
     if (handlers[syscall_number][HANDLER_EXEC]) {
         ret = handlers[syscall_number][HANDLER_EXEC]();
-        printf("Handler complete\n");
         assert(ret >= 0);
         if (ret > 0) {
             reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)ret);
             send_back(reply);
         }
-        printf("Syscall complete\n");
     } else {
         printf("Unknown syscall %d\n", syscall_number);
     }

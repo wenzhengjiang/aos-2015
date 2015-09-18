@@ -12,7 +12,7 @@
 #include "network.h"
 #include "syscall.h"
 
-#define verbose 1
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 

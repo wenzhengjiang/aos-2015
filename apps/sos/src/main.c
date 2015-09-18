@@ -47,7 +47,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -89,12 +89,12 @@ void syscall_loop(seL4_CPtr ep) {
     register_handlers();
     int pid = setjmp(ipc_event_env);
     while (1) {
+        dprintf(4, "[MAIN] Restart syscall loop\n");
         seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
-        printf("Re-entering syscall loop\n");
         if (pid > 0) {
-            printf("PID is set\n");
+            dprintf(4, "[MAIN] Applying continuation\n");
             // m7 TODO: Need to update the current process
             proc = process_lookup(pid);
             //message = proc->cont.ipc_message;
@@ -103,7 +103,7 @@ void syscall_loop(seL4_CPtr ep) {
             assert(!"SOME KIND OF ERROR\n");
             continue;
         } else {
-            printf("New continuation\n");
+            dprintf(4, "[MAIN] New continuation\n");
             proc = current_process();
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
@@ -111,14 +111,13 @@ void syscall_loop(seL4_CPtr ep) {
         }
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
-            printf("badge: %x\n", badge);
             if (badge &  IRQ_BADGE_CLOCK) {
-                printf("Timer interrupt\n");
+                dprintf(4, "[MAIN] Starting timer interrupt\n");
                 timer_interrupt();
-                printf("Timer interrupt finished\n");
             }
             if (badge & IRQ_BADGE_NETWORK) {
                 callback_done = false;
+                dprintf(4, "[MAIN] Starting network interrupt\n");
                 network_irq();
                 if(callback_done) {
                     pid = 1;
@@ -149,12 +148,13 @@ void syscall_loop(seL4_CPtr ep) {
                 syscall_end_continuation(proc, 0, true);
             }
         } else if(label == seL4_NoFault) {
-            printf("SYSCALL\n");
-            printf("proc->cont.syscall_loop_initiations: %d\n", proc->cont.syscall_loop_initiations);
             if (proc->cont.syscall_loop_initiations == 0) {
+                dprintf(4, "[MAIN] Starting syscall\n");
                 proc->cont.syscall_number = seL4_GetMR(0);
                 proc->cont.reply_cap = cspace_save_reply_cap(cur_cspace);
                 proc->cont.ipc_label = label;
+            } else {
+                dprintf(4, "[MAIN] Restarting syscall %d\n", proc->cont.syscall_loop_initiations);
             }
             proc->cont.syscall_loop_initiations++;
             /* System call */

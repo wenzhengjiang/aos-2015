@@ -14,7 +14,7 @@
 #include "syscall.h"
 #include "addrspace.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 extern bool callback_done;
@@ -108,7 +108,6 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
-    printf("READ\n");
     (void)fattr;
     sos_proc_t *proc;
     int fd;
@@ -265,7 +264,6 @@ int sos_nfs_getattr(void) {
     pid_t pid = proc->pid;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
-    printf("filename: %s\n", current_process()->cont.path);
     int err = nfs_lookup(&mnt_point, current_process()->cont.path, sos_nfs_lookup_for_attr,
                        (unsigned)pid);
     if (err) {
@@ -280,22 +278,17 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     sos_proc_t *proc = process_lookup(token);
-    printf("readdir is finishing\n");
     if (status != NFS_OK) {
-        printf("not okay\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
     if (proc->cont.position_arg <= 0) {
-        printf("bad target\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
     dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.position_arg, num_files);
     if (proc->cont.position_arg <= proc->cont.counter + num_files) {
-        printf("readdir is happy and found\n");
         char *file = file_names[proc->cont.position_arg - proc->cont.counter - 1];
-        printf("readdir Found: %s, now writing ipc of %u bytes\n", file, umin(strlen(file) + 1, proc->cont.length_arg));
         size_t str_len = umin(strlen(file) + 1, proc->cont.length_arg);
         ipc_write(1, file, str_len);
         proc->cont.reply_length = 2 + ((str_len + sizeof(seL4_Word) - 1) >> 2);
@@ -305,7 +298,6 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     proc->cont.counter += num_files;
 
     if (nfscookie == 0) {
-        printf("readdir is happy not found\n");
         syscall_end_continuation(proc, 0, true);
         return;
     }
