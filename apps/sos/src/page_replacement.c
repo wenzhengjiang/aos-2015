@@ -40,22 +40,19 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
 int swap_evict_page(sos_addrspace_t *as) {
     sos_proc_t *proc = current_process();
     pte_t *victim;
-    printf("Starting eviction\n");
+    printf("STARTING EVICTION\n");
     if (!proc->cont.page_replacement_victim) {
-        printf("Choosing\n");
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
     }
-    printf("chosen\n");
     if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         victim = proc->cont.page_replacement_victim;
-        printf("sos_swap_write\n");
         victim->swaddr = sos_swap_write(victim->addr);
         printf("page_to_evict: %08x, writing to: %u\n", proc->cont.page_replacement_victim->caddr,
                proc->cont.page_replacement_victim->swaddr);
         longjmp(ipc_event_env, -1);
     }
-    printf("Finishing up\n");
     if (proc->cont.swap_status == SWAP_SUCCESS) {
+        memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
         proc->cont.page_replacement_victim->valid = false;
         return 0;
     } else {
@@ -75,7 +72,6 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
     swap_evict_page(as);
-
     assert(proc->cont.page_replacement_victim->swaddr != -1);
     pte_t *to_load = as_lookup_pte(as, readin);
     if (!proc->cont.page_replacement_request) {

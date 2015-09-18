@@ -121,6 +121,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
 }
 
 swap_addr sos_swap_write(sos_vaddr page) {
+    assert(ALIGNED(page));
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
     printf("In SSW\n");
@@ -135,16 +136,15 @@ swap_addr sos_swap_write(sos_vaddr page) {
 
     proc->cont.swap_page = page;
     proc->cont.swap_file_offset = swap_alloc();
-    if (proc->cont.swap_file_offset < 0) return proc->cont.swap_file_offset;
-    assert(proc->cont.swap_cnt == 0);
-
+    assert(ALIGNED(proc->cont.swap_file_offset));
     int code = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {
-        code += ((char*)page) + i;
+        code += ((char*)page)[i];
     }
-    printf("swap_write addr=%x,pos=%d, code=%08x\n", proc->cont.swap_page, proc->cont.swap_file_offset,code);
-
-   if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
+    swap_table[proc->cont.swap_file_offset/PAGE_SIZE].chksum = code;
+    if (proc->cont.swap_file_offset < 0) return proc->cont.swap_file_offset;
+    assert(proc->cont.swap_cnt == 0);
+    if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
                   (const void*)proc->cont.swap_page, swap_write_callback, pid) != RPC_OK) {
         proc->cont.swap_status = SWAP_FAILED;
         longjmp(ipc_event_env, swap_generic_error);
@@ -171,15 +171,16 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
     int code = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {
-        code += ((char*)proc->cont.swap_page) + i;
+        code += ((char*)proc->cont.swap_page)[i];
     }
-    printf("READ callback addr=%x,pos=%d,code=%08x\n", proc->cont.swap_page, proc->cont.swap_file_offset,code);
+    assert(swap_table[proc->cont.swap_file_offset/PAGE_SIZE].chksum == code);
     swap_free(proc->cont.swap_file_offset);
 }
 
 void sos_swap_read(sos_vaddr page, swap_addr pos) {
     assert(inited);
     assert(ALIGNED(page));
+    assert(ALIGNED(pos));
     printf("Reading: %x from %u\n", page, pos);
     sos_proc_t *proc = current_process();
     proc->cont.swap_status = SWAP_RUNNING;
@@ -197,6 +198,7 @@ void swap_init(void * vaddr) {
     swap_table = (swap_entry_t*) vaddr;
     free_list = swap_table;
     for (int i = 0; i < NSWAP; i++) {
+        swap_table[i].chksum = 0;
         swap_table[i].next_free = &swap_table[i+1];
     }
     swap_table[NSWAP].next_free = NULL;

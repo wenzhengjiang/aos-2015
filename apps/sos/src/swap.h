@@ -6,12 +6,12 @@
 
 typedef struct swap_entry {
     struct swap_entry * next_free;
+    int chksum;
 } swap_entry_t;
 
-
-#define SWAP_FILE_SIZE 5049942016 // maximum size of swap file is 4G
+#define SWAP_FILE_SIZE 2147483648  // maximum size of swap file is 2G
 #define NSWAP (SWAP_FILE_SIZE / PAGE_SIZE) // nunber of entries in swap table
-#define SWAP_TABLE_SIZE (NSWAP * sizeof(swap_entry_t)) 
+#define SWAP_TABLE_SIZE (NSWAP * sizeof(swap_entry_t))
 
 #define SWAP_SUCCESS (1)
 #define SWAP_RUNNING (0)
