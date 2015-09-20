@@ -21,6 +21,10 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
         if(!as->repllist_head->valid) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
+            // TODO: There's potential for a hang here.  We should detect &
+            // kill client if it ends up with too many pages pinned, as we
+            // can't guarantee consistency should we start forcefully
+            // unpinning pages.
             continue;
         }
         if(as->repllist_head->refd) {
@@ -48,13 +52,10 @@ int swap_evict_page(sos_addrspace_t *as) {
     if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
         victim = proc->cont.page_replacement_victim;
         victim->swaddr = sos_swap_write(victim->addr);
-        printf("page_to_evict: %08x, writing to: %u\n", proc->cont.page_replacement_victim->caddr,
-               proc->cont.page_replacement_victim->swaddr);
         longjmp(ipc_event_env, -1);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         dprintf(4, "[PR] Evicted. Tidying up.\n");
-        //memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
         assert(!proc->cont.page_replacement_victim->refd);
         proc->cont.page_replacement_victim->valid = false;
         return 0;
@@ -80,10 +81,13 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
+            assert(proc->cont.page_replacement_victim->addr != 0);
+            memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
             printf("reading in new page %08x from address %u\n", readin, to_load->swaddr);
             to_load->addr = proc->cont.page_replacement_victim->addr;
             sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
             longjmp(ipc_event_env, -1);
+            assert(proc->cont.page_replacement_victim->addr != 0);
         } else {
             assert(!"Did not find page");
         }
@@ -91,7 +95,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         to_load->swaddr = (unsigned)-1;
         seL4_CPtr fc = frame_cap(to_load->addr);
-        seL4_ARM_Page_Unify_Instruction(fc, 0, PAGESIZE);
+        seL4_ARM_Page_Unify_Instruction(fc, 0, PAGE_SIZE);
         //printf("NEW PAGE LOADED OKAY\n");
         return 0;
     } else {

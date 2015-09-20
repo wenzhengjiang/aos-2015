@@ -112,7 +112,6 @@ int sos_serial_open(const char* filename, fmode_t mode) {
 }
 
 int sos_serial_read(iovec_t* vec, int fd, int count) {
-    printf("Serial read\n");
     (void)count;
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
@@ -129,7 +128,6 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
         if (as_page_exists(current_process()->vspace, vec->vstart)) {
             dprintf(4, "page exists\n");
             if (swap_is_page_swapped(current_process()->vspace, vec->vstart)) { // page is in disk
-                printf("page is in disk\n");
                 swap_replace_page(current_process()->vspace, vec->vstart);
             } else if (!is_referenced(current_process()->vspace, vec->vstart)) {
                 as_reference_page(current_process()->vspace, vec->vstart, reg->rights);

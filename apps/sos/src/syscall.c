@@ -154,6 +154,8 @@ void iov_ensure_loaded(iovec_t* iov) {
     if (as_page_exists(as, iov->vstart)) {
         if (swap_is_page_swapped(as, iov->vstart)) { // page is in disk
             swap_replace_page(as, iov->vstart);
+        } else if (!is_referenced(as, iov->vstart)) {
+            as_reference_page(as, iov->vstart, reg->rights);
         }
     } else {
         assert(reg);
