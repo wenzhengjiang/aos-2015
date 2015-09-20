@@ -42,31 +42,29 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
 
     sos_region_t* reg = as_vaddr_region(as, faultaddr);
     if (!reg) {
-        printf("addr %x is not in the reg\n", faultaddr);
+        ERR("[VMF] Addr %x is not in the reg\n", faultaddr);
         return EFAULT;
     }
     if (is_read_fault(faulttype) && !(reg->rights & seL4_CanRead)) {
+        ERR("[VMF] Cannot read address: %x\n", faultaddr);
         return EACCES;
     }
     if (!is_read_fault(faulttype) && !(reg->rights & seL4_CanWrite)) {
+        ERR("[VMF] Cannot write to address: %x\n", faultaddr);
         return EACCES;
     }
     dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
     if (as_page_exists(as, faultaddr)) {
-        dprintf(4, "page exists\n");
         if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
-            printf("page is in disk\n");
             swap_replace_page(as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
             // correct permissions), yet it faulted?!
             assert(!"This shouldn't happen");
         } else {
-            printf("referencing page: %x\n", faultaddr);
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {
-        dprintf(4, "create new page\n");
         process_create_page(faultaddr, reg->rights);
     }
     return 0;

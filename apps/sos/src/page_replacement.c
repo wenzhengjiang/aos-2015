@@ -45,7 +45,7 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
 int swap_evict_page(sos_addrspace_t *as) {
     sos_proc_t *proc = current_process();
     pte_t *victim;
-    printf("STARTING EVICTION\n");
+    dprintf(3, "[PR] EVICTING PAGE\n");
     if (!proc->cont.page_replacement_victim) {
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
     }
@@ -55,7 +55,7 @@ int swap_evict_page(sos_addrspace_t *as) {
         longjmp(ipc_event_env, -1);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
-        dprintf(4, "[PR] Evicted. Tidying up.\n");
+        dprintf(4, "[PR] EVICTED. Tidying up.\n");
         assert(!proc->cont.page_replacement_victim->refd);
         proc->cont.page_replacement_victim->valid = false;
         return 0;
@@ -72,7 +72,7 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
 int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     // TODO: Probably need to kill the process.  So much memory contention
     // that we have no room to allocate ANY pages for the new process!
-    printf("REPLACING\n");
+    dprintf(3, "[PR] STARTING PAGE REPLACEMENT\n");
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
     swap_evict_page(as);
@@ -81,9 +81,10 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
+            dprintf(3, "[PR] READING in targeted replacement page\n");
             assert(proc->cont.page_replacement_victim->addr != 0);
             memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
-            printf("reading in new page %08x from address %u\n", readin, to_load->swaddr);
+            dprintf(4, "[PR] reading in new page %08x from address %u\n", readin, to_load->swaddr);
             to_load->addr = proc->cont.page_replacement_victim->addr;
             sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
             longjmp(ipc_event_env, -1);
@@ -93,6 +94,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
         }
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
+        dprintf(3, "[PR] REPLACEMENT COMPLETE\n");
         to_load->swaddr = (unsigned)-1;
         seL4_CPtr fc = frame_cap(to_load->addr);
         seL4_ARM_Page_Unify_Instruction(fc, 0, PAGE_SIZE);

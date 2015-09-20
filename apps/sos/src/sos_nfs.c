@@ -231,7 +231,7 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
-        printf("NFS failed\n");
+        ERR("NFS failed\n");
         return;
     }
     sos_stat_t sos_attr;
@@ -253,7 +253,7 @@ static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
-        printf("Did not find file\n");
+        ERR("Did not find file\n");
         return;
     }
     nfs_getattr(fh, sos_nfs_getattr_callback, (unsigned)pid);
@@ -267,7 +267,7 @@ int sos_nfs_getattr(void) {
     int err = nfs_lookup(&mnt_point, current_process()->cont.path, sos_nfs_lookup_for_attr,
                        (unsigned)pid);
     if (err) {
-        printf("NFS stat said: %d\n", err);
+        ERR("NFS stat said: %d\n", err);
     }
     return err;
 }

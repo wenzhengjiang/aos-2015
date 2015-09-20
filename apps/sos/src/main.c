@@ -160,7 +160,7 @@ void syscall_loop(seL4_CPtr ep) {
             /* System call */
             handle_syscall(proc->cont.syscall_number);
         }else{
-            printf("Rootserver got an unknown message\n");
+            ERR("Rootserver got an unknown message\n");
         }
 
         pid = 0;

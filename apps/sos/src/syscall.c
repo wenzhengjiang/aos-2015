@@ -20,7 +20,7 @@
 #include <syscallno.h>
 #include <clock/clock.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -53,7 +53,7 @@ static void iov_free(iovec_t *iov) {
 
 void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     if (nfs_pkg) {
-        printf("pkg_size = %d\n", pkg_size );
+        dprintf(4, "pkg_size = %d\n", pkg_size);
         nfs_pkg = false;
     }
     seL4_MessageInfo_t reply;

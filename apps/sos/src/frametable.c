@@ -104,17 +104,15 @@ int sos_map_frame(seL4_Word vaddr) {
  * @return 0 on success, non-zero on failure
  */
 int sos_unmap_frame(seL4_Word vaddr) {
-//    printf("sos_unmap_frame\n");
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
- //   printf("unmap_frame: %x %d\n",vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
     cur_frame->map_req_count--;
-    
+
     if (cur_frame->map_req_count == 0) {
-        printf("FREEING FRAME\n");
+        dprintf(2, "[FRAME] Freeing frame\n");
         if (frame_free(vaddr)) {
-            printf("ERR during frame_Free\n");
+            ERR("[FRAME] Error during frame_free\n");
         }
         return 0;
     }
@@ -214,14 +212,12 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     sos_proc_t *proc = current_process();
     sos_addrspace_t *as = proc->vspace;
     if (!frame_available_frames()) {
-        printf("evicting\n");
         swap_evict_page(as);
     }
     if (proc->cont.page_replacement_victim) {
         assert(proc->cont.page_replacement_victim->addr != 0);
         memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
         assert(proc->cont.page_replacement_victim->addr % PAGE_SIZE == 0);
-        printf("sos_unmap_frame, %x\n", proc->cont.page_replacement_victim->addr);
         sos_unmap_frame(proc->cont.page_replacement_victim->addr);
         proc->cont.page_replacement_victim->addr = 0;
         if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
@@ -261,7 +257,7 @@ int frame_free(seL4_Word vaddr) {
     if (cur_frame->map_req_count != 0) {
         return EPERM;
     }
-    printf("about to unmap page\n");
+    dprintf(3, "[FRAME] Unmapping page\n");
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_revoke_cap(cur_cspace, cur_frame->cap);
     cspace_err_t err = cspace_delete_cap(cur_cspace, cur_frame->cap);
@@ -273,6 +269,6 @@ int frame_free(seL4_Word vaddr) {
     cur_frame->next_free = free_list;
     free_list = cur_frame;
     assert(free_list != NULL);
-    printf("Unmap complete\n");
+    dprintf(2, "[FRAME] Unmap complete\n");
     return 0;
 }

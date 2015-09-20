@@ -42,7 +42,7 @@ static inline unsigned CONST min(unsigned a, unsigned b)
 }
 
 static inline void try_send_buffer(int i) {
-    printf("TRY SEND BUF\n");
+    dprintf(3, "[SERIAL] Attempting 'try_send_buffer'\n");
     if (reader_pid == 0) {
         return;
     }
@@ -54,7 +54,7 @@ static inline void try_send_buffer(int i) {
     char *buf = line_buf[i];
     int buflen = line_buflen[i];
     int pos = 0;
-    printf("checking iovs\n");
+    dprintf(4, "[SERIAL] Checking iovs\n");
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
         int n = min(buflen - pos, v->sz);
@@ -66,7 +66,6 @@ static inline void try_send_buffer(int i) {
         // Pin the page
         pt->valid = true;
     }
-    printf("end continuation\n");
     // reply to client reader
     syscall_end_continuation(current_process(), pos, true);
     reader_pid = 0;
@@ -142,7 +141,7 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
 }
 
 int sos_serial_write(iovec_t* vec, int fd, int count) {
-    printf("Serial write\n");
+    dprintf(3, "[SERIAL] Starting serial_write\n");
     (void)fd;
     (void)count;
     assert(vec);
