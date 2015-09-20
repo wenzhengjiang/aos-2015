@@ -47,7 +47,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 

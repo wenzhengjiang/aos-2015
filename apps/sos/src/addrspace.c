@@ -77,7 +77,7 @@ sos_region_t* as_vaddr_region(sos_addrspace_t *as, client_vaddr vaddr) {
     assert(as);
     sos_region_t *region = as->regions;
     while (region) {
-        if (vaddr >= region->start && vaddr <= region->end) {
+        if (vaddr >= region->start && vaddr < region->end) {
             return region;
         }
         region = region->next;
@@ -178,7 +178,6 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
     as->pd[pd_idx][pt_idx]->valid = true;
-    as->pd[pd_idx][pt_idx]->debug = vaddr;
     return 0;
 }
 
@@ -199,11 +198,11 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     if (pt == NULL) {
         return ENOMEM;
     }
+    assert(sos_vaddr != 0);
     pt->refd = false;
     pt->valid = true;
     pt->addr = sos_vaddr;
     pt->swaddr = (unsigned)(-1);
-    pt->caddr = vaddr;
 
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
@@ -225,7 +224,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
  */
 int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) {
 
-    dprintf(-1, "as_create_page\n");
+    dprintf(2, "as_create_page\n");
     seL4_CPtr cap;
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);

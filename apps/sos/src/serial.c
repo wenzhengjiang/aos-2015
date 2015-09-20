@@ -7,6 +7,7 @@
 #include "serial.h"
 #include "file.h"
 #include "process.h"
+#include "page_replacement.h"
 
 #define SERIAL_BUF_SIZE  1024
 
@@ -57,11 +58,13 @@ static inline void try_send_buffer(int i) {
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
         int n = min(buflen - pos, v->sz);
-        // TODO: Work out how to handle iov_ensure here 
         sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, v->vstart);
         assert(dst);
         memcpy((char*)dst, buf+pos, n);
         pos += n;
+        pte_t* pt = as_lookup_pte(current_process()->vspace, v->vstart);
+        // Pin the page
+        pt->valid = true;
     }
     printf("end continuation\n");
     // reply to client reader
@@ -109,13 +112,32 @@ int sos_serial_open(const char* filename, fmode_t mode) {
 }
 
 int sos_serial_read(iovec_t* vec, int fd, int count) {
-    printf("Serial read\n");
     (void)count;
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
     cont_t *cont = &(proc->cont);
-    reader_pid = current_process()->pid;
     cont->iov = vec;
+    for (; vec != NULL; vec = vec->next) {
+        sos_region_t* reg = as_vaddr_region(current_process()->vspace, vec->vstart);
+        // TODO: kill the client
+        assert(reg);
+        pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
+        // Pin the page
+        pt->valid = false;
+        // TODO: Needs refactor as codeblock appears a few times thruout SOS
+        if (as_page_exists(current_process()->vspace, vec->vstart)) {
+            dprintf(4, "page exists\n");
+            if (swap_is_page_swapped(current_process()->vspace, vec->vstart)) { // page is in disk
+                swap_replace_page(current_process()->vspace, vec->vstart);
+            } else if (!is_referenced(current_process()->vspace, vec->vstart)) {
+                as_reference_page(current_process()->vspace, vec->vstart, reg->rights);
+            }
+        } else {
+            dprintf(4, "create new page\n");
+            process_create_page(vec->vstart, reg->rights);
+        }
+        reader_pid = current_process()->pid;
+    }
     return 0;
 }
 

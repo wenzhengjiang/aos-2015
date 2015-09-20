@@ -12,7 +12,7 @@
 #include "network.h"
 #include "syscall.h"
 
-#define verbose 1
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -106,6 +106,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
            proc->cont.swap_file_offset, proc->cont.swap_cnt, zero_count, count);
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
+        proc->cont.swap_cnt = 0;
         callback_done = true;
         //printf("Finishing with write callback1\n");
         return;

@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <assert.h>
 #include "frametable.h"
+#include "addrspace.h"
+#include "process.h"
+#include "page_replacement.h"
 #include "swap.h"
 
 #define verbose 5
@@ -117,7 +120,6 @@ int sos_unmap_frame(seL4_Word vaddr) {
         return 0;
     }
     seL4_ARM_Page_Unmap(cur_frame->cap);
-    seL4_ARM_Page_Unify_Instruction(cur_frame->cap, 0, PAGE_SIZE);
     return 0;
 }
 
@@ -210,10 +212,23 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         ERR("frame_alloc: passed null pointer\n");
         return 0;
     }
-    if (!free_list) {
-        ERR("[frametable] Free list empty\n");
-        *vaddr = 0;
-        return 0;
+    sos_proc_t *proc = current_process();
+    sos_addrspace_t *as = proc->vspace;
+    if (!frame_available_frames()) {
+        printf("evicting\n");
+        swap_evict_page(as);
+    }
+    if (proc->cont.page_replacement_victim) {
+        assert(proc->cont.page_replacement_victim->addr != 0);
+        memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
+        assert(proc->cont.page_replacement_victim->addr % PAGE_SIZE == 0);
+        printf("sos_unmap_frame, %x\n", proc->cont.page_replacement_victim->addr);
+        sos_unmap_frame(proc->cont.page_replacement_victim->addr);
+        proc->cont.page_replacement_victim->addr = 0;
+        if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
+            assert(!"Victim has no swap address!");
+        }
+        proc->cont.page_replacement_victim = NULL;
     }
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
@@ -243,6 +258,7 @@ int frame_free(seL4_Word vaddr) {
         return EINVAL;
     }
     frame_entry_t *cur_frame = &frame_table[idx];
+    assert(cur_frame != NULL);
     if (cur_frame->map_req_count != 0) {
         return EPERM;
     }
@@ -257,6 +273,7 @@ int frame_free(seL4_Word vaddr) {
     ut_free(cur_frame->paddr, seL4_PageBits);
     cur_frame->next_free = free_list;
     free_list = cur_frame;
+    assert(free_list != NULL);
     printf("Unmap complete\n");
     return 0;
 }

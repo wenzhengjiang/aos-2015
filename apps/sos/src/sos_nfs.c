@@ -14,7 +14,7 @@
 #include "syscall.h"
 #include "addrspace.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 extern bool callback_done;
@@ -108,38 +108,45 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
-    printf("READ\n");
     (void)fattr;
     sos_proc_t *proc;
     int fd;
     proc = process_lookup((int)token);
     fd = proc->cont.fd;
 
+    if (count == 0) {
+        syscall_end_continuation(proc, proc->cont.counter, true);
+        return;
+    }
+
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
     proc->cont.counter += count;
-     of_entry_t *of = fd_lookup(proc, fd);
+    of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
 
-    iovec_t *iov = proc->cont.iov;
-    if ((int)iov->sz != count) {
-        dprintf(-1, "iovsz = %d, count = %d\n", iov->sz, count);
-    }
-
-    //TODO: Fix start -> vstart
-    sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
+    sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, proc->cont.iov->vstart);
     assert(dst);
 
     memcpy((char*)dst, data, (size_t)count);
-    proc->cont.iov = iov->next;
-    free(iov);
-    if (proc->cont.iov == NULL) {
+    dprintf(2, "READ %d bytes to %08x, now at offset: %u\n", count, proc->cont.iov->vstart, of->offset);
+
+    iovec_t *iov = proc->cont.iov;
+    if (proc->cont.iov->sz == (size_t)count) {
+        proc->cont.iov = iov->next;
+        free(iov);
+        iov = proc->cont.iov;
+    } else {
+        iov->vstart += (size_t)count;
+        iov->sz -= (size_t)count;
+    }
+
+    if (iov == NULL) {
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
-    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->vstart, of->offset);
     callback_done = true;
 }
 
@@ -149,10 +156,11 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     pid_t pid = proc->pid;
     of_entry_t *of = fd_lookup(current_process(), fd);
 
+    assert(proc->cont.iov);
     iov_ensure_loaded(proc->cont.iov);
 
-    dprintf(2, "read %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz,proc->cont.iov->vstart, of->offset);
-    return nfs_read(of->fhandle, of->offset, proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
+    dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
+    return nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
 /* WRITE FILE */
@@ -166,20 +174,21 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
+
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
-    dprintf(1, "[WRITE] for %d bytes\n", count);
     of->offset += (unsigned)count;
 
     iovec_t *iov = proc->cont.iov;
-    if (proc->cont.iov->sz == count) {
+    if (proc->cont.iov->sz == (size_t)count) {
         proc->cont.iov = iov->next;
         free(iov);
+        iov = proc->cont.iov;
     } else {
-        iov->vstart += count;
-        iov->sz -= count;
+        iov->vstart += (size_t)count;
+        iov->sz -= (size_t)count;
     }
-    if (proc->cont.iov == NULL) {
+    if (iov == NULL) {
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
@@ -192,6 +201,7 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
 
+    assert(proc->cont.iov);
     iov_ensure_loaded(proc->cont.iov);
 
     sos_vaddr src = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
@@ -254,7 +264,6 @@ int sos_nfs_getattr(void) {
     pid_t pid = proc->pid;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
-    printf("filename: %s\n", current_process()->cont.path);
     int err = nfs_lookup(&mnt_point, current_process()->cont.path, sos_nfs_lookup_for_attr,
                        (unsigned)pid);
     if (err) {
@@ -269,22 +278,17 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     sos_proc_t *proc = process_lookup(token);
-    printf("readdir is finishing\n");
     if (status != NFS_OK) {
-        printf("not okay\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
     if (proc->cont.position_arg <= 0) {
-        printf("bad target\n");
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
     dprintf(2, "readir_callback:count=%d,target=%d,nfiles=%d\n", proc->cont.counter, proc->cont.position_arg, num_files);
     if (proc->cont.position_arg <= proc->cont.counter + num_files) {
-        printf("readdir is happy and found\n");
         char *file = file_names[proc->cont.position_arg - proc->cont.counter - 1];
-        printf("readdir Found: %s, now writing ipc of %u bytes\n", file, umin(strlen(file) + 1, proc->cont.length_arg));
         size_t str_len = umin(strlen(file) + 1, proc->cont.length_arg);
         ipc_write(1, file, str_len);
         proc->cont.reply_length = 2 + ((str_len + sizeof(seL4_Word) - 1) >> 2);
@@ -294,7 +298,6 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     proc->cont.counter += num_files;
 
     if (nfscookie == 0) {
-        printf("readdir is happy not found\n");
         syscall_end_continuation(proc, 0, true);
         return;
     }
