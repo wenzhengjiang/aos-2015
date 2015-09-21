@@ -8,6 +8,9 @@
 #include "swap.h"
 #include "sos_type.h"
 
+#define SAVE_PAGE(a) (assert((a << 20) == 0), a >> 12)
+#define LOAD_PAGE(a) (assert((a >> 20) == 0), a << 12)
+
 // Allocated using malloc
 typedef struct region {
     client_vaddr start;
@@ -23,13 +26,12 @@ typedef struct kernel_page_table {
 } kpt_t;
 
 typedef struct page_table_entry {
-    sos_vaddr addr;
-    swap_addr swaddr;
     seL4_CPtr page_cap;
     struct page_table_entry *next;
-    bool refd;
-    // Indicates the page has been free'd.
-    bool valid;
+    sos_vaddr addr : 24;
+    bool refd : 1;
+    bool valid : 1;
+    bool swapd  : 1;
 } pte_t;
 
 typedef pte_t **pt_t;

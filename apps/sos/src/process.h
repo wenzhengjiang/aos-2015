@@ -25,6 +25,7 @@ typedef struct continuation {
     seL4_Word vm_fault_type;
     seL4_Word client_addr;
     seL4_Word page_replacement_request;
+    seL4_Word original_page_addr;
     uint32_t cookie;
     pte_t* page_replacement_victim;
     size_t reply_length;

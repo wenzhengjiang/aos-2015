@@ -64,7 +64,7 @@ sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr) {
     if (pte == NULL) {
         return 0;
     }
-    return (pte->addr + (0x00000fff & vaddr));
+    return (LOAD_PAGE(pte->addr) + (0x00000fff & vaddr));
 }
 
 /**
@@ -201,8 +201,8 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     assert(sos_vaddr != 0);
     pt->refd = false;
     pt->valid = true;
-    pt->addr = sos_vaddr;
-    pt->swaddr = (unsigned)(-1);
+    pt->swapd = false;
+    pt->addr = SAVE_PAGE(sos_vaddr);
 
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
@@ -284,7 +284,7 @@ void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights r
     if (pte == NULL) {
         assert(!"Page does not exist to be mapped");
     }
-    seL4_CPtr cap = frame_cap(pte->addr);
+    seL4_CPtr cap = frame_cap(LOAD_PAGE(pte->addr));
     assert(cap != seL4_CapNull);
     as_map_page(as, vaddr, cap, rights);
 }
