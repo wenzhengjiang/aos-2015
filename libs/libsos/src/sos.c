@@ -214,7 +214,20 @@ size_t sos_read(void *vData, size_t count) {
 }
 
 pid_t sos_process_create(const char *path) {
-    assert(!"sos_process_create not implemented!");
+    if (path == NULL) return -1;
+
+    int len = ((strlen(path)+1) + sizeof(seL4_Word)-1) >> 2;
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2 + len);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_PROC_CREATE);
+    ipc_write(PROC_CREATE_MESSAGE_START, path);
+
+    seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
+        return -1;
+    else 
+        return seL4_GetMR(0);
+
     return 0;
 }
 

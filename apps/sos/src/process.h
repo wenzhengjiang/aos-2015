@@ -6,11 +6,14 @@
 #include <nfs/nfs.h>
 #include <cspace/cspace.h>
 #include <stdbool.h>
+#include <sel4/sel4.h>
 #include "addrspace.h"
 #include "file.h"
 #include <syscallno.h>
 
 #define TEST_PROCESS_NAME             CONFIG_SOS_STARTUP_APP
+
+#define MAX_PROCESS_NUM         (1024)
 
 // TODO: This should now be backed by a dedicated sel4 frame as is big
 typedef struct continuation {
@@ -52,13 +55,14 @@ typedef struct process {
     cont_t cont;
 } sos_proc_t;
 
+
 int process_create(seL4_CPtr fault_ep);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);
 sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
-int fd_free(sos_proc_t* proc, int fd);
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
+pid_t start_process(char* app_name, seL4_CPtr fault_ep) ;
 
 #endif

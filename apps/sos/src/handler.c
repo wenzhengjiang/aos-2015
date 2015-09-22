@@ -196,7 +196,12 @@ static int close_handler (void) {
     send_back(reply);
     return 0;
 }
-
+static int proc_create_setup(void) {
+    dprintf(4, "SYS PROC_CREATE\n");
+    memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
+    ipc_read(PROC_CREATE_MESSAGE_START, current_process()->cont.path);
+    return 0;
+}
 void register_handlers(void) {
     handlers[SOS_SYSCALL_BRK][HANDLER_SETUP] = NULL;
     handlers[SOS_SYSCALL_BRK][HANDLER_EXEC] = brk_handler;
@@ -224,6 +229,9 @@ void register_handlers(void) {
 
     handlers[SOS_SYSCALL_CLOSE][HANDLER_SETUP] = NULL;
     handlers[SOS_SYSCALL_CLOSE][HANDLER_EXEC] = close_handler;
+
+    handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_SETUP] = proc_create_setup;
+    handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_EXEC] =  sos__sys_proc_create;
 }
 
 void handle_syscall(seL4_Word syscall_number) {

@@ -28,6 +28,7 @@
 
 extern io_device_t serial_io;
 extern io_device_t nfs_io;
+extern seL4_CPtr _sos_ipc_ep_cap;
 
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
@@ -312,11 +313,17 @@ int sos__sys_close(void) {
     of_entry_t* of = fd_lookup(current_process(), file);
     io_device_t *io = of->io;
     if (io == NULL) {
-        res = fd_free(current_process(), file);
+        res = fd_free(current_process()->fd_table, file);
     } else if (io->close == NULL) {
-        res = fd_free(current_process(), file);
+        res = fd_free(current_process()->fd_table, file);
     } else {
         res = io->close(file);
     }
     return res;
+}
+
+int sos__sys_proc_create(void) {
+    pid_t pid = start_process(current_process()->cont.path, _sos_ipc_ep_cap);
+    syscall_end_continuation(current_process(), pid, pid > 0);
+    return 0;
 }

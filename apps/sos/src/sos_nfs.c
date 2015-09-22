@@ -44,7 +44,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
 
-        fd_free(proc, fd);
+        fd_free(proc->fd_table, fd);
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
@@ -52,7 +52,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
     of_entry_t *of = fd_lookup(proc, fd);
     of->fhandle = malloc(sizeof(fhandle_t));
     if (of->fhandle == NULL) {
-        fd_free(proc, fd);
+        fd_free(proc->fd_table, fd);
         syscall_end_continuation(proc, -1, false);
         return;
     }
@@ -84,7 +84,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
         return;
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
-        fd_free(proc, fd);
+        fd_free(proc->fd_table, fd);
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }

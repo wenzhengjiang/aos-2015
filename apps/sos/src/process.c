@@ -10,12 +10,15 @@
 #include <device/mapping.h>
 #include <string.h>
 #include <nfs/nfs.h>
+#include <cpio/cpio.h>
 
 #include "process.h"
 #include "addrspace.h"
 #include "page_replacement.h"
 #include "frametable.h"
 #include "serial.h"
+#include <elf/elf.h>
+#include "elf.h"
 
 #define verbose 0
 #include <log/debug.h>
@@ -28,8 +31,11 @@
 #define TEST_EP_BADGE       (101)
 #define FD_TABLE_SIZE       (1024)
 
+static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
+
 sos_proc_t test_proc;
 sos_proc_t *curproc = &test_proc;
+extern char _cpio_archive[];
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
@@ -81,18 +87,37 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
     return user_ep_cap;
 }
 
+static int get_next_pid() {
+    static int next_pid = 1;
+    int cnt = 0;
+    while (proc_table[next_pid]) {
+        next_pid = (next_pid+1) % MAX_PROCESS_NUM;
+        cnt++;
+        if (cnt == MAX_PROCESS_NUM) return -1;
+        if (next_pid == 0) next_pid++;
+    }
+    return next_pid;
+}
 /**
  * Create a new process
  * @return error code or 0 for success
  */
 int process_create(seL4_CPtr fault_ep) {
-    memset((void*)curproc, 0, sizeof(sos_proc_t));
-    curproc->pid = 1;
-    curproc->vspace = as_create();
-    init_cspace(curproc);
-    curproc->user_ep_cap = init_ep(curproc, fault_ep);
-    init_tcb(curproc);
-    init_fd_table();
+    sos_proc_t* proc = malloc(sizeof(sos_proc_t));
+    if (proc) {
+        return ENOMEM;
+    }
+    memset((void*)proc, 0, sizeof(sos_proc_t));
+    proc->pid = get_next_pid();
+    if (proc->pid == -1)
+        return ENOMEM;
+    proc->vspace = as_create();
+    init_cspace(proc);
+    proc->user_ep_cap = init_ep(proc, fault_ep);
+    init_tcb(proc);
+    init_fd_table(&proc->fd_table);
+    proc_table[proc->pid] = proc; 
+
     return 0;
 }
 
@@ -117,20 +142,40 @@ of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
 }
 
 sos_proc_t *process_lookup(pid_t pid) {
-    (void)pid;
-    // TODO: Implement me
-    return &test_proc;
+    if(!(pid > 0 && pid < MAX_PROCESS_NUM))
+        return NULL;
+    return proc_table[pid];
 }
 
-int fd_free(sos_proc_t* proc, int fd) {
-    assert(proc);
-    assert(proc->fd_table[fd]);
-    if (proc->fd_table[fd] == NULL) {
-        printf("fd %d not found to close\n", fd);
-        return -1;
-    }
-    proc->fd_table[fd]->io = NULL;
-    proc->fd_table[fd] = NULL;
-    dprintf(3, "fd %d closed okay\n", fd);
-    return 0;
+pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
+    int err;
+
+    /* These required for setting up the TCB */
+    seL4_UserContext context;
+
+    /* These required for loading program sections */
+    char* elf_base;
+    unsigned long elf_size;
+    pid_t pid = process_create(fault_ep);
+    sos_proc_t *proc = process_lookup(pid);
+
+    sos_addrspace_t *as = proc_as(proc);
+
+    /* parse the cpio image */
+    dprintf(1, "\nStarting \"%s\"...\n", app_name);
+    elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
+    conditional_panic(!elf_base, "Unable to locate cpio header");
+    /* load the elf image */
+    err = elf_load(proc->vspace->sos_pd_cap, elf_base);
+    conditional_panic(err, "Failed to load elf image");
+    as_activate(as);
+
+    /* Start the new process */
+    memset(&context, 0, sizeof(context));
+    context.pc = elf_getEntryPoint(elf_base);
+    printf("pc = %08x\n", context.pc);
+    context.sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
+    return pid;
 }
+
