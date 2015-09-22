@@ -93,14 +93,9 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
         return;
     }
     proc->cont.swap_cnt += count;
-    int zero_count = 0;
-    for (int i = 0; i < PAGE_SIZE; i++) {
-        if (((char*)proc->cont.swap_page)[i] == 0) {
-            zero_count++;
-        }
-    }
-    dprintf(3, "[SWAP] write callback: sos addr: %x, offset: %u, proc->cont.swap_cnt: %u, zeroes: %d, count: %d\n",
-            proc->cont.swap_page, proc->cont.swap_file_offset, proc->cont.swap_cnt, zero_count, count);
+
+    dprintf(3, "[SWAP] write callback: sos addr: %x, offset: %u, proc->cont.swap_cnt: %u, count: %d\n", proc->cont.swap_page, proc->cont.swap_file_offset, proc->cont.swap_cnt, count);
+    assert(proc->cont.swap_cnt <= PAGE_SIZE);
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
         proc->cont.swap_cnt = 0;
@@ -108,6 +103,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
         return;
     } else {
         int cnt = proc->cont.swap_cnt;
+        printf("Asking to write PAGE_SIZE - cnt (%u) bytes\n", PAGE_SIZE - cnt);
         if (nfs_write(&swap_handle, proc->cont.swap_file_offset + cnt, PAGE_SIZE - cnt,
                       (void*)(proc->cont.swap_page+cnt), swap_write_callback,
                      token)) {
@@ -137,6 +133,7 @@ swap_addr sos_swap_write(sos_vaddr page) {
     swap_table[proc->cont.swap_file_offset/PAGE_SIZE].chksum = code;
     if (proc->cont.swap_file_offset < 0) return proc->cont.swap_file_offset;
     assert(proc->cont.swap_cnt == 0);
+    printf("Asking to write PAGE_SIZE - cnt (%u) bytes\n", PAGE_SIZE);
     if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
                   (const void*)proc->cont.swap_page, swap_write_callback, pid) != RPC_OK) {
         proc->cont.swap_status = SWAP_FAILED;
@@ -179,7 +176,7 @@ void sos_swap_read(sos_vaddr page, swap_addr pos) {
     proc->cont.swap_status = SWAP_RUNNING;
     proc->cont.swap_page = page;
     proc->cont.swap_file_offset = pos;
-    dprintf(4, "[SWAP] swap_read addr=%x,pos=%d\n", page, pos);
+    dprintf(4, "[SWAP] swap_read addr=%x,pos=%x\n", page, pos);
     if(nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, proc->pid)) {
         ERR("[SWAP] Read failed\n");
         proc->cont.swap_status = SWAP_FAILED;

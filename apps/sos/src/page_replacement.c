@@ -49,9 +49,14 @@ int swap_evict_page(sos_addrspace_t *as) {
     if (!proc->cont.page_replacement_victim) {
         proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
     }
-    if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
+    if (!proc->cont.page_replacement_victim->swapd) {
         victim = proc->cont.page_replacement_victim;
-        victim->swaddr = sos_swap_write(victim->addr);
+        proc->cont.original_page_addr = LOAD_PAGE(proc->cont.page_replacement_victim->addr);
+        printf("Writing: %x, which gets converted to %x\n", victim->addr, LOAD_PAGE(victim->addr));
+        printf("Original page addr: %x\n", proc->cont.original_page_addr);
+        victim->addr = sos_swap_write(LOAD_PAGE(victim->addr));
+        victim->addr = SAVE_PAGE(victim->addr);
+        victim->swapd = true;
         longjmp(ipc_event_env, -1);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
@@ -66,7 +71,7 @@ int swap_evict_page(sos_addrspace_t *as) {
 
 bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
     pte_t *pt = as_lookup_pte(as, addr);
-    return (pt->swaddr != (unsigned)-1);
+    return pt->swapd;
 }
 
 int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
@@ -76,27 +81,30 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
     sos_proc_t *proc = current_process();
     assert(as->repllist_head && as->repllist_tail);
     swap_evict_page(as);
-    assert(proc->cont.page_replacement_victim->swaddr != -1);
+    assert(proc->cont.page_replacement_victim->swapd);
     pte_t *to_load = as_lookup_pte(as, readin);
     if (!proc->cont.page_replacement_request) {
         proc->cont.page_replacement_request = readin;
         if (to_load) {
             dprintf(3, "[PR] READING in targeted replacement page\n");
-            assert(proc->cont.page_replacement_victim->addr != 0);
-            memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
-            dprintf(4, "[PR] reading in new page %08x from address %u\n", readin, to_load->swaddr);
-            to_load->addr = proc->cont.page_replacement_victim->addr;
-            sos_swap_read(proc->cont.page_replacement_victim->addr, to_load->swaddr);
+            assert(proc->cont.original_page_addr != 0);
+            memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
+            dprintf(4, "[PR] reading in new page %08x from address %u\n", readin, LOAD_PAGE(to_load->addr));
+            assert(proc->cont.page_replacement_victim->swapd);
+            printf("before read: Original page addr: %x\n", proc->cont.original_page_addr);
+            sos_swap_read(proc->cont.original_page_addr, LOAD_PAGE(to_load->addr));
             longjmp(ipc_event_env, -1);
-            assert(proc->cont.page_replacement_victim->addr != 0);
+            assert(proc->cont.original_page_addr != 0);
         } else {
             assert(!"Did not find page");
         }
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         dprintf(3, "[PR] REPLACEMENT COMPLETE\n");
-        to_load->swaddr = (unsigned)-1;
-        seL4_CPtr fc = frame_cap(to_load->addr);
+        printf("after: Original page addr: %x\n", proc->cont.original_page_addr);
+        to_load->addr = SAVE_PAGE(proc->cont.original_page_addr);
+        to_load->swapd = false;
+        seL4_CPtr fc = frame_cap(LOAD_PAGE(to_load->addr));
         seL4_ARM_Page_Unify_Instruction(fc, 0, PAGE_SIZE);
         //printf("NEW PAGE LOADED OKAY\n");
         return 0;

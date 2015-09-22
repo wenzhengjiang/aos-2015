@@ -16,7 +16,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -59,6 +59,7 @@ static void set_num_frames(void) {
  * Retrieve the cap corresponding to a frame
  */
 seL4_CPtr frame_cap(seL4_Word vaddr) {
+    dprintf(3, "%x\n", vaddr);
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
     conditional_panic(idx <= 0 || idx > nframes, "Cap does not exist\n");
@@ -214,16 +215,13 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     if (!frame_available_frames()) {
         swap_evict_page(as);
     }
-    if (proc->cont.page_replacement_victim) {
-        assert(proc->cont.page_replacement_victim->addr != 0);
-        memset((void*)proc->cont.page_replacement_victim->addr, 0, PAGE_SIZE);
-        assert(proc->cont.page_replacement_victim->addr % PAGE_SIZE == 0);
-        sos_unmap_frame(proc->cont.page_replacement_victim->addr);
-        proc->cont.page_replacement_victim->addr = 0;
-        if (proc->cont.page_replacement_victim->swaddr == (unsigned)-1) {
-            assert(!"Victim has no swap address!");
-        }
+    if (proc->cont.original_page_addr) {
+        memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
+        assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
+        sos_unmap_frame(proc->cont.original_page_addr);
+        assert(proc->cont.page_replacement_victim->swapd);
         proc->cont.page_replacement_victim = NULL;
+        proc->cont.original_page_addr = 0;
     }
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
