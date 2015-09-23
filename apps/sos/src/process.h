@@ -65,5 +65,6 @@ sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) ;
+void set_current_process(pid_t pid);
 
 #endif

@@ -28,13 +28,11 @@
  * be stored in the clients cspace. */
 #define USER_EP_CAP         (1)
 #define TEST_PRIORITY       (0)
-#define TEST_EP_BADGE       (101)
 #define FD_TABLE_SIZE       (1024)
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
-sos_proc_t test_proc;
-sos_proc_t *curproc = &test_proc;
+sos_proc_t *curproc;
 extern char _cpio_archive[];
 
 static void init_cspace(sos_proc_t *proc) {
@@ -77,10 +75,10 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
 
     /* Copy the fault endpoint to the user app to enable IPC */
     user_ep_cap = cspace_mint_cap(proc->cspace,
-            cur_cspace,
-            fault_ep,
-            seL4_AllRights,
-            seL4_CapData_Badge_new(TEST_EP_BADGE));
+                                  cur_cspace,
+                                  fault_ep,
+                                  seL4_AllRights,
+                                  seL4_CapData_Badge_new((unsigned)proc->pid));
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
     assert(user_ep_cap == USER_EP_CAP);
@@ -123,6 +121,11 @@ int process_create(seL4_CPtr fault_ep) {
 
 sos_addrspace_t *current_as(void) {
     return proc_as(curproc);
+}
+
+void set_current_process(pid_t pid) {
+    assert(pid > 0 && pid < MAX_PROCESS_NUM);
+    curproc = process_lookup(pid);
 }
 
 sos_proc_t *current_process(void) {
