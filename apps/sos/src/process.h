@@ -57,7 +57,7 @@ typedef struct process {
 } sos_proc_t;
 
 
-int process_create(seL4_CPtr fault_ep);
+sos_proc_t* process_create(seL4_CPtr fault_ep);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);

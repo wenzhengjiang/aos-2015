@@ -58,7 +58,8 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
  * Inject data into the given vspace.
  * TODO: Don't keep these pages mapped in
  */
-static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
+static int load_segment_into_vspace(sos_addrspace_t* as,
+                                    seL4_ARM_PageDirectory dest_as,
                                     char *src, unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions) {
@@ -87,14 +88,14 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
     */
 
 
-
+    dprintf(-1, "load_segment_into_vspace: dst=%08x", dst);
     assert(file_size <= segment_size);
 
     unsigned long pos;
 
     /* We work a page at a time in the destination vspace. */
+    assert(as);
     pos = 0;
-    sos_addrspace_t *as = proc_as(current_process());
     sos_region_t *reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
     if (reg == NULL) {
         // failed to create a region
@@ -127,10 +128,11 @@ static int load_segment_into_vspace(seL4_ARM_PageDirectory dest_as,
         dst += nbytes;
         src += nbytes;
     }
+    dprintf(-1, "load_segment_into_vspace: finished\n");
     return 0;
 }
 
-int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
+int elf_load(sos_addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
     int num_headers;
     int err;
@@ -159,7 +161,7 @@ int elf_load(seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
-        err = load_segment_into_vspace(dest_as, source_addr, segment_size, file_size, vaddr,
+        err = load_segment_into_vspace(as, dest_as, source_addr, segment_size, file_size, vaddr,
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
         conditional_panic(err != 0, "Elf loading failed!\n");
     }

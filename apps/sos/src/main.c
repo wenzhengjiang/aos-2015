@@ -230,36 +230,6 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"--------------------------------------------------------\n");
 }
 
-void start_first_process(char* app_name, seL4_CPtr fault_ep) {
-    int err;
-
-    /* These required for setting up the TCB */
-    seL4_UserContext context;
-
-    /* These required for loading program sections */
-    char* elf_base;
-    unsigned long elf_size;
-    sos_proc_t *curproc = current_process();
-
-    process_create(fault_ep);
-    sos_addrspace_t *as = proc_as(curproc);
-
-    /* parse the cpio image */
-    dprintf(1, "\nStarting \"%s\"...\n", app_name);
-    elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
-    conditional_panic(!elf_base, "Unable to locate cpio header");
-    /* load the elf image */
-    err = elf_load(curproc->vspace->sos_pd_cap, elf_base);
-    conditional_panic(err, "Failed to load elf image");
-    as_activate(as);
-
-    /* Start the new process */
-    memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(elf_base);
-    printf("pc = %08x\n", context.pc);
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(curproc->tcb_cap, 1, 0, 2, &context);
-}
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     seL4_Word ep_addr, aep_addr;
@@ -376,7 +346,7 @@ int main(void) {
 
     sos_serial_init();
     /* Start the user application */
-    start_first_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
+    assert(start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap) > 0);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

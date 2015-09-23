@@ -28,7 +28,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 /* Maximum number of frames which will fit in our region */
-#define SMALL_FT
 #ifdef SMALL_FT
   #define MAX_FRAMES 1580
 #else

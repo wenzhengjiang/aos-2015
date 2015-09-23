@@ -27,7 +27,7 @@ typedef of_entry_t** fd_table_t;
 
 int init_open_file_table(void);
 int fd_create(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode);
+int fd_create_fd(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode, int fd);
 int fd_free(fd_table_t fd_table, int fd);
-int init_fd_table(fd_table_t*);
 
 #endif

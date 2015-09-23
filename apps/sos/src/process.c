@@ -20,7 +20,7 @@
 #include <elf/elf.h>
 #include "elf.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -87,14 +87,23 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
     return user_ep_cap;
 }
 
+static int init_fd_table(sos_proc_t *proc) {
+    frame_alloc((seL4_Word*)&proc->fd_table);
+
+    conditional_panic(!proc->fd_table, "No memory for new TCB");
+    if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,1) < 0) return ENOMEM;
+    if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,2) < 0) return ENOMEM;
+
+    return 0;
+}
+
 static int get_next_pid() {
     static int next_pid = 1;
     int cnt = 0;
-    while (proc_table[next_pid]) {
+    while (next_pid == 0 || proc_table[next_pid]) {
         next_pid = (next_pid+1) % MAX_PROCESS_NUM;
         cnt++;
         if (cnt == MAX_PROCESS_NUM) return -1;
-        if (next_pid == 0) next_pid++;
     }
     return next_pid;
 }
@@ -102,23 +111,26 @@ static int get_next_pid() {
  * Create a new process
  * @return error code or 0 for success
  */
-int process_create(seL4_CPtr fault_ep) {
+sos_proc_t* process_create(seL4_CPtr fault_ep) {
+    //dprintf(3, "process_create\n");
     sos_proc_t* proc = malloc(sizeof(sos_proc_t));
-    if (proc) {
-        return ENOMEM;
+    if (proc == NULL) {
+        return NULL;
     }
     memset((void*)proc, 0, sizeof(sos_proc_t));
     proc->pid = get_next_pid();
     if (proc->pid == -1)
-        return ENOMEM;
+        return NULL;
     proc->vspace = as_create();
     init_cspace(proc);
+    assert(proc->vspace);
     proc->user_ep_cap = init_ep(proc, fault_ep);
     init_tcb(proc);
-    init_fd_table(&proc->fd_table);
+    init_fd_table(proc);
     proc_table[proc->pid] = proc; 
 
-    return 0;
+    //dprintf(3, "process_create finished\n");
+    return proc;
 }
 
 sos_addrspace_t *current_as(void) {
@@ -148,6 +160,7 @@ sos_proc_t *process_lookup(pid_t pid) {
 }
 
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
+    printf("start_process\n");
     int err;
 
     /* These required for setting up the TCB */
@@ -156,9 +169,12 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     char* elf_base;
     unsigned long elf_size;
-    pid_t pid = process_create(fault_ep);
-    sos_proc_t *proc = process_lookup(pid);
+    printf("process_create\n");
+    sos_proc_t* proc = process_create(fault_ep);
+    if (!proc) return -1;
+    printf("process_lookup\n");
 
+    printf("proc_as\n");
     sos_addrspace_t *as = proc_as(proc);
 
     /* parse the cpio image */
@@ -166,7 +182,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
     /* load the elf image */
-    err = elf_load(proc->vspace->sos_pd_cap, elf_base);
+    err = elf_load(as, proc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
     as_activate(as);
 
@@ -176,6 +192,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     printf("pc = %08x\n", context.pc);
     context.sp = PROCESS_STACK_TOP;
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
-    return pid;
+    return proc->pid;
 }
 

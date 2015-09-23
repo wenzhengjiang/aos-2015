@@ -22,7 +22,7 @@ of_entry_t* get_ofe() {
     return NULL;
 }
 
-static int fd_create2(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode, int i) {
+int fd_create_fd(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode, int i) {
     assert (fdt[i] == NULL);
 
     fdt[i] = get_ofe();
@@ -65,12 +65,4 @@ int fd_free(fd_table_t fd_table, int fd) {
     return 0;
 }
 
-int init_fd_table(fd_table_t *fd_table) {
-    frame_alloc((seL4_Word*)fd_table);
 
-    conditional_panic(!fd_table, "No memory for new TCB");
-    if(fd_create2(*fd_table, 0, &serial_io, FM_READ,1) < 0) return ENOMEM;
-    if(fd_create2(*fd_table, 0, &serial_io, FM_READ,2) < 0) return ENOMEM;
-
-    return 0;
-}
