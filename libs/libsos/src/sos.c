@@ -237,7 +237,7 @@ int sos_process_status(sos_process_t *processes, unsigned max) {
 }
 
 pid_t sos_process_wait(pid_t pid) {
-    assert(!"sos_process_wait not implemented!");
+    //assert(!"sos_process_wait not implemented!");
     return 0;
 }
 

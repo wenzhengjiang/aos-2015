@@ -212,6 +212,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     }
     as->repllist_tail = pt;
     pt->next = as->repllist_head;
+    dprintf(0, "as_add_page complete");
     return 0;
 }
 
@@ -356,11 +357,14 @@ void as_activate(sos_addrspace_t* as) {
  */
 sos_addrspace_t* as_create(void) {
     int err;
+    dprintf(3, "[AS] as_create\n");
     sos_addrspace_t *as = malloc(sizeof(sos_addrspace_t));
     conditional_panic(!as, "No memory for address space");
     memset(as, 0, sizeof(sos_addrspace_t));
+    printf("finished memset\n");
     as->sos_pd_addr = ut_alloc(seL4_PageDirBits);
     conditional_panic(!as->sos_pd_addr, "No memory for new Page Directory");
+    printf("cspace_ut_retyping\n");
     err = cspace_ut_retype_addr(as->sos_pd_addr,
                                 seL4_ARM_PageDirectoryObject,
                                 seL4_PageDirBits,
@@ -368,8 +372,11 @@ sos_addrspace_t* as_create(void) {
                                 &as->sos_pd_cap);
     conditional_panic(err, "Failed to allocate page directory cap for client");
     // Create the page directory
+    printf("Allocating new frame for PD\n");
     err = (int)frame_alloc((seL4_Word*)&as->pd);
     conditional_panic(!err, "Unable to get frame for PD!\n");
+    printf("allocating page for buf addr\n");
     as_alloc_page(as, &as->sos_ipc_buf_addr);
+    dprintf(3, "[AS] as_create success\n");
     return as;
 }

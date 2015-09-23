@@ -32,7 +32,7 @@
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
-sos_proc_t *curproc;
+sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
 
 static void init_cspace(sos_proc_t *proc) {
@@ -87,8 +87,9 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
 
 static int init_fd_table(sos_proc_t *proc) {
     frame_alloc((seL4_Word*)&proc->fd_table);
-
-    conditional_panic(!proc->fd_table, "No memory for new TCB");
+    if (!proc->fd_table) {
+        return ENOMEM;
+    }
     if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,1) < 0) return ENOMEM;
     if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,2) < 0) return ENOMEM;
 
@@ -117,16 +118,21 @@ sos_proc_t* process_create(seL4_CPtr fault_ep) {
     }
     memset((void*)proc, 0, sizeof(sos_proc_t));
     proc->pid = get_next_pid();
-    if (proc->pid == -1)
+    if (proc->pid == -1) {
+        free(proc);
         return NULL;
+    }
     proc->vspace = as_create();
     init_cspace(proc);
     assert(proc->vspace);
     proc->user_ep_cap = init_ep(proc, fault_ep);
+    printf("Initialising TCB\n");
     init_tcb(proc);
-    init_fd_table(proc);
-    proc_table[proc->pid] = proc; 
-
+    printf("Finished initialising TCB\n");
+    int err = init_fd_table(proc);
+    assert(!err);
+    proc_table[proc->pid] = proc;
+    printf("Process create finished\n");
     //dprintf(3, "process_create finished\n");
     return proc;
 }
@@ -144,6 +150,7 @@ sos_proc_t *current_process(void) {
     return curproc;
 }
 
+// TODO: Remove this function.  maybe?
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
     sos_addrspace_t* as = current_process()->vspace;
     int err = as_create_page(as, vaddr, rights);
@@ -175,7 +182,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     printf("process_create\n");
     sos_proc_t* proc = process_create(fault_ep);
     if (!proc) return -1;
-    printf("process_lookup\n");
 
     printf("proc_as\n");
     sos_addrspace_t *as = proc_as(proc);
@@ -192,8 +198,8 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* Start the new process */
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);
-    printf("pc = %08x\n", context.pc);
     context.sp = PROCESS_STACK_TOP;
+    assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
     return proc->pid;
 }

@@ -47,7 +47,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -85,7 +85,7 @@ static inline int CONST min(int a, int b)
 }
 
 void syscall_loop(seL4_CPtr ep) {
-    sos_proc_t *proc;
+    sos_proc_t *proc = NULL;
     register_handlers();
     int pid = setjmp(ipc_event_env);
     while (1) {
@@ -96,6 +96,7 @@ void syscall_loop(seL4_CPtr ep) {
         if (pid > 0) {
             dprintf(4, "[MAIN] Applying continuation\n");
             // m7 TODO: Need to update the current process
+            set_current_process(pid);
             proc = process_lookup(pid);
             //message = proc->cont.ipc_message;
             label = proc->cont.ipc_label;
@@ -104,9 +105,12 @@ void syscall_loop(seL4_CPtr ep) {
             continue;
         } else {
             dprintf(4, "[MAIN] New continuation\n");
-            proc = current_process();
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
+            if (badge < MAX_PROCESS_NUM) {
+                set_current_process((int)badge);
+                proc = current_process();
+            }
 
         }
         if(badge & IRQ_EP_BADGE){
@@ -120,14 +124,15 @@ void syscall_loop(seL4_CPtr ep) {
                 dprintf(4, "[MAIN] Starting network interrupt\n");
                 network_irq();
                 if(callback_done) {
+                    printf("Setting PID for continuation\n");
                     pid = 1;
                 } else {
+                    printf("Not setting PID for continuation\n");
                     pid = 0;
                 }
                 continue;
             }
         } else if(label == seL4_VMFault){
-            set_current_process((int)badge);
             /* Page fault */
             // Only print out debugging information before the first fault attempt
             if (!pid || !proc->cont.syscall_loop_initiations) {
@@ -149,7 +154,6 @@ void syscall_loop(seL4_CPtr ep) {
                 syscall_end_continuation(proc, 0, true);
             }
         } else if(label == seL4_NoFault) {
-            set_current_process((int)badge);
             if (proc->cont.syscall_loop_initiations == 0) {
                 dprintf(4, "[MAIN] Starting syscall\n");
                 proc->cont.syscall_number = seL4_GetMR(0);
@@ -348,10 +352,12 @@ int main(void) {
 
     sos_serial_init();
     /* Start the user application */
-    assert(start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap) > 0);
+    assert(_sos_ipc_ep_cap);
+    pid_t pid = start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
+    assert(pid > 0);
 
     /* Wait on synchronous endpoint for IPC */
-    dprintf(0, "\nSOS entering syscall loop\n");
+    dprintf(-1, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
 
     /* Not reached */

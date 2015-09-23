@@ -65,10 +65,17 @@ static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
     callback_done = false;
+    printf("Entering nfs_open callback: %d\n", (int)token);
     sos_proc_t *proc = process_lookup(token);
+    assert(proc);
     int fd = proc->cont.fd;
+    printf("fd found: %d\n", fd);
     of_entry_t *of = fd_lookup(proc, fd);
+    printf("of found %x\n", (unsigned)of);
+    assert(of);
+    printf("status: %d\n", status);
     if (status == NFSERR_NOENT && (of->mode & FM_WRITE)) {
+        printf("Open calling for creation.\n");
         // TODO: Implement time stamps
         uint32_t clock_upper = time_stamp() >> 32;
         uint32_t clock_lower = (time_stamp() << 32) >> 32;
@@ -88,11 +95,13 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
     }
+    printf("File already existsh on FS.\n");
 
     of->fhandle = (fhandle_t*)malloc(sizeof(fhandle_t));
     *(of->fhandle) = *fh;
-
+    assert(proc);
     syscall_end_continuation(proc, fd, true);
+    printf("Finishing nfs_open callback\n");
 }
 
 int sos_nfs_open(const char* filename, fmode_t mode) {
@@ -301,7 +310,7 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
         syscall_end_continuation(proc, 0, true);
         return;
     }
-    current_process()->cont.cookie = nfscookie;
+    proc->cont.cookie = nfscookie;
     callback_done = true;
 }
 

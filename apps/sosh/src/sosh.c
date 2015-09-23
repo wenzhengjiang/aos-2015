@@ -347,12 +347,12 @@ static void m5_test(void) {
     assert(r == strlen(msg));
     close(file);
     file = open("tmp1", O_RDONLY);
-    assert(file > 0);
+    assert(file >= 0);
     r = read(file, buf, BUF_SIZ);
     assert(r == strlen("hello, world"));
     r = close(file);
     file = open("bootimg.elf", O_RDONLY);
-    assert(file > 0);
+    assert(file >= 0);
     r = read(file, buf, BUF_SIZ);
     assert(r == BUF_SIZ);
     r = close(file);
@@ -369,8 +369,9 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
     create_tmpfiles();
-    m5_test();
     in = open("console", O_RDONLY);
+    m5_test();
+
     assert(in >= 0);
     bp = buf;
     done = 0;

@@ -110,7 +110,7 @@ static int load_segment_into_vspace(sos_addrspace_t* as,
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
         /* First we need to create a frame */
-        process_create_page(vpage, permissions);
+        as_create_page(as, vpage, permissions);
 
         kdst   = as_lookup_sos_vaddr(as, dst);
         sos_cap = frame_cap(kdst);

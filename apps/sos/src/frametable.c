@@ -210,17 +210,19 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         return 0;
     }
     sos_proc_t *proc = current_process();
-    sos_addrspace_t *as = proc->vspace;
-    if (!frame_available_frames()) {
-        swap_evict_page(as);
-    }
-    if (proc->cont.original_page_addr) {
-        memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
-        assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
-        sos_unmap_frame(proc->cont.original_page_addr);
-        assert(proc->cont.page_replacement_victim->swapd);
-        proc->cont.page_replacement_victim = NULL;
-        proc->cont.original_page_addr = 0;
+    if (proc) {
+        sos_addrspace_t *as = proc->vspace;
+        if (!frame_available_frames()) {
+            swap_evict_page(as);
+        }
+        if (proc->cont.original_page_addr) {
+            memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
+            assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
+            sos_unmap_frame(proc->cont.original_page_addr);
+            assert(proc->cont.page_replacement_victim->swapd);
+            proc->cont.page_replacement_victim = NULL;
+            proc->cont.original_page_addr = 0;
+        }
     }
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;

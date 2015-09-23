@@ -59,9 +59,9 @@ int fd_free(fd_table_t fd_table, int fd) {
         return -1;
     }
     fd_table[fd]->io = NULL;
-    fd_table[fd] = NULL;
     if(fd_table[fd]->fhandle)
         free(fd_table[fd]->fhandle);
+    fd_table[fd] = NULL;
     return 0;
 }
 
