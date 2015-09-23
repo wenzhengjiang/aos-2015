@@ -127,6 +127,7 @@ void syscall_loop(seL4_CPtr ep) {
                 continue;
             }
         } else if(label == seL4_VMFault){
+            set_current_process((int)badge);
             /* Page fault */
             // Only print out debugging information before the first fault attempt
             if (!pid || !proc->cont.syscall_loop_initiations) {
@@ -148,6 +149,7 @@ void syscall_loop(seL4_CPtr ep) {
                 syscall_end_continuation(proc, 0, true);
             }
         } else if(label == seL4_NoFault) {
+            set_current_process((int)badge);
             if (proc->cont.syscall_loop_initiations == 0) {
                 dprintf(4, "[MAIN] Starting syscall\n");
                 proc->cont.syscall_number = seL4_GetMR(0);
