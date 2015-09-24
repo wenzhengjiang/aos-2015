@@ -43,7 +43,13 @@ typedef struct continuation {
     bool handler_initiated;
     bool swap_status;
     char path[MAX_FILE_PATH_LENGTH];
+    pid_t pid;
 } cont_t;
+
+typedef struct pid_entry {
+    pid_t pid;
+    struct pid_entry* next;
+} pid_entry_t;
 
 typedef struct process {
     int pid;
@@ -54,6 +60,9 @@ typedef struct process {
     seL4_CPtr user_ep_cap;
     fd_table_t fd_table;
     cont_t cont;
+    
+    pid_t waiting_pid; // pid of process I'm waiting. -1: any, 0: none
+    pid_entry_t* pid_queue; // processes waiting for me
 } sos_proc_t;
 
 
@@ -66,5 +75,8 @@ of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) ;
 void set_current_process(pid_t pid);
+
+int register_to_all_proc(pid_t pid);
+int register_to_proc(sos_proc_t* proc, pid_t pid);
 
 #endif

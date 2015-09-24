@@ -172,6 +172,13 @@ static int getdirent_setup (void) {
     return 0;
 }
 
+static int waitpid_setup(void) {
+    dprintf(4, "SYS WAITPID\n");
+    pid_t pid = seL4_GetMR(1);
+    current_process()->cont.pid = pid;
+    return 0;
+}
+
 static int stat_setup (void) {
     current_process()->cont.client_addr = (client_vaddr)seL4_GetMR(1);
     dprintf(4, "SYS STAT\n");
@@ -235,6 +242,10 @@ void register_handlers(void) {
 
     handlers[SOS_SYSCALL_GETPID][HANDLER_SETUP] = NULL;
     handlers[SOS_SYSCALL_GETPID][HANDLER_EXEC] =  sos__sys_getpid;
+
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = waitpid_setup;
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_waitpid;
+
 }
 
 void handle_syscall(seL4_Word syscall_number) {

@@ -100,7 +100,6 @@ static int cp(int argc, char **argv) {
     fd_out = open(file2, O_WRONLY);
 
     assert(fd >= 0);
-    int offset = 0 ;
     printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
     while ((num_read = read(fd, really_big_buf, buf_size)) > 0) {
         gettimeofday(&start_time, NULL);

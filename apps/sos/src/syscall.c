@@ -306,6 +306,20 @@ int sos__sys_getdirent(void) {
     return nfs_io.getdirent();
 }
 
+int sos__sys_waitpid(void) {
+    int err = 0;
+    pid_t pid = current_process()->cont.pid;
+    sos_proc_t* cur_proc = current_process();
+    assert(cur_proc->waiting_pid == 0);
+    cur_proc->waiting_pid = pid;
+    if (pid == -1) {
+        err = register_to_all_proc(cur_proc->pid);
+    } else {
+        err = register_to_proc(process_lookup(pid), cur_proc->pid);
+    }
+    return err;
+}
+
 /**
  * Close an open file.
  * Should not block the caller.

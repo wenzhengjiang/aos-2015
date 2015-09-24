@@ -19,6 +19,7 @@
 #include "serial.h"
 #include <elf/elf.h>
 #include "elf.h"
+#include "file.h"
 
 #define verbose 5
 #include <log/debug.h>
@@ -160,6 +161,7 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
 
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
     assert(proc);
+    assert(fd >= 0 && fd <= MAX_FD);
     return proc->fd_table[fd];
 }
 
@@ -202,5 +204,26 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
     return proc->pid;
+}
+
+
+int register_to_all_proc(pid_t pid) {
+    int err = 0;
+    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
+        if(proc_table[i]) {
+            if(err = register_to_proc(proc_table[i], pid))
+                return err;
+        }
+    }
+    return err;
+}
+int register_to_proc(sos_proc_t* proc, pid_t pid) {
+    assert(proc);
+    pid_entry_t * pe = malloc(sizeof(pid_entry_t));
+    pe->pid = pid;
+    if (pe == NULL) return ENOMEM;
+    pe->next = proc->pid_queue;
+    proc->pid_queue = pe;
+    
 }
 

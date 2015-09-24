@@ -236,8 +236,21 @@ int sos_process_status(sos_process_t *processes, unsigned max) {
 }
 
 pid_t sos_process_wait(pid_t pid) {
-    //assert(!"sos_process_wait not implemented!");
-    return 0;
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_WAITPID);
+    seL4_SetMR(1, (seL4_Word)pid);
+    seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    return (long)seL4_GetMR(0);
+}
+
+int sos_process_delete(pid_t pid) {
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_WAITPID);
+    seL4_SetMR(1, (seL4_Word)pid);
+    seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    return (long)seL4_GetMR(0);
 }
 
 pid_t sos_my_id(void) {
@@ -259,3 +272,5 @@ int sos_sys_close(int file) {
     } else {        return -1;
     }
 }
+
+
