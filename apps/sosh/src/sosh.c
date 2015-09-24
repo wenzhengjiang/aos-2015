@@ -302,6 +302,12 @@ static int micro_time(int argc, char *argv[]) {
     return 0;
 }
 
+static int get_pid(int argc, char *argv[]) {
+    int pid = sos_my_id();
+    printf("Our pid is %d\n", pid);
+    return 0;
+}
+
 struct command {
     char *name;
     int (*command)(int argc, char **argv);
@@ -309,7 +315,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time} };
+                              {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid} };
 
 
 static void create_tmpfiles(void) {
@@ -361,6 +367,7 @@ static void m5_test(void) {
     assert(r == -1);
     r = read(file, buf, BUF_SIZ);
     assert(r == -1);
+    sos_my_id();
 }
 
 int main(void) {

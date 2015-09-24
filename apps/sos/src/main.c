@@ -110,8 +110,8 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge < MAX_PROCESS_NUM) {
                 set_current_process((int)badge);
                 proc = current_process();
+                printf("Received %u from process\n", proc->pid);
             }
-
         }
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */

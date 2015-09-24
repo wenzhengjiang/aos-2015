@@ -254,6 +254,11 @@ int sos__sys_open(void) {
     return dev->open(path, mode);
 }
 
+int sos__sys_getpid(void) {
+    syscall_end_continuation(current_process(), current_process()->pid, true);
+    return 0;
+}
+
 int sos__sys_read(void){
     int file = current_process()->cont.fd;
     size_t nbyte = current_process()->cont.length_arg;

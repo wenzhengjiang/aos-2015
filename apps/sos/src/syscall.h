@@ -26,6 +26,8 @@ int sos__sys_close(void);
 
 int sos__sys_proc_create(void);
 
+int sos__sys_getpid(void);
+
 void ipc_read(int start, char *buf);
 
 void iov_ensure_loaded(iovec_t* iov);

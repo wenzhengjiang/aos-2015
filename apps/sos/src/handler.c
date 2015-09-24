@@ -232,6 +232,9 @@ void register_handlers(void) {
 
     handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_SETUP] = proc_create_setup;
     handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_EXEC] =  sos__sys_proc_create;
+
+    handlers[SOS_SYSCALL_GETPID][HANDLER_SETUP] = NULL;
+    handlers[SOS_SYSCALL_GETPID][HANDLER_EXEC] =  sos__sys_getpid;
 }
 
 void handle_syscall(seL4_Word syscall_number) {
