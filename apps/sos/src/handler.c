@@ -126,6 +126,7 @@ static int open_setup (void) {
     io_device_t *dev = device_handler_str(current_process()->cont.path);
     int fd = fd_create(current_process()->fd_table, NULL, dev,
                        current_process()->cont.file_mode);
+    assert(fd >= 0 && fd <= MAX_FD);
     current_process()->cont.fd = fd;
     return 0;
 }
@@ -140,7 +141,7 @@ static int read_setup (void) {
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (current_process()->cont.iov == NULL) {
         // TODO: Kill bad client
-        assert(!"illegal buf addr");
+        //assert(!"illegal buf addr");
         return EINVAL;
     }
     return 0;
@@ -179,6 +180,26 @@ static int waitpid_setup(void) {
     return 0;
 }
 
+static int proc_delete_setup(void) {
+    dprintf(4, "SYS PROC DELETE\n");
+    pid_t pid = seL4_GetMR(1);
+    current_process()->cont.pid = pid;
+    return 0;
+}
+
+static int proc_status_setup(void) {
+    dprintf(4, "SYS PROC STATUS\n");
+    client_vaddr buf = seL4_GetMR(1);
+    size_t nbyte = (size_t)seL4_GetMR(2);
+    current_process()->cont.client_addr = buf;
+    current_process()->cont.length_arg = nbyte;
+    current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
+    if (current_process()->cont.iov == NULL) {
+        return EINVAL;
+    }
+    return 0;
+}
+
 static int stat_setup (void) {
     current_process()->cont.client_addr = (client_vaddr)seL4_GetMR(1);
     dprintf(4, "SYS STAT\n");
@@ -203,12 +224,14 @@ static int close_handler (void) {
     send_back(reply);
     return 0;
 }
+
 static int proc_create_setup(void) {
     dprintf(4, "SYS PROC_CREATE\n");
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
     ipc_read(PROC_CREATE_MESSAGE_START, current_process()->cont.path);
     return 0;
 }
+
 void register_handlers(void) {
     handlers[SOS_SYSCALL_BRK][HANDLER_SETUP] = NULL;
     handlers[SOS_SYSCALL_BRK][HANDLER_EXEC] = brk_handler;
@@ -245,6 +268,12 @@ void register_handlers(void) {
 
     handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = waitpid_setup;
     handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_waitpid;
+
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = proc_delete_setup;
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_proc_delete;
+
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = proc_status_setup;
+    handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_proc_status;
 
 }
 

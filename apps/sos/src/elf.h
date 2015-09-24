@@ -12,8 +12,8 @@
 #define _LIBDEVICE_ELF_H_
 
 #include <sel4/sel4.h>
-#include "addrspace.h"
+#include "process.h"
 
-int elf_load(sos_addrspace_t* as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
+int elf_load(sos_proc_t * proc, seL4_ARM_PageDirectory dest_pd, char* elf_file);
 
 #endif

@@ -43,7 +43,6 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
-
         fd_free(proc->fd_table, fd);
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;

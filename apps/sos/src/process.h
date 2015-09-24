@@ -10,6 +10,7 @@
 #include "addrspace.h"
 #include "file.h"
 #include <syscallno.h>
+#include <sos.h>
 
 #define TEST_PROCESS_NAME             CONFIG_SOS_STARTUP_APP
 
@@ -63,10 +64,13 @@ typedef struct process {
     
     pid_t waiting_pid; // pid of process I'm waiting. -1: any, 0: none
     pid_entry_t* pid_queue; // processes waiting for me
+    
+    sos_process_t status;
 } sos_proc_t;
 
 
-sos_proc_t* process_create(seL4_CPtr fault_ep);
+sos_proc_t* process_create(char* name, seL4_CPtr fault_ep);
+void process_delete(sos_proc_t* proc);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);
@@ -75,8 +79,12 @@ of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) ;
 void set_current_process(pid_t pid);
+int get_all_proc_stat(char *buf, size_t n);
 
 int register_to_all_proc(pid_t pid);
 int register_to_proc(sos_proc_t* proc, pid_t pid);
+int deregister_to_all_proc(pid_t pid);
+int deregister_to_proc(sos_proc_t* proc, pid_t pid);
+
 
 #endif

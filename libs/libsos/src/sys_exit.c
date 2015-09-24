@@ -42,7 +42,7 @@ sys_getpid(va_list ap) {
 long
 sys_exit(va_list ap)
 {
-    abort();
+    sos_process_delete(sos_my_id());
     return 0;
 }
 

@@ -231,8 +231,14 @@ pid_t sos_process_create(const char *path) {
 }
 
 int sos_process_status(sos_process_t *processes, unsigned max) {
-    assert(!"sos_process_status not implemented!");
-    return 0;
+    if (!processes) return -1;
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_STATUS);
+    seL4_SetMR(1, (seL4_Word)processes);
+    seL4_SetMR(2, (seL4_Word)max);
+    seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    return (long)seL4_GetMR(0);
 }
 
 pid_t sos_process_wait(pid_t pid) {
@@ -247,7 +253,7 @@ pid_t sos_process_wait(pid_t pid) {
 int sos_process_delete(pid_t pid) {
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
     seL4_SetTag(tag);
-    seL4_SetMR(0, SOS_SYSCALL_WAITPID);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_DELETE);
     seL4_SetMR(1, (seL4_Word)pid);
     seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     return (long)seL4_GetMR(0);
@@ -269,7 +275,8 @@ int sos_sys_close(int file) {
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
         return (int)seL4_GetMR(0);
-    } else {        return -1;
+    } else {
+        return -1;
     }
 }
 

@@ -30,6 +30,10 @@ int sos__sys_getpid(void);
 
 int sos__sys_waitpid(void);
 
+int sos__sys_proc_delete(void);
+
+int sos__sys_proc_status(void);
+
 void ipc_read(int start, char *buf);
 
 void iov_ensure_loaded(iovec_t* iov);

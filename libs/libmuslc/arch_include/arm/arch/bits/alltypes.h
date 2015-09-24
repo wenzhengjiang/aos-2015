@@ -190,6 +190,7 @@ struct timespec { time_t tv_sec; long tv_nsec; };
 
 #if defined(__NEED_pid_t) && !defined(__DEFINED_pid_t)
 typedef int pid_t;
+
 #define __DEFINED_pid_t
 #endif
 

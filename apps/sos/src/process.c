@@ -11,6 +11,7 @@
 #include <string.h>
 #include <nfs/nfs.h>
 #include <cpio/cpio.h>
+#include <clock/clock.h>
 
 #include "process.h"
 #include "addrspace.h"
@@ -33,7 +34,7 @@
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
-sos_proc_t *curproc = NULL;
+static sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
 
 static void init_cspace(sos_proc_t *proc) {
@@ -111,7 +112,7 @@ static int get_next_pid() {
  * Create a new process
  * @return error code or 0 for success
  */
-sos_proc_t* process_create(seL4_CPtr fault_ep) {
+sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     //dprintf(3, "process_create\n");
     sos_proc_t* proc = malloc(sizeof(sos_proc_t));
     if (proc == NULL) {
@@ -131,6 +132,11 @@ sos_proc_t* process_create(seL4_CPtr fault_ep) {
     init_tcb(proc);
     printf("Finished initialising TCB\n");
     int err = init_fd_table(proc);
+    proc->status.pid = proc->pid;
+    proc->status.size = 0;
+    proc->status.stime = time_stamp() / 1000;
+    strncpy(proc->status.command, name, N_NAME); 
+
     assert(!err);
     proc_table[proc->pid] = proc;
     printf("Process create finished\n");
@@ -138,6 +144,10 @@ sos_proc_t* process_create(seL4_CPtr fault_ep) {
     return proc;
 }
 
+void process_delete(sos_proc_t* proc) {
+    assert(proc);
+    assert(!"process_delete not implemented"); 
+}
 sos_addrspace_t *current_as(void) {
     return proc_as(curproc);
 }
@@ -161,7 +171,8 @@ void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
 
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
     assert(proc);
-    assert(fd >= 0 && fd <= MAX_FD);
+    if(!(fd >= 0 && fd <= MAX_FD))
+        return NULL;
     return proc->fd_table[fd];
 }
 
@@ -182,7 +193,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     char* elf_base;
     unsigned long elf_size;
     printf("process_create\n");
-    sos_proc_t* proc = process_create(fault_ep);
+    sos_proc_t* proc = process_create(app_name, fault_ep);
     if (!proc) return -1;
 
     printf("proc_as\n");
@@ -193,7 +204,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
     /* load the elf image */
-    err = elf_load(as, proc->vspace->sos_pd_cap, elf_base);
+    err = elf_load(proc, proc->vspace->sos_pd_cap, elf_base);
     conditional_panic(err, "Failed to load elf image");
     as_activate(as);
 
@@ -210,7 +221,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
 int register_to_all_proc(pid_t pid) {
     int err = 0;
     for (int i = 1; i < MAX_PROCESS_NUM; i++) {
-        if(proc_table[i]) {
+        if(proc_table[i] != NULL) {
             if(err = register_to_proc(proc_table[i], pid))
                 return err;
         }
@@ -224,6 +235,49 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
     if (pe == NULL) return ENOMEM;
     pe->next = proc->pid_queue;
     proc->pid_queue = pe;
-    
+    return 0;
 }
 
+int deregister_to_all_proc(pid_t pid) {
+    int err = 0;
+    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
+        if(proc_table[i]) {
+            err = deregister_to_proc(proc_table[i], pid);
+        }
+    }
+    return err;
+}
+
+int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
+    assert(proc);
+    assert(proc->pid_queue);
+    if (proc->pid_queue->pid == pid) {
+        proc->pid_queue = proc->pid_queue->next;
+        return 0;
+    }
+    pid_entry_t *p = proc->pid_queue;
+    bool found = false;
+    while (p->next) {
+        if (p->next->pid == pid) {
+            found = true;
+            pid_entry_t* next = p->next;
+            p->next = p->next->next;
+            free(next);
+        }
+        p = p->next;
+    }
+    return !found;
+}
+
+int get_all_proc_stat(char *buf, size_t size) {
+    assert(buf);
+    int offset = 0;
+    for (int i = 1;i < MAX_PROCESS_NUM && offset < size; i++) {
+        sos_proc_t * proc = proc_table[i];
+        if (proc) {
+            memcpy(buf+offset, (char*)&proc->status, sizeof(sos_process_t));
+            offset += sizeof(sos_process_t);
+        }
+    }
+    return offset;
+}

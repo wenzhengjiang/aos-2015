@@ -320,6 +320,30 @@ int sos__sys_waitpid(void) {
     return err;
 }
 
+int sos__sys_proc_delete(void) {
+    int err = 0;
+    pid_t pid = current_process()->cont.pid;
+    sos_proc_t* proc = process_lookup(pid);
+    pid_entry_t* pid_queue = proc->pid_queue;
+    // release all processes waiting for me
+    if (proc->waiting_pid == -1) {
+        err = deregister_to_all_proc(proc->pid);
+    } else {
+        err = deregister_to_proc(process_lookup(proc->waiting_pid), proc->pid);
+    }
+    assert(err);
+    for (pid_entry_t* p = pid_queue; p; p = p->next) {
+        sos_proc_t* proc = process_lookup(p->pid);
+        assert(proc->waiting_pid == proc->pid);
+        if(p == pid_queue) syscall_end_continuation(proc, pid, true); // only one process can get returned pid
+        else syscall_end_continuation(proc, -1, false);
+    }
+
+    process_delete(proc);
+
+    return err;
+}
+
 /**
  * Close an open file.
  * Should not block the caller.
@@ -346,4 +370,13 @@ int sos__sys_proc_create(void) {
     pid_t pid = start_process(current_process()->cont.path, _sos_ipc_ep_cap);
     syscall_end_continuation(current_process(), pid, pid > 0);
     return 0;
+}
+
+int sos__sys_proc_status(void) {
+    sos_proc_t *proc = current_process();
+    size_t n = proc->cont.length_arg;
+    char *buf = malloc(n * sizeof(sos_process_t));
+    int bytes = get_all_proc_stat(buf, n);
+    
+    free(buf);
 }
