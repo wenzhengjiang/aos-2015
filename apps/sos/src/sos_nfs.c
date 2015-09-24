@@ -298,6 +298,8 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
     proc->cont.counter += num_files;
 
     if (nfscookie == 0) {
+        proc->cont.reply_length = 2;
+        seL4_SetMR(1, 0);
         syscall_end_continuation(proc, 0, true);
         return;
     }
