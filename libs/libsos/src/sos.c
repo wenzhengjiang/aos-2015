@@ -197,7 +197,7 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {
         ipc_read(1, (char*)name);
-        name[nbyte] = 0;
+        name[nbyte - 1] = 0;
         return seL4_GetMR(0);
     } else {
         return -1;
