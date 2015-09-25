@@ -11,7 +11,7 @@
 
 #define SERIAL_BUF_SIZE  1024
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -19,7 +19,7 @@
 // to the client
 io_device_t serial_io = {
     .open = sos_serial_open,
-    .close = NULL,
+    .close = sos_serial_close,
     .read = sos_serial_read,
     .write = sos_serial_write,
     .getdirent = NULL,
@@ -68,7 +68,6 @@ static inline void try_send_buffer(int i) {
     }
     // reply to client reader
     syscall_end_continuation(current_process(), pos, true);
-    reader_pid = 0;
 
     if (pos < buflen) {
         memmove(buf, buf + pos, buflen - pos);
@@ -91,22 +90,43 @@ static void serial_handler(struct serial *serial, char c) {
 
 int sos_serial_close(int fd) {
     (void)fd;
-    serial_register_handler(serial, NULL);
-    serial = NULL;
-    line_buflen[0] = line_buflen[1] = 0;
+    // TODO: Commented things should probably be in a destroy()-like function
+    //serial_register_handler(serial, NULL);
+    //serial = NULL;
+    if (current_process()->fd_table[fd] == NULL) { return ENOENT; }
+    if (current_process()->fd_table[fd]->mode & FM_READ) {
+        reader_pid = 0;
+    }
+    //line_buflen[0] = line_buflen[1] = 0;
+    fd_free(current_process()->fd_table, fd);
     return 0;
 }
 
 int sos_serial_open(const char* filename, fmode_t mode) {
+    dprintf(3, "[SERIAL] sos_serial_open()\n");
     assert(!strcmp(filename, "console"));
     //    line_buflen[0] = line_buflen[1] = 0; // clear buffer
     sos_proc_t* proc = current_process();
-    int retval = fd_create(proc->fd_table, NULL, &serial_io, mode);
+    int retval;
+    if (mode & FM_READ) {
+        if (reader_pid == 0) {
+            reader_pid = proc->pid;
+            retval = proc->cont.fd;
+        } else {
+            dprintf(4, "[SERIAL] Busy reader: owned by %d\n", reader_pid);
+            retval = -EBUSY;
+            fd_free(proc->fd_table, proc->cont.fd);
+        }
+    } else {
+        retval = proc->cont.fd;
+    }
+
     if (retval >= 0) {
         syscall_end_continuation(current_process(), retval, true);
     } else {
         syscall_end_continuation(current_process(), retval, false);
     }
+    dprintf(4, "[SERIAL] sos_serial_open() complete\n");
     return 0;
 }
 
@@ -135,7 +155,6 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
             dprintf(4, "create new page\n");
             process_create_page(vec->vstart, reg->rights);
         }
-        reader_pid = current_process()->pid;
     }
     return 0;
 }

@@ -71,6 +71,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
 }
 
 inline static void send_back(seL4_MessageInfo_t reply) {
+    dprintf(2, "Replying via send_back()\n");
     seL4_CPtr reply_cap = current_process()->cont.reply_cap;
     assert(reply_cap != seL4_CapNull);
     seL4_SetTag(reply);
@@ -175,7 +176,7 @@ static int getdirent_setup (void) {
 
 static int waitpid_setup(void) {
     dprintf(4, "SYS WAITPID\n");
-    pid_t pid = seL4_GetMR(1);
+    pid_t pid = (int)seL4_GetMR(1);
     current_process()->cont.pid = pid;
     return 0;
 }
@@ -269,18 +270,18 @@ void register_handlers(void) {
     handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = waitpid_setup;
     handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_waitpid;
 
-    handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = proc_delete_setup;
-    handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_proc_delete;
+    handlers[SOS_SYSCALL_PROC_DELETE][HANDLER_SETUP] = proc_delete_setup;
+    handlers[SOS_SYSCALL_PROC_DELETE][HANDLER_EXEC] =  sos__sys_proc_delete;
 
-    handlers[SOS_SYSCALL_WAITPID][HANDLER_SETUP] = proc_status_setup;
-    handlers[SOS_SYSCALL_WAITPID][HANDLER_EXEC] =  sos__sys_proc_status;
-
+    handlers[SOS_SYSCALL_PROC_STATUS][HANDLER_SETUP] = proc_status_setup;
+    handlers[SOS_SYSCALL_PROC_STATUS][HANDLER_EXEC] =  sos__sys_proc_status;
 }
 
 void handle_syscall(seL4_Word syscall_number) {
     /* Save the caller */
     seL4_MessageInfo_t reply;
     int ret;
+    printf("Handling syscall number %d\n", syscall_number);
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
     if (handlers[syscall_number][HANDLER_SETUP] != NULL &&
         !current_process()->cont.handler_initiated) {

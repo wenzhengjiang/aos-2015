@@ -125,7 +125,10 @@ void syscall_loop(seL4_CPtr ep) {
                 network_irq();
                 if(callback_done) {
                     printf("Setting PID for continuation\n");
-                    pid = 1;
+                    pid = 0;
+                    if (current_process()) {
+                        pid = current_process()->pid;
+                    }
                 } else {
                     printf("Not setting PID for continuation\n");
                     pid = 0;

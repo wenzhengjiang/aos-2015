@@ -39,6 +39,7 @@ static inline unsigned CONST umin(unsigned a, unsigned b)
 static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
+    set_current_process(token);
     callback_done = false;
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
@@ -63,6 +64,7 @@ sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
 static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
+    set_current_process(token);
     callback_done = false;
     printf("Entering nfs_open callback: %d\n", (int)token);
     sos_proc_t *proc = process_lookup(token);
@@ -117,6 +119,7 @@ static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
     (void)fattr;
+    set_current_process(token);
     sos_proc_t *proc;
     int fd;
     proc = process_lookup((int)token);
@@ -176,6 +179,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
 static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
 
+    set_current_process(token);
     sos_proc_t *proc = proc = process_lookup(token);
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
@@ -235,6 +239,7 @@ static void prstat(sos_stat_t sbuf) {
 }
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
+    set_current_process(token);
     callback_done = false;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
@@ -285,6 +290,7 @@ int sos_nfs_getattr(void) {
 static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
+    set_current_process(token);
     sos_proc_t *proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);

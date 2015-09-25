@@ -177,8 +177,9 @@ of_entry_t *fd_lookup(sos_proc_t *proc, int fd) {
 }
 
 sos_proc_t *process_lookup(pid_t pid) {
-    if(!(pid > 0 && pid < MAX_PROCESS_NUM))
+    if(!(pid > 0 && pid < MAX_PROCESS_NUM)) {
         return NULL;
+    }
     return proc_table[pid];
 }
 

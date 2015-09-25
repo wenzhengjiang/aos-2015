@@ -49,6 +49,7 @@ static void swap_free(swap_addr saddr) {
 static void
 sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
+    set_current_process(token);
     sos_proc_t *proc = current_process();
     dprintf(4, "[SWAP] Invoking nfs_create callback\n");
     if (status != NFS_OK) {
@@ -86,6 +87,7 @@ static void sos_swap_open(void) {
 
 static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
+    set_current_process(token);
     sos_proc_t *proc = process_lookup(token);
     if (status != NFS_OK) {
         ERR("[SWAP] Failed to write to swap file");
@@ -146,6 +148,7 @@ swap_addr sos_swap_write(sos_vaddr page) {
 static void
 swap_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
+    set_current_process(token);
     if (count == 0) return;
     (void)fattr;
     sos_proc_t *proc = process_lookup(token);

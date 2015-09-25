@@ -310,6 +310,7 @@ int sos__sys_waitpid(void) {
     int err = 0;
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* cur_proc = current_process();
+    printf("%d is already waiting on cur_proc->waiting_pid: %d\n", cur_proc->pid, cur_proc->waiting_pid);
     assert(cur_proc->waiting_pid == 0);
     cur_proc->waiting_pid = pid;
     if (pid == -1) {
@@ -377,6 +378,6 @@ int sos__sys_proc_status(void) {
     size_t n = proc->cont.length_arg;
     char *buf = malloc(n * sizeof(sos_process_t));
     int bytes = get_all_proc_stat(buf, n);
-    
+
     free(buf);
 }

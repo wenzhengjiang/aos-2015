@@ -376,9 +376,10 @@ int main(void) {
     char *bp, *p;
     create_tmpfiles();
     in = open("console", O_RDONLY);
+    assert(in >= 0);
+
     m5_test();
 
-    assert(in >= 0);
     bp = buf;
     done = 0;
     new = 1;
