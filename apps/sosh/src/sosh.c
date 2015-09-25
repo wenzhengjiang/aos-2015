@@ -471,6 +471,10 @@ int main(void) {
 
         found = 0;
 
+        if (strcmp(argv[0], "quit") == 0) {
+            break;
+        }
+
         for (i = 0; i < sizeof(commands) / sizeof(struct command); i++) {
             if (strcmp(argv[0], commands[i].name) == 0) {
                 commands[i].command(argc, argv);

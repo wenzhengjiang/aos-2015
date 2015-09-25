@@ -127,6 +127,82 @@ _proc_map_pagetable(sos_addrspace_t *as, seL4_Word pd_idx, client_vaddr vaddr) {
     return 0;
 }
 
+
+/** Address space destruction **/
+static void as_free_region(sos_addrspace_t *as) {
+    sos_region_t *reg;
+    dprintf(3, "[AS] freeing regions\n");
+    for (reg = as->regions; as->regions != NULL; reg = reg->next) {
+        reg = as->regions->next;
+        free(as->regions);
+        as->regions = reg;
+    }
+    dprintf(4, "[AS] regions free'd\n");
+}
+
+static void as_free_kpts(sos_addrspace_t *as) {
+    kpt_t *kpt;
+    dprintf(3, "[AS] Freeing KPTs\n");
+    for (kpt = as->kpts; as->kpts != NULL; kpt = kpt->next) {
+        kpt = as->kpts->next;
+        cspace_revoke_cap(cur_cspace, kpt->cap);
+        cspace_err_t err = cspace_delete_cap(cur_cspace, kpt->cap);
+        if (err != CSPACE_NOERROR) {
+            ERR("[AS]: failed to delete kpt cap\n");
+        }
+        ut_free(kpt->addr, seL4_PageTableBits);
+        free(as->kpts);
+        as->kpts = kpt;
+    }
+    dprintf(4, "[AS] KPTs free'd\n");
+}
+
+static void as_free_ptes(sos_addrspace_t *as) {
+    pte_t *pt;
+    dprintf(3, "[AS] Freeing PTEs\n");
+    sos_unmap_frame(as->sos_ipc_buf_addr);
+    for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
+        pt = as->repllist_head->next;
+        if (pt->swapd) {
+            // TODO: Make sure that the page cap is dealt with in this scenario
+            swap_free(pt->addr);
+        } else {
+            cspace_revoke_cap(cur_cspace, pt->page_cap);
+            cspace_err_t err = cspace_delete_cap(cur_cspace, pt->page_cap);
+            if (err != CSPACE_NOERROR) {
+                ERR("[AS]: failed to delete page cap\n");
+            }
+            sos_unmap_frame(pt->addr);
+        }
+        free(as->repllist_head);
+        as->repllist_head = pt;
+    }
+    dprintf(4, "[AS] PTEs freed\n");
+}
+
+static void as_free_pd(sos_addrspace_t *as) {
+    int max_pt = (1 << PD_BITS);
+    dprintf(3, "[AS] freeing PD\n");
+    for (int i = 0; i < max_pt; i++) {
+        if (as->pd[i] != NULL) {
+            sos_unmap_frame((seL4_Word)as->pd[i]);
+        }
+    }
+    sos_unmap_frame((seL4_Word)as->pd);
+    dprintf(4, "[AS] PD free'd\n");
+}
+
+void as_free(sos_addrspace_t *as) {
+    dprintf(3, "[AS] Freeing address space\n");
+    assert(as);
+    as_free_region(as);
+    as_free_kpts(as);
+    as_free_ptes(as);
+    as_free_pd(as);
+    free(as);
+    dprintf(4, "[AS] address space free'd\n");
+}
+
 /**
  * Allocate a new frame
  */

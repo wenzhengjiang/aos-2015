@@ -74,4 +74,6 @@ void as_reference_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights r
 pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr);
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr);
 
+void as_free(sos_addrspace_t *as);
+
 #endif

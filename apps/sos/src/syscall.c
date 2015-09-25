@@ -43,7 +43,7 @@ static inline unsigned CONST umax(unsigned a, unsigned b) {
 
 timestamp_t start_time, end_time;
 
-static void iov_free(iovec_t *iov) {
+void iov_free(iovec_t *iov) {
     iovec_t *cur;
     while(iov) {
         cur = iov;
@@ -325,20 +325,6 @@ int sos__sys_proc_delete(void) {
     int err = 0;
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* proc = process_lookup(pid);
-    pid_entry_t* pid_queue = proc->pid_queue;
-    // release all processes waiting for me
-    if (proc->waiting_pid == -1) {
-        err = deregister_to_all_proc(proc->pid);
-    } else {
-        err = deregister_to_proc(process_lookup(proc->waiting_pid), proc->pid);
-    }
-    assert(err);
-    for (pid_entry_t* p = pid_queue; p; p = p->next) {
-        sos_proc_t* proc = process_lookup(p->pid);
-        assert(proc->waiting_pid == proc->pid);
-        if(p == pid_queue) syscall_end_continuation(proc, pid, true); // only one process can get returned pid
-        else syscall_end_continuation(proc, -1, false);
-    }
 
     process_delete(proc);
 

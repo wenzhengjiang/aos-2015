@@ -22,5 +22,6 @@ typedef seL4_Word swap_addr;
 void swap_init(void *);
 swap_addr sos_swap_write(sos_vaddr page);
 void sos_swap_read(sos_vaddr page, swap_addr pos);
+void swap_free(swap_addr saddr);
 
 #endif

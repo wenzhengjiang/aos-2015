@@ -77,6 +77,7 @@ inline static void send_back(seL4_MessageInfo_t reply) {
     seL4_SetTag(reply);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
+    // TODO: This does not free iov
     current_process()->cont = empty_cont;
 }
 

@@ -30,7 +30,6 @@
  * be stored in the clients cspace. */
 #define USER_EP_CAP         (1)
 #define TEST_PRIORITY       (0)
-#define FD_TABLE_SIZE       (1024)
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
@@ -144,10 +143,37 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     return proc;
 }
 
+static void process_free_pid_queue(sos_proc_t *proc) {
+    pid_entry_t *node;
+    dprintf(3, "[AS] freeing pid_queue\n");
+    for (node = proc->pid_queue; proc->pid_queue != NULL; node = node->next) {
+        node = proc->pid_queue->next;
+        free(proc->pid_queue);
+        proc->pid_queue = node;
+    }
+    dprintf(4, "[AS] pid_queue free'd\n");
+}
+
 void process_delete(sos_proc_t* proc) {
     assert(proc);
+
+    cspace_revoke_cap(cur_cspace, proc->tcb_cap);
+    cspace_err_t err = cspace_delete_cap(cur_cspace, proc->tcb_cap);
+    if (err != CSPACE_NOERROR) {
+        ERR("[PROC]: failed to delete tcb cap\n");
+    }
+    ut_free(proc->tcb_addr, seL4_TCBBits);
+    as_free(proc->vspace);
+    process_deregister_wait(proc, proc->pid);
+    free_fd_table(proc->fd_table);
+    iov_free(proc->cont.iov);
+    process_wake_waiters(proc);
+    process_free_pid_queue(proc);
+    cspace_destroy(proc->cspace);
+    free(proc);
     assert(!"process_delete not implemented"); 
 }
+
 sos_addrspace_t *current_as(void) {
     return proc_as(curproc);
 }
@@ -181,6 +207,21 @@ sos_proc_t *process_lookup(pid_t pid) {
         return NULL;
     }
     return proc_table[pid];
+}
+
+int process_wake_waiters(sos_proc_t *proc) {
+    (void)proc;
+    ERR("[PROCESS] process_wake_waiters(): implement me");
+
+    pid_entry_t* pid_queue = proc->pid_queue;
+    for (pid_entry_t* p = pid_queue; p; p = p->next) {
+        sos_proc_t* wake_proc = process_lookup(p->pid);
+        assert(proc->waiting_pid == proc->pid);
+        // only one process can get returned pid
+        if(p == pid_queue) syscall_end_continuation(wake_proc, proc->pid, true);
+        else syscall_end_continuation(proc, -1, false);
+    }
+    return 0;
 }
 
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
@@ -239,17 +280,7 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
     return 0;
 }
 
-int deregister_to_all_proc(pid_t pid) {
-    int err = 0;
-    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
-        if(proc_table[i]) {
-            err = deregister_to_proc(proc_table[i], pid);
-        }
-    }
-    return err;
-}
-
-int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
+static int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
     assert(proc);
     assert(proc->pid_queue);
     if (proc->pid_queue->pid == pid) {
@@ -268,6 +299,25 @@ int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
         p = p->next;
     }
     return !found;
+}
+
+static int deregister_to_all_proc(pid_t pid) {
+    int err = 0;
+    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
+        if(proc_table[i]) {
+            err = deregister_to_proc(proc_table[i], pid);
+        }
+    }
+    return err;
+}
+
+int process_deregister_wait(sos_proc_t* proc, pid_t pid) {
+    if (pid == 0) {
+        return 0;
+    } else if (pid == -1) {
+        return deregister_to_all_proc(pid);
+    }
+    return deregister_to_proc(proc, pid);
 }
 
 int get_all_proc_stat(char *buf, size_t size) {

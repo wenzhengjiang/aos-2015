@@ -61,10 +61,10 @@ typedef struct process {
     seL4_CPtr user_ep_cap;
     fd_table_t fd_table;
     cont_t cont;
-    
+
     pid_t waiting_pid; // pid of process I'm waiting. -1: any, 0: none
     pid_entry_t* pid_queue; // processes waiting for me
-    
+
     sos_process_t status;
 } sos_proc_t;
 
@@ -83,8 +83,7 @@ int get_all_proc_stat(char *buf, size_t n);
 
 int register_to_all_proc(pid_t pid);
 int register_to_proc(sos_proc_t* proc, pid_t pid);
-int deregister_to_all_proc(pid_t pid);
-int deregister_to_proc(sos_proc_t* proc, pid_t pid);
-
+int process_deregister_wait(sos_proc_t* proc, pid_t pid);
+int process_wake_waiters(sos_proc_t *proc);
 
 #endif

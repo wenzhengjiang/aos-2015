@@ -40,7 +40,7 @@ static swap_addr swap_alloc(void) {
     }
 }
 
-static void swap_free(swap_addr saddr) {
+void swap_free(swap_addr saddr) {
    assert(ALIGNED(saddr));
    swap_table[saddr/PAGE_SIZE].next_free = free_list; 
    free_list = &swap_table[saddr/PAGE_SIZE];
