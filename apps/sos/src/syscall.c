@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
+#include <setjmp.h>
 #include <serial/serial.h>
 #include <cspace/cspace.h>
 #include <limits.h>
@@ -32,6 +33,7 @@ extern seL4_CPtr _sos_ipc_ep_cap;
 
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
+extern jmp_buf ipc_event_env;
 
 static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;
@@ -359,9 +361,17 @@ int sos__sys_proc_create(void) {
 
 int sos__sys_proc_status(void) {
     sos_proc_t *proc = current_process();
-    size_t n = proc->cont.length_arg;
-    char *buf = malloc(n * sizeof(sos_process_t));
-    int bytes = get_all_proc_stat(buf, n);
 
-    free(buf);
+    while (proc->cont.iov) {
+        iov_ensure_loaded(proc->cont.iov);
+        sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, proc->cont.iov->vstart);
+        assert(dst);
+        memcpy((char*)dst, proc->cont.proc_stat_buf, proc->cont.iov->sz);
+        proc->cont.proc_stat_buf += proc->cont.iov->sz;
+        proc->cont.iov = proc->cont.iov->next;
+    }
+
+    free(proc->cont.proc_stat_buf);
+    syscall_end_continuation(current_process(), proc->cont.proc_stat_n, true);
+    return 0;
 }

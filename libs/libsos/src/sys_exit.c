@@ -45,6 +45,7 @@ long
 sys_exit(va_list ap)
 {
     sos_process_delete(sos_my_id());
+    abort();
     return 0;
 }
 

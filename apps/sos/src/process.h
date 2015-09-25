@@ -45,6 +45,8 @@ typedef struct continuation {
     bool swap_status;
     char path[MAX_FILE_PATH_LENGTH];
     pid_t pid;
+    char* proc_stat_buf;
+    size_t proc_stat_n;
 } cont_t;
 
 typedef struct pid_entry {

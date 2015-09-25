@@ -192,10 +192,16 @@ static int proc_delete_setup(void) {
 static int proc_status_setup(void) {
     dprintf(4, "SYS PROC STATUS\n");
     client_vaddr buf = seL4_GetMR(1);
-    size_t nbyte = (size_t)seL4_GetMR(2);
-    current_process()->cont.client_addr = buf;
-    current_process()->cont.length_arg = nbyte;
-    current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
+    size_t maxn = (size_t)seL4_GetMR(2);
+
+    char *stat_buf = malloc(maxn * sizeof(sos_process_t));
+    if (!stat_buf) return ENOMEM;
+    int bytes = get_all_proc_stat(stat_buf, maxn);
+    assert(bytes <= maxn * sizeof(sos_process_t));
+
+    current_process()->cont.proc_stat_buf = stat_buf;
+    current_process()->cont.proc_stat_n = bytes / sizeof(sos_process_t);
+    current_process()->cont.iov = cbuf_to_iov(buf, bytes, WRITE);
     if (current_process()->cont.iov == NULL) {
         return EINVAL;
     }
