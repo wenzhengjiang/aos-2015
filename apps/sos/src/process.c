@@ -320,14 +320,16 @@ int process_deregister_wait(sos_proc_t* proc, pid_t pid) {
     return deregister_to_proc(proc, pid);
 }
 
-int get_all_proc_stat(char *buf, size_t size) {
+int get_all_proc_stat(char *buf, size_t maxn) {
     assert(buf);
     int offset = 0;
-    for (int i = 1;i < MAX_PROCESS_NUM && offset < size; i++) {
+    int cnt = 0;
+    for (int i = 1;i < MAX_PROCESS_NUM && cnt < maxn; i++) {
         sos_proc_t * proc = proc_table[i];
         if (proc) {
             memcpy(buf+offset, (char*)&proc->status, sizeof(sos_process_t));
             offset += sizeof(sos_process_t);
+            cnt++;
         }
     }
     return offset;
