@@ -171,7 +171,6 @@ void process_delete(sos_proc_t* proc) {
     process_free_pid_queue(proc);
     cspace_destroy(proc->cspace);
     free(proc);
-    assert(!"process_delete not implemented"); 
 }
 
 sos_addrspace_t *current_as(void) {
@@ -216,10 +215,11 @@ int process_wake_waiters(sos_proc_t *proc) {
     pid_entry_t* pid_queue = proc->pid_queue;
     for (pid_entry_t* p = pid_queue; p; p = p->next) {
         sos_proc_t* wake_proc = process_lookup(p->pid);
-        assert(proc->waiting_pid == proc->pid);
+        assert(wake_proc->waiting_pid == proc->pid || wake_proc->waiting_pid == -1);
         // only one process can get returned pid
-        if(p == pid_queue) syscall_end_continuation(wake_proc, proc->pid, true);
-        else syscall_end_continuation(proc, -1, false);
+        //if(p == pid_queue) syscall_end_continuation(wake_proc, proc->pid, true);
+        //else syscall_end_continuation(proc, -1, false);
+        syscall_end_continuation(proc, proc->pid, true);
     }
     return 0;
 }

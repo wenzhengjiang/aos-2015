@@ -145,12 +145,12 @@ static void as_free_kpts(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing KPTs\n");
     for (kpt = as->kpts; as->kpts != NULL; kpt = kpt->next) {
         kpt = as->kpts->next;
-        cspace_revoke_cap(cur_cspace, kpt->cap);
-        cspace_err_t err = cspace_delete_cap(cur_cspace, kpt->cap);
+        cspace_revoke_cap(cur_cspace, as->kpts->cap);
+        cspace_err_t err = cspace_delete_cap(cur_cspace, as->kpts->cap);
         if (err != CSPACE_NOERROR) {
             ERR("[AS]: failed to delete kpt cap\n");
         }
-        ut_free(kpt->addr, seL4_PageTableBits);
+        ut_free(as->kpts->addr, seL4_PageTableBits);
         free(as->kpts);
         as->kpts = kpt;
     }
@@ -161,18 +161,23 @@ static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
     sos_unmap_frame(as->sos_ipc_buf_addr);
+    as->repllist_tail->next = NULL;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         pt = as->repllist_head->next;
-        if (pt->swapd) {
+        if (as->repllist_head->swapd) {
             // TODO: Make sure that the page cap is dealt with in this scenario
-            swap_free(pt->addr);
+            dprintf(4, "[AS] freeing swap\n");
+            swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
-            cspace_revoke_cap(cur_cspace, pt->page_cap);
-            cspace_err_t err = cspace_delete_cap(cur_cspace, pt->page_cap);
+            dprintf(4, "[AS] freeing frame\n");
+            assert(as->repllist_head->page_cap != seL4_CapNull);
+            cspace_revoke_cap(cur_cspace, as->repllist_head->page_cap);
+            cspace_err_t err = cspace_delete_cap(cur_cspace, as->repllist_head->page_cap);
             if (err != CSPACE_NOERROR) {
                 ERR("[AS]: failed to delete page cap\n");
             }
-            sos_unmap_frame(pt->addr);
+            printf("Unmapping\n");
+            sos_unmap_frame(LOAD_PAGE(as->repllist_head->addr));
         }
         free(as->repllist_head);
         as->repllist_head = pt;

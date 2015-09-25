@@ -148,8 +148,6 @@ void ipc_read(int start, char *buf) {
     }
 }
 
-
-
 void iov_ensure_loaded(iovec_t* iov) {
     sos_addrspace_t *as = current_process()->vspace;
     sos_region_t *reg = as_vaddr_region(as, iov->vstart);

@@ -24,6 +24,8 @@ sel4_abort()
 long
 sys_rt_sigprocmask(va_list ap) {
     /* abort messages with signals in order to kill itself */
+    // TODO: This is nasty - not all signals kill
+    sos_process_delete(sos_my_id());
     return 0;
 }
 
@@ -56,7 +58,7 @@ sys_exit_group(va_list ap)
 long
 sys_tgkill(va_list ap)
 {
-    sel4_abort();
+    abort();
     return 0;
 }
 

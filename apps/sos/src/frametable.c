@@ -106,6 +106,7 @@ int sos_map_frame(seL4_Word vaddr) {
 int sos_unmap_frame(seL4_Word vaddr) {
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
+    printf("vaddr, %x, idx: %d\n", vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
     cur_frame->map_req_count--;
 
