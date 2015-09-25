@@ -219,7 +219,7 @@ int process_wake_waiters(sos_proc_t *proc) {
         // only one process can get returned pid
         //if(p == pid_queue) syscall_end_continuation(wake_proc, proc->pid, true);
         //else syscall_end_continuation(proc, -1, false);
-        syscall_end_continuation(proc, proc->pid, true);
+        syscall_end_continuation(wake_proc, proc->pid, true);
     }
     return 0;
 }
