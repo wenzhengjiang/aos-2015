@@ -429,9 +429,9 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
  */
 void as_activate(sos_addrspace_t* as) {
     int err;
+    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
-    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
 }
 
 /**

@@ -119,6 +119,9 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     if (proc == NULL) {
         return NULL;
     }
+    if (current_process()) {
+        current_process()->cont.spawning_proc = proc;
+    }
     memset((void*)proc, 0, sizeof(sos_proc_t));
     proc->pid = get_next_pid();
     if (proc->pid == -1) {
@@ -222,6 +225,7 @@ int process_wake_waiters(sos_proc_t *proc) {
 }
 
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
+    sos_proc_t* proc = NULL;
     printf("start_process\n");
     int err;
 
@@ -231,8 +235,17 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     char* elf_base;
     unsigned long elf_size;
-    printf("process_create\n");
-    sos_proc_t* proc = process_create(app_name, fault_ep);
+    printf("check continuation\n");
+    if (current_process() != NULL) {
+        if (current_process()->cont.spawning_proc) {
+            proc = (sos_proc_t*)current_process()->cont.spawning_proc;
+        }
+    }
+
+    if (!proc) {
+        proc = process_create(app_name, fault_ep);
+    }
+
     if (!proc) return -1;
 
     printf("proc_as\n");

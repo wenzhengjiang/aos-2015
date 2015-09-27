@@ -56,9 +56,8 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
 
 /*
  * Inject data into the given vspace.
- * TODO: Don't keep these pages mapped in
  */
-static int load_segment_into_vspace(sos_addrspace_t* as,
+static int load_segment_into_vspace(sos_proc_t* proc,
                                     seL4_ARM_PageDirectory dest_as,
                                     char *src, unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
@@ -87,21 +86,29 @@ static int load_segment_into_vspace(sos_addrspace_t* as,
 
     */
 
-
-    dprintf(-1, "load_segment_into_vspace: dst=%08x", dst);
+    sos_addrspace_t *as = proc_as(proc);
     assert(file_size <= segment_size);
-
-    unsigned long pos;
 
     /* We work a page at a time in the destination vspace. */
     assert(as);
-    pos = 0;
-    sos_region_t *reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+
+    sos_region_t *reg = NULL;
+    reg = as_vaddr_region(as, dst);
+    if (proc->cont.elf_segment_pos == 0) {
+        if (reg == NULL) {
+            reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
+        }
+    }
+
     if (reg == NULL) {
         // failed to create a region
         return 1;
     }
-    while(pos < segment_size) {
+
+    dst += proc->cont.elf_segment_pos;
+    src += proc->cont.elf_segment_pos;
+
+    while(proc->cont.elf_segment_pos < segment_size) {
         seL4_Word paddr;
         seL4_CPtr sos_cap;
         seL4_Word vpage, kvpage;
@@ -109,6 +116,9 @@ static int load_segment_into_vspace(sos_addrspace_t* as,
         int nbytes;
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
+
+        dprintf(-1, "load_segment_into_vspace: vpage=%08x", vpage);
+
         /* First we need to create a frame */
         as_create_page(as, vpage, permissions);
 
@@ -117,16 +127,17 @@ static int load_segment_into_vspace(sos_addrspace_t* as,
         assert(sos_cap != seL4_CapNull);
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
-        if (pos < file_size){
-            memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
+        if (proc->cont.elf_segment_pos < file_size){
+            memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - proc->cont.elf_segment_pos));
         }
 
         /* Not observable to I-cache yet so flush the frame */
         seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
-        pos += nbytes;
+        proc->cont.elf_segment_pos += nbytes;
         dst += nbytes;
         src += nbytes;
+        
     }
     dprintf(-1, "load_segment_into_vspace: finished\n");
     return 0;
@@ -144,7 +155,8 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
     }
 
     num_headers = elf_getNumProgramHeaders(elf_file);
-    for (i = 0; i < num_headers; i++) {
+    for (i = proc->cont.elf_header; i < num_headers; i++) {
+        proc->cont.elf_header = i;
         char *source_addr;
         unsigned long flags, file_size, segment_size, vaddr;
 
@@ -161,9 +173,10 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         proc->status.size += segment_size;
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
-        err = load_segment_into_vspace(proc_as(proc), dest_as, source_addr, segment_size, file_size, vaddr,
+        err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
         conditional_panic(err != 0, "Elf loading failed!\n");
+        proc->cont.elf_segment_pos = 0;
     }
 
     return 0;
