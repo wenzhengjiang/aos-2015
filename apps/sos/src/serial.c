@@ -138,8 +138,9 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
     cont->iov = vec;
     for (; vec != NULL; vec = vec->next) {
         sos_region_t* reg = as_vaddr_region(current_process()->vspace, vec->vstart);
-        // TODO: kill the client
-        assert(reg);
+        if (!reg) {
+            process_delete(current_process());
+        }
         pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
         // Pin the page
         pt->pinned = false;

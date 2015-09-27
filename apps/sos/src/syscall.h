@@ -8,6 +8,8 @@
 #include "addrspace.h"
 #include "process.h"
 
+#define SYSCALL_INIT_PROC_TERMINATED  (-99)
+
 typedef enum iop_direction {READ, WRITE, NONE} iop_direction_t;
 
 size_t sys_print(size_t num_args);

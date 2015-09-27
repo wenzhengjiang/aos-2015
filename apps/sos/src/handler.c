@@ -142,8 +142,7 @@ static int read_setup (void) {
     current_process()->cont.length_arg = nbyte;
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (current_process()->cont.iov == NULL) {
-        // TODO: Kill bad client
-        //assert(!"illegal buf addr");
+        process_delete(current_process());
         return EINVAL;
     }
     return 0;
@@ -158,8 +157,7 @@ static int write_setup (void) {
     current_process()->cont.length_arg = nbyte;
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, READ);
     if (current_process()->cont.iov == NULL) {
-        // TODO: Kill bad client
-        assert(!"illegal buf addr");
+        process_delete(current_process());
         return EINVAL;
     }
     return 0;

@@ -1,6 +1,7 @@
 /** process.c --- Process management **/
 
 #include <sel4/sel4.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <device/vmem_layout.h>
@@ -35,6 +36,7 @@ static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
 static sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
+extern jmp_buf ipc_event_env;
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
@@ -210,15 +212,10 @@ sos_proc_t *process_lookup(pid_t pid) {
 
 int process_wake_waiters(sos_proc_t *proc) {
     (void)proc;
-    ERR("[PROCESS] process_wake_waiters(): implement me");
-
     pid_entry_t* pid_queue = proc->pid_queue;
     for (pid_entry_t* p = pid_queue; p; p = p->next) {
         sos_proc_t* wake_proc = process_lookup(p->pid);
         assert(wake_proc->waiting_pid == proc->pid || wake_proc->waiting_pid == -1);
-        // only one process can get returned pid
-        //if(p == pid_queue) syscall_end_continuation(wake_proc, proc->pid, true);
-        //else syscall_end_continuation(proc, -1, false);
         syscall_end_continuation(wake_proc, proc->pid, true);
     }
     return 0;
@@ -282,7 +279,11 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
 
 static int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
     assert(proc);
-    assert(proc->pid_queue);
+    if (proc->pid_queue == NULL) {
+        // pid_queue is NULL when it's the initial process
+        // We halt the system now.
+        longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
+    }
     if (proc->pid_queue->pid == pid) {
         proc->pid_queue = proc->pid_queue->next;
         return 0;

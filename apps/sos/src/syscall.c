@@ -322,13 +322,11 @@ int sos__sys_waitpid(void) {
 }
 
 int sos__sys_proc_delete(void) {
-    int err = 0;
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* proc = process_lookup(pid);
 
     process_delete(proc);
-
-    return err;
+    return 0;
 }
 
 /**
