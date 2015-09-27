@@ -18,7 +18,7 @@
 static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
     while(1) {
         dprintf(4, "[PRCLOCK] Tick\n");
-        if(!as->repllist_head->valid) {
+        if(as->repllist_head->pinned || as->repllist_head->swapd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
             // TODO: There's potential for a hang here.  We should detect &
@@ -62,7 +62,7 @@ int swap_evict_page(sos_addrspace_t *as) {
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         dprintf(4, "[PR] EVICTED. Tidying up.\n");
         assert(!proc->cont.page_replacement_victim->refd);
-        proc->cont.page_replacement_victim->valid = false;
+        proc->cont.page_replacement_victim->pinned = false;
         return 0;
     } else {
         longjmp(ipc_event_env, -1);

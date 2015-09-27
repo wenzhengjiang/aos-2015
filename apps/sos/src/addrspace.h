@@ -30,7 +30,7 @@ typedef struct page_table_entry {
     struct page_table_entry *next;
     sos_vaddr addr : 24;
     bool refd : 1;
-    bool valid : 1;
+    bool pinned : 1;
     bool swapd  : 1;
 } pte_t;
 

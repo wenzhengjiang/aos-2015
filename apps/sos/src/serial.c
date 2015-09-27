@@ -64,7 +64,7 @@ static inline void try_send_buffer(int i) {
         pos += n;
         pte_t* pt = as_lookup_pte(current_process()->vspace, v->vstart);
         // Pin the page
-        pt->valid = true;
+        pt->pinned = true;
     }
     // reply to client reader
     syscall_end_continuation(current_process(), pos, true);
@@ -142,7 +142,7 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
         assert(reg);
         pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
         // Pin the page
-        pt->valid = false;
+        pt->pinned = false;
         // TODO: Needs refactor as codeblock appears a few times thruout SOS
         if (as_page_exists(current_process()->vspace, vec->vstart)) {
             dprintf(4, "page exists\n");

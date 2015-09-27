@@ -264,7 +264,7 @@ int register_to_all_proc(pid_t pid) {
     int err = 0;
     for (int i = 1; i < MAX_PROCESS_NUM; i++) {
         if(proc_table[i] != NULL) {
-            if(err = register_to_proc(proc_table[i], pid))
+            if((err = register_to_proc(proc_table[i], pid)))
                 return err;
         }
     }

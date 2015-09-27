@@ -258,7 +258,8 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     assert(!err);
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
-    as->pd[pd_idx][pt_idx]->valid = true;
+    as->pd[pd_idx][pt_idx]->pinned = false;
+    as->pd[pd_idx][pt_idx]->swapd = false;
     return 0;
 }
 
@@ -281,7 +282,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     }
     assert(sos_vaddr != 0);
     pt->refd = false;
-    pt->valid = true;
+    pt->pinned = false;
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
 
