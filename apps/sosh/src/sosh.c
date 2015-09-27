@@ -80,7 +80,7 @@ static int cp(int argc, char **argv) {
     int fd, fd_out;
     char *file1, *file2;
     char buf[BUF_SIZ];
-    size_t buf_size = 1024*100;
+    size_t buf_size = 1024;
     char *really_big_buf = malloc(buf_size);
     assert(really_big_buf);
     memset(really_big_buf, 0, buf_size);
@@ -304,7 +304,7 @@ static int micro_time(int argc, char *argv[]) {
 static int get_pid(int argc, char *argv[]) {
     int pid = sos_my_id();
     printf("Our pid is %d\n", pid);
-    return 0;
+    return pid;
 }
 
 struct command {
@@ -376,9 +376,28 @@ int main(void) {
     char *bp, *p;
     create_tmpfiles();
     in = open("console", O_RDONLY);
-    assert(in >= 0);
 
     m5_test();
+
+    int j = get_pid(0, NULL);
+    if (j == 1) {
+        char* args[3];
+        args[0] = "exec";
+        args[1] = "sosh";
+        args[2] = "&";
+        exec(3, args);
+        args[0] = "cp";
+        args[1] = "cptest1";
+        args[2] = "cptest2";
+        cp(3, args);
+    }
+    if (j == 2) {
+        char* args[3];
+        args[0] = "cp";
+        args[1] = "cptest1";
+        args[2] = "cptest3";
+        cp(3, args);
+    }
 
     bp = buf;
     done = 0;
