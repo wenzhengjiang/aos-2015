@@ -377,7 +377,7 @@ int main(void) {
     create_tmpfiles();
     in = open("console", O_RDONLY);
 
-    m5_test();
+    //m5_test();
 
     int j = get_pid(0, NULL);
     if (j == 1) {
@@ -387,15 +387,15 @@ int main(void) {
         args[2] = "&";
         exec(3, args);
         args[0] = "cp";
-        args[1] = "cptest1";
-        args[2] = "cptest2";
+        args[1] = "bootimg.elf";
+        args[2] = "bootimg.elf1";
         cp(3, args);
     }
     if (j == 2) {
         char* args[3];
         args[0] = "cp";
-        args[1] = "cptest1";
-        args[2] = "cptest3";
+        args[1] = "bootimg.elf";
+        args[2] = "bootimg.elf2";
         cp(3, args);
     }
 

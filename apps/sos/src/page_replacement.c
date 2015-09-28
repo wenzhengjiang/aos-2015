@@ -19,6 +19,7 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
     while(1) {
         dprintf(4, "[PRCLOCK] Tick\n");
         if(as->repllist_head->pinned || as->repllist_head->swapd) {
+            dprintf(4, "[PRCLOCK] pinned %d,swapd %d\n", as->repllist_head->swapd, as->repllist_head->pinned);
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
             // TODO: There's potential for a hang here.  We should detect &
