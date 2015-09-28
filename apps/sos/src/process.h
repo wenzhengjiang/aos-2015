@@ -47,6 +47,9 @@ typedef struct continuation {
     pid_t pid;
     char* proc_stat_buf;
     size_t proc_stat_n;
+    int elf_header;
+    unsigned elf_segment_pos;
+    void* spawning_proc;
 } cont_t;
 
 typedef struct pid_entry {

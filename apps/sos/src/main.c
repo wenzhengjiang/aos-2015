@@ -101,6 +101,10 @@ void syscall_loop(seL4_CPtr ep) {
             //message = proc->cont.ipc_message;
             label = proc->cont.ipc_label;
         } else if (pid < -1) { // got error
+            if (pid == SYSCALL_INIT_PROC_TERMINATED) {
+                printf(" == That's all Folks! == \n");
+                break;
+            }
             assert(!"SOME KIND OF ERROR\n");
             continue;
         } else {
@@ -362,6 +366,8 @@ int main(void) {
     /* Wait on synchronous endpoint for IPC */
     dprintf(-1, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
+
+    while(1) {};
 
     /* Not reached */
     return 0;

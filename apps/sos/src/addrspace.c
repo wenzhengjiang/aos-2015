@@ -160,7 +160,6 @@ static void as_free_kpts(sos_addrspace_t *as) {
 static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
-    sos_unmap_frame(as->sos_ipc_buf_addr);
     as->repllist_tail->next = NULL;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         pt = as->repllist_head->next;
@@ -170,6 +169,7 @@ static void as_free_ptes(sos_addrspace_t *as) {
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
             dprintf(4, "[AS] freeing frame\n");
+            printf("Freeing from node %p\n", as->repllist_head);
             assert(as->repllist_head->page_cap != seL4_CapNull);
             cspace_revoke_cap(cur_cspace, as->repllist_head->page_cap);
             cspace_err_t err = cspace_delete_cap(cur_cspace, as->repllist_head->page_cap);
@@ -177,7 +177,9 @@ static void as_free_ptes(sos_addrspace_t *as) {
                 ERR("[AS]: failed to delete page cap\n");
             }
             printf("Unmapping\n");
-            sos_unmap_frame(LOAD_PAGE(as->repllist_head->addr));
+            sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr));
+            as->repllist_head->addr = 0;
+            as->repllist_head->page_cap = seL4_CapNull;
         }
         free(as->repllist_head);
         as->repllist_head = pt;
@@ -427,9 +429,9 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
  */
 void as_activate(sos_addrspace_t* as) {
     int err;
+    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
-    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
 }
 
 /**

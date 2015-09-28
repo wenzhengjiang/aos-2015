@@ -68,7 +68,11 @@ int fd_free(fd_table_t fd_table, int fd) {
 int free_fd_table(fd_table_t fdt) {
     for (int i = 0; i < FD_TABLE_SIZE; i++) {
         if (fdt[i] != NULL)  {
-            fd_free(fdt, i);
+            if (fdt[i]->io && fdt[i]->io->close) {
+                fdt[i]->io->close(i);
+            } else {
+                fd_free(fdt, i);
+            }
         }
     }
     sos_unmap_frame((seL4_Word)fdt);
