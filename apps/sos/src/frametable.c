@@ -16,7 +16,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -85,10 +85,10 @@ int sos_map_frame(seL4_Word vaddr) {
     assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     frame_entry_t *cur_frame = &frame_table[idx];
-    cur_frame->map_req_count++;
-    if (cur_frame->map_req_count > 1) {
-        return 0;
-    }
+    //cur_frame->map_req_count++;
+    //if (cur_frame->map_req_count > 1) {
+    //    return 0;
+    //}
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -109,15 +109,15 @@ int sos_unmap_frame(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     printf("vaddr, %x, idx: %d\n", vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
-    cur_frame->map_req_count--;
+    //cur_frame->map_req_count--;
 
-    if (cur_frame->map_req_count == 0) {
+    //if (cur_frame->map_req_count == 0) {
         dprintf(2, "[FRAME] Freeing frame\n");
         if (frame_free(vaddr)) {
             ERR("[FRAME] Error during frame_free\n");
         }
         return 0;
-    }
+    //}
     seL4_ARM_Page_Unmap(cur_frame->cap);
     return 0;
 }
@@ -157,7 +157,7 @@ static int frame_map_page(unsigned idx) {
     memset((void*)vaddr, 0, PAGE_SIZE);
     frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
-    frame_table[idx].map_req_count++;
+    //frame_table[idx].map_req_count++;
     return 0;
 }
 
@@ -196,7 +196,7 @@ void frame_init(void) {
         else {
             frame_table[i].next_free = NULL;
         }
-        frame_table[i].map_req_count = 0;
+        //frame_table[i].map_req_count = 0;
     }
 }
 
@@ -207,6 +207,7 @@ void frame_init(void) {
  */
 seL4_Word frame_alloc(seL4_Word *vaddr) {
     assert(frame_table);
+    dprintf(3, "[FRAME] frame alloc\n");
     if (!vaddr) {
         ERR("frame_alloc: passed null pointer\n");
         return 0;
@@ -215,8 +216,10 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     if (proc) {
         sos_addrspace_t *as = proc->vspace;
         if (!frame_available_frames()) {
+            dprintf(3, "[FRAME] no available frame\n");
             swap_evict_page(as);
         }
+        dprintf(3, "[FRAME] start to unmap frame\n");
         if (proc->cont.original_page_addr) {
             memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
             assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
@@ -238,6 +241,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    if(proc && proc->cont.from_alloc_page) proc->cont.alloc_page_frame = *vaddr;
     return *vaddr;
 }
 
@@ -255,9 +259,9 @@ int frame_free(seL4_Word vaddr) {
     }
     frame_entry_t *cur_frame = &frame_table[idx];
     assert(cur_frame != NULL);
-    if (cur_frame->map_req_count != 0) {
-        return EPERM;
-    }
+    //if (cur_frame->map_req_count != 0) {
+    //    return EPERM;
+    //}
     dprintf(3, "[FRAME] Unmapping page\n");
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_revoke_cap(cur_cspace, cur_frame->cap);

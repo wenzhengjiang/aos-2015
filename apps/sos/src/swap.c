@@ -28,7 +28,7 @@ static bool inited = false;
 static swap_entry_t * free_list;
 static swap_entry_t * swap_table;
 extern jmp_buf ipc_event_env;
-extern bool callback_done ;
+extern pid_t callback_pid ;
 
 // return offset in swap file
 static swap_addr swap_alloc(void) {
@@ -59,7 +59,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
     }
     swap_handle = *fh;
     inited = true;
-    callback_done = true;
+    callback_pid = token;
     return;
 }
 
@@ -101,7 +101,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
         proc->cont.swap_cnt = 0;
-        callback_done = true;
+        callback_pid = token;
         return;
     } else {
         int cnt = proc->cont.swap_cnt;
@@ -160,7 +160,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     assert(count == PAGE_SIZE);
     assert(proc->cont.swap_status != SWAP_SUCCESS);
     proc->cont.swap_status = SWAP_SUCCESS;
-    callback_done = true;
+    callback_pid = token;
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
     int code = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {

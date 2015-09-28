@@ -69,7 +69,7 @@ extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
 jmp_buf ipc_event_env;
-bool callback_done = false;
+pid_t callback_pid = 0;
 
 /*
  * A dummy starting syscall
@@ -124,15 +124,15 @@ void syscall_loop(seL4_CPtr ep) {
                 timer_interrupt();
             }
             if (badge & IRQ_BADGE_NETWORK) {
-                callback_done = false;
+                callback_pid = 0;
                 dprintf(4, "[MAIN] Starting network interrupt\n");
                 network_irq();
-                if(callback_done) {
-                    printf("Setting PID for continuation\n");
-                    pid = 0;
-                    if (current_process()) {
-                        pid = current_process()->pid;
-                    }
+                if(callback_pid) {
+                    printf("Setting PID for continuation %d\n", callback_pid);
+                    pid = callback_pid;
+//                    if (current_process()) {
+//                        pid = current_process()->pid;
+//                    }
                 } else {
                     printf("Not setting PID for continuation\n");
                     pid = 0;

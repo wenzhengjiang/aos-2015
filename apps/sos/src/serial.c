@@ -62,12 +62,12 @@ static inline void try_send_buffer(int i) {
         assert(dst);
         memcpy((char*)dst, buf+pos, n);
         pos += n;
-        pte_t* pt = as_lookup_pte(current_process()->vspace, v->vstart);
+        pte_t* pt = as_lookup_pte(proc->vspace, v->vstart);
         // Pin the page
         pt->pinned = true;
     }
     // reply to client reader
-    syscall_end_continuation(current_process(), pos, true);
+    syscall_end_continuation(proc, pos, true);
 
     if (pos < buflen) {
         memmove(buf, buf + pos, buflen - pos);

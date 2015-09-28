@@ -10,6 +10,7 @@
 #include "frametable.h"
 #include "addrspace.h"
 #include "swap.h"
+#include "process.h"
 #include <assert.h>
 
 #define verbose 5
@@ -216,9 +217,16 @@ void as_free(sos_addrspace_t *as) {
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
 
-    // Create a frame
-    frame_alloc(sos_vaddr);
-    conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
+    sos_proc_t *proc = current_process();
+    if (proc && proc->cont.alloc_page_frame) {
+        *sos_vaddr = proc->cont.alloc_page_frame;
+    } else {
+        // Create a frame
+        if (proc) proc->cont.from_alloc_page = true;
+        frame_alloc(sos_vaddr);
+        if (proc) proc->cont.from_alloc_page = false;
+        conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
+    }
 
     // Retrieve the Cap for the newly created frame
     seL4_CPtr fc = frame_cap(*sos_vaddr);
@@ -309,12 +317,16 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
  */
 int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) {
 
-    dprintf(2, "as_create_page\n");
     seL4_CPtr cap;
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
+    dprintf(2, "as_create_page %08x, %08x\n", vaddr, sos_vaddr);
     int err = as_add_page(as, vaddr, sos_vaddr);
+    if (current_process())
+        current_process()->cont.alloc_page_frame = 0;
+
     if (err) {
+        assert(err);
         return err;
     }
     return as_map_page(as, vaddr, cap, rights);

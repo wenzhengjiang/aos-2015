@@ -117,7 +117,7 @@ static int load_segment_into_vspace(sos_proc_t* proc,
         vpage  = PAGE_ALIGN(dst);
         kvpage = PAGE_ALIGN(kdst);
 
-        dprintf(-1, "load_segment_into_vspace: vpage=%08x", vpage);
+        dprintf(-1, "load_segment_into_vspace: src=%08x,dst=%08x\n", src, dst);
 
         /* First we need to create a frame */
         as_create_page(as, vpage, permissions);

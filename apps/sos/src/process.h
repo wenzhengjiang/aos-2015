@@ -50,6 +50,8 @@ typedef struct continuation {
     int elf_header;
     unsigned elf_segment_pos;
     void* spawning_proc;
+    bool from_alloc_page;
+    seL4_Word alloc_page_frame;
 } cont_t;
 
 typedef struct pid_entry {

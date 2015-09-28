@@ -17,7 +17,7 @@
 #define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
-extern bool callback_done;
+extern pid_t callback_pid;
 #define SOS_NFS_ERR (-1)
 
 io_device_t nfs_io = {
@@ -40,7 +40,6 @@ static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     set_current_process(token);
-    callback_done = false;
     sos_proc_t *proc = process_lookup(token);
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
@@ -65,7 +64,6 @@ static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
     set_current_process(token);
-    callback_done = false;
     printf("Entering nfs_open callback: %d\n", (int)token);
     sos_proc_t *proc = process_lookup(token);
     assert(proc);
@@ -158,7 +156,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
-    callback_done = true;
+    callback_pid = token;
 }
 
 // TODO: Tidy up these params
@@ -204,7 +202,7 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
-    callback_done = true;
+    callback_pid = token;
 }
 
 int sos_nfs_write(iovec_t* iov, int fd, int count) {
@@ -240,7 +238,6 @@ static void prstat(sos_stat_t sbuf) {
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     set_current_process(token);
-    callback_done = false;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
@@ -261,7 +258,6 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
 
 static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
                                     fhandle_t* fh, fattr_t* fattr) {
-    callback_done = false;
     pid_t pid = current_process()->pid;
     sos_proc_t* proc = process_lookup(token);
     if (status != NFS_OK) {
@@ -318,7 +314,7 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
         return;
     }
     proc->cont.cookie = nfscookie;
-    callback_done = true;
+    callback_pid = token;
 }
 
 int sos_nfs_readdir(void) {

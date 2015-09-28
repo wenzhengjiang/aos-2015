@@ -379,23 +379,22 @@ int main(void) {
 
     //m5_test();
 
+    printf("\n[==== main =====]\n");
     int j = get_pid(0, NULL);
     if (j == 1) {
         char* args[3];
         args[0] = "exec";
         args[1] = "sosh";
-        args[2] = "&";
-        exec(3, args);
+        exec(2, args);
         args[0] = "cp";
         args[1] = "bootimg.elf";
-        args[2] = "bootimg.elf1";
+        args[2] = "bootimg1.elf";
         cp(3, args);
-    }
-    if (j == 2) {
+    } else {
         char* args[3];
         args[0] = "cp";
         args[1] = "bootimg.elf";
-        args[2] = "bootimg.elf2";
+        args[2] = "bootimg2.elf";
         cp(3, args);
     }
 
