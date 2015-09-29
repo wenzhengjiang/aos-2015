@@ -89,7 +89,7 @@ void syscall_loop(seL4_CPtr ep) {
     register_handlers();
     int pid = setjmp(ipc_event_env);
     while (1) {
-        dprintf(4, "[MAIN] Restart syscall loop\n");
+        dprintf(5, "[MAIN] Restart syscall loop\n");
         seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
@@ -108,7 +108,7 @@ void syscall_loop(seL4_CPtr ep) {
             assert(!"SOME KIND OF ERROR\n");
             continue;
         } else {
-            dprintf(4, "[MAIN] New continuation\n");
+            dprintf(5, "[MAIN] New continuation\n");
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
             if (badge < MAX_PROCESS_NUM) {
@@ -120,7 +120,7 @@ void syscall_loop(seL4_CPtr ep) {
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge &  IRQ_BADGE_CLOCK) {
-                dprintf(4, "[MAIN] Starting timer interrupt\n");
+                dprintf(5, "[MAIN] Starting timer interrupt\n");
                 timer_interrupt();
             }
             if (badge & IRQ_BADGE_NETWORK) {

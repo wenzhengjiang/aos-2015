@@ -16,7 +16,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -118,7 +118,7 @@ int sos_unmap_frame(seL4_Word vaddr) {
         }
         return 0;
     //}
-    seL4_ARM_Page_Unmap(cur_frame->cap);
+    // seL4_ARM_Page_Unmap(cur_frame->cap);
     return 0;
 }
 
@@ -223,10 +223,12 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         if (proc->cont.original_page_addr) {
             memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
             assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
-            sos_unmap_frame(proc->cont.original_page_addr);
+           // sos_unmap_frame(proc->cont.original_page_addr);
             assert(proc->cont.page_replacement_victim->swapd);
             proc->cont.page_replacement_victim = NULL;
+            *vaddr = proc->cont.original_page_addr;
             proc->cont.original_page_addr = 0;
+            goto FRAME_ALLOC_RETURN;
         }
     }
     frame_entry_t* new_frame = free_list;
@@ -241,6 +243,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+FRAME_ALLOC_RETURN:
     if(proc && proc->cont.from_alloc_page) proc->cont.alloc_page_frame = *vaddr;
     return *vaddr;
 }
@@ -262,6 +265,14 @@ int frame_free(seL4_Word vaddr) {
     //if (cur_frame->map_req_count != 0) {
     //    return EPERM;
     //}
+    {
+    static int cnt = 0;
+    if (vaddr == 0x20627000) cnt++;
+    assert(cnt <= 1);
+    }
+
+    assert(cur_frame->next_free == NULL);
+    assert(cur_frame->cap != 0);
     dprintf(3, "[FRAME] Unmapping page\n");
     seL4_ARM_Page_Unmap(cur_frame->cap);
     cspace_revoke_cap(cur_cspace, cur_frame->cap);
@@ -270,10 +281,12 @@ int frame_free(seL4_Word vaddr) {
         ERR("frame_free: failed to delete CAP\n");
         return EINVAL;
     }
+    cur_frame->cap = 0;
     ut_free(cur_frame->paddr, seL4_PageBits);
     cur_frame->next_free = free_list;
     free_list = cur_frame;
     assert(free_list != NULL);
     dprintf(2, "[FRAME] Unmap complete\n");
+    
     return 0;
 }

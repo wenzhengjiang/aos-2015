@@ -162,6 +162,8 @@ static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
     as->repllist_tail->next = NULL;
+    pte_t *head = as->repllist_head;
+    int cnt = 0;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         pt = as->repllist_head->next;
         if (as->repllist_head->swapd) {
@@ -169,6 +171,9 @@ static void as_free_ptes(sos_addrspace_t *as) {
             dprintf(4, "[AS] freeing swap\n");
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
+            if (as->repllist_head->addr == 0x20627000) cnt++;
+            assert(cnt <= 1);
+
             dprintf(4, "[AS] freeing frame\n");
             printf("Freeing from node %p\n", as->repllist_head);
             assert(as->repllist_head->page_cap != seL4_CapNull);
@@ -285,6 +290,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
             return ENOMEM;
         }
     }
+    assert(as->pd[pd_idx][pt_idx] == 0);
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
     if (pt == NULL) {

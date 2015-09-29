@@ -384,7 +384,7 @@ int main(void) {
     if (j == 1) {
         char* args[3];
         args[0] = "exec";
-        args[1] = "sosh";
+        args[1] = "m3_test";
         exec(2, args);
         args[0] = "cp";
         args[1] = "bootimg.elf";

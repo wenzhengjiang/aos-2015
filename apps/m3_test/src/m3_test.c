@@ -36,12 +36,16 @@ do_pt_test( char *buf )
     int i;
 
     /* set */
-    for(i = 0; i < NPAGES; i ++)
-	buf[i * 4096] = i;
+    for(i = 0; i < NPAGES; i ++) {
+        printf("setting : %p\n", &buf[i * 4096]);
+	    buf[i * 4096] = i;
+    }
 
     /* check */
-    for(i = 0; i < NPAGES; i ++)
-	assert(buf[i * 4096] == i);
+    for(i = 0; i < NPAGES; i ++) {
+        printf("checking : %p\n", &buf[i * 4096]);
+	    assert(buf[i * 4096] == i);
+    }
 }
 
 static void
@@ -54,11 +58,13 @@ pt_test( void )
     assert((void *) buf1 > (void *) 0x20000000);
 
     /* stack test */
+    printf("m3_test: start stack test ...\n");
     do_pt_test(buf1);
     //printf("STATIC TESTS PASSED\n");
     /* heap test */
     buf2 = malloc(NPAGES * 4096);
     assert(buf2);
+    printf("m3_test: start heap test ...\n");
     do_pt_test(buf2);
     free(buf2);
     //printf("DYNAMIC TESTS PASSED\n");
@@ -73,11 +79,6 @@ thread_block(void){
 }
 
 int main(void){
-    do {
-        //printf("M3 TEST\n");
-        pt_test();
-        thread_block();
-        // sleep(1);	// Implement this as a syscall
-    } while(1);
+    pt_test();
     return 0;
 }

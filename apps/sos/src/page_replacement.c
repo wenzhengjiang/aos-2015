@@ -61,6 +61,7 @@ int swap_evict_page(sos_addrspace_t *as) {
         victim->addr = sos_swap_write(LOAD_PAGE(victim->addr));
         victim->addr = SAVE_PAGE(victim->addr);
         victim->swapd = true;
+        printf("Writing: %x, %d\n", proc->cont.page_replacement_victim->addr , proc->cont.page_replacement_victim->swapd);
         longjmp(ipc_event_env, -1);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
@@ -108,6 +109,7 @@ int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
         printf("after: Original page addr: %x\n", proc->cont.original_page_addr);
         to_load->addr = SAVE_PAGE(proc->cont.original_page_addr);
         to_load->swapd = false;
+        assert(proc->cont.original_page_addr != 0x20627000);
         seL4_CPtr fc = frame_cap(LOAD_PAGE(to_load->addr));
         seL4_ARM_Page_Unify_Instruction(fc, 0, PAGE_SIZE);
         //printf("NEW PAGE LOADED OKAY\n");
