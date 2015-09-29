@@ -312,9 +312,27 @@ struct command {
     int (*command)(int argc, char **argv);
 };
 
+static int kill(int argc, char **argv) {
+    int err;
+
+    if (argc != 2) {
+        printf("Usage: kill pid\n");
+        return 1;
+    }
+
+    pid_t pid = atoi(argv[1]);
+    err = sos_process_delete(pid);
+    if (err != 0) {
+        printf("Failed!\n");
+    } else {
+        printf("Killed pid=%d\n", pid);
+    }
+    return 0;
+}
+
 struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
-        "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-                              {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid} };
+        "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep}, {
+        "kill", kill }, {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid} };
 
 
 static void create_tmpfiles(void) {
@@ -402,7 +420,7 @@ int main(void) {
     done = 0;
     new = 1;
 
-//    sos_debug_print("SOS starting\n");
+    // sos_debug_print("SOS starting\n");
     printf("\n[SOS Starting]\n");
 
     while (!done) {
