@@ -58,8 +58,8 @@ int swap_evict_page(sos_addrspace_t *as) {
         proc->cont.original_page_addr = LOAD_PAGE(proc->cont.page_replacement_victim->addr);
         printf("Writing: %x, which gets converted to %x\n", victim->addr, LOAD_PAGE(victim->addr));
         printf("Original page addr: %x\n", proc->cont.original_page_addr);
-        victim->addr = sos_swap_write(LOAD_PAGE(victim->addr));
-        victim->addr = SAVE_PAGE(victim->addr);
+        swap_addr saddr = sos_swap_write(LOAD_PAGE(victim->addr));
+        victim->addr = SAVE_PAGE(saddr);
         victim->swapd = true;
         printf("Writing: %x, %d\n", proc->cont.page_replacement_victim->addr , proc->cont.page_replacement_victim->swapd);
         longjmp(ipc_event_env, -1);
