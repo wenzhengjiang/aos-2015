@@ -23,7 +23,7 @@
 #include <ut/ut.h>
 #include <device/mapping.h>
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -178,6 +178,6 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         conditional_panic(err != 0, "Elf loading failed!\n");
         proc->cont.elf_segment_pos = 0;
     }
-
+    dprintf(2, "elf_load finished");
     return 0;
 }

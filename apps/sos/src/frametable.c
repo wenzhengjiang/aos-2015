@@ -109,6 +109,13 @@ int sos_unmap_frame(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     printf("vaddr, %x, idx: %d\n", vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
+    {
+    static int unmap_frame_cnt = 0;
+    if (vaddr == 0x20627000) unmap_frame_cnt++;
+    assert(unmap_frame_cnt <= 1);
+    }
+
+
     //cur_frame->map_req_count--;
 
     //if (cur_frame->map_req_count == 0) {
@@ -219,8 +226,8 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             dprintf(3, "[FRAME] no available frame\n");
             swap_evict_page(as);
         }
-        dprintf(3, "[FRAME] start to unmap frame\n");
         if (proc->cont.original_page_addr) {
+            dprintf(3, "[FRAME] start to unmap frame\n");
             memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
             assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
            // sos_unmap_frame(proc->cont.original_page_addr);
@@ -266,9 +273,9 @@ int frame_free(seL4_Word vaddr) {
     //    return EPERM;
     //}
     {
-    static int cnt = 0;
-    if (vaddr == 0x20627000) cnt++;
-    assert(cnt <= 1);
+    static int frame_cnt = 0;
+    if (vaddr == 0x20627000) frame_cnt++;
+    assert(frame_cnt <= 1);
     }
 
     assert(cur_frame->next_free == NULL);

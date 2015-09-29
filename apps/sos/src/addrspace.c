@@ -163,16 +163,18 @@ static void as_free_ptes(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing PTEs\n");
     as->repllist_tail->next = NULL;
     pte_t *head = as->repllist_head;
-    int cnt = 0;
+    static int as_cnt = 0, head_cnt = 0;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
+        if (head == as->repllist_head) head_cnt++; 
+        assert(head_cnt <= 1);
         pt = as->repllist_head->next;
         if (as->repllist_head->swapd) {
             // TODO: Make sure that the page cap is dealt with in this scenario
             dprintf(4, "[AS] freeing swap\n");
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
-            if (as->repllist_head->addr == 0x20627000) cnt++;
-            assert(cnt <= 1);
+            if (as->repllist_head->addr == 0x20627) as_cnt++;
+            assert(as_cnt <= 1);
 
             dprintf(4, "[AS] freeing frame\n");
             printf("Freeing from node %p\n", as->repllist_head);
@@ -209,9 +211,9 @@ void as_free(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing address space\n");
     assert(as);
     as_free_region(as);
-    as_free_kpts(as);
+    //as_free_kpts(as);
     as_free_ptes(as);
-    as_free_pd(as);
+    //as_free_pd(as);
     free(as);
     dprintf(4, "[AS] address space free'd\n");
 }
@@ -279,7 +281,7 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
 }
 
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
-    dprintf(0, "as_add_page");
+    dprintf(0, "as_add_page %08x, %08x\n", vaddr, sos_vaddr);
     int err;
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
@@ -301,7 +303,20 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     pt->pinned = false;
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
+    { static int add_page_cnt = 0;
+      static sos_addrspace_t *prev_as = NULL;
+      static client_vaddr prev_caddr = 0;
 
+    if (pt->addr == 0x20627) {
+        add_page_cnt++;
+        if(add_page_cnt > 1 && as == prev_as) {
+            printf("client = %08x, %08x\n", prev_caddr, vaddr);
+            assert(!"add_page");
+        }
+        prev_as = as;
+        prev_caddr = vaddr;
+    }
+    }
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
         as->repllist_head = pt;
@@ -323,10 +338,10 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
  */
 int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) {
 
+    dprintf(2, "as_create_page %08x\n", vaddr);
     seL4_CPtr cap;
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
-    dprintf(2, "as_create_page %08x, %08x\n", vaddr, sos_vaddr);
     int err = as_add_page(as, vaddr, sos_vaddr);
     if (current_process())
         current_process()->cont.alloc_page_frame = 0;
@@ -479,6 +494,7 @@ sos_addrspace_t* as_create(void) {
     conditional_panic(!err, "Unable to get frame for PD!\n");
     printf("allocating page for buf addr\n");
     as_alloc_page(as, &as->sos_ipc_buf_addr);
+    if (current_process()) current_process()->cont.alloc_page_frame = 0;
     dprintf(3, "[AS] as_create success\n");
     return as;
 }
