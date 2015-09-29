@@ -219,6 +219,7 @@ int process_wake_waiters(sos_proc_t *proc) {
     for (pid_entry_t* p = pid_queue; p; p = p->next) {
         sos_proc_t* wake_proc = process_lookup(p->pid);
         assert(wake_proc->waiting_pid == proc->pid || wake_proc->waiting_pid == -1);
+        wake_proc->waiting_pid = 0;
         syscall_end_continuation(wake_proc, proc->pid, true);
     }
     return 0;
