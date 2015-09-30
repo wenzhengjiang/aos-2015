@@ -76,6 +76,7 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     iov_free(proc->cont.iov);
     memset(&proc->cont, 0, sizeof(cont_t));
     dprintf(4, "SYSCALL ENDED\n", retval);
+    if (!success) while(1);
 }
 
 static bool check_region(sos_addrspace_t *as, client_vaddr page, iop_direction_t dir) {
@@ -310,14 +311,17 @@ int sos__sys_waitpid(void) {
     int err = 0;
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* cur_proc = current_process();
-    printf("%d is already waiting on cur_proc->waiting_pid: %d\n", cur_proc->pid, cur_proc->waiting_pid);
-    assert(cur_proc->waiting_pid == 0);
+    if (cur_proc->waiting_pid) {
+        dprintf(3, "%d is already waiting on cur_proc->waiting_pid: %d\n", cur_proc->pid, cur_proc->waiting_pid);
+        assert(cur_proc->waiting_pid == 0);
+    }
     cur_proc->waiting_pid = pid;
     if (pid == -1) {
         err = register_to_all_proc(cur_proc->pid);
     } else {
         err = register_to_proc(process_lookup(pid), cur_proc->pid);
     }
+    dprintf(3, "sos__sys_waitpid end %d\n", err);
     return err;
 }
 

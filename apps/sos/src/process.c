@@ -169,11 +169,17 @@ void process_delete(sos_proc_t* proc) {
     }
     ut_free(proc->tcb_addr, seL4_TCBBits);
     as_free(proc->vspace);
+    dprintf(4, "[AS] degregister_wait\n");
     process_deregister_wait(proc, proc->pid);
+    dprintf(4, "[AS] fd_table\n");
     free_fd_table(proc->fd_table);
+    //dprintf(4, "[AS] cont.iov\n");
     iov_free(proc->cont.iov);
+    //dprintf(4, "[AS] wake_waiters\n");
     process_wake_waiters(proc);
+    //dprintf(4, "[AS] pid_queue\n");
     process_free_pid_queue(proc);
+    //dprintf(4, "[AS] cspace\n");
     cspace_destroy(proc->cspace);
     free(proc);
 }
@@ -293,34 +299,33 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
 
 static int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
     assert(proc);
-    if (proc->pid_queue == NULL) {
+    if (proc->pid == 1) {
         // pid_queue is NULL when it's the initial process
         // We halt the system now.
         longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
     }
+    if (!proc->pid_queue) return 0;
     if (proc->pid_queue->pid == pid) {
         proc->pid_queue = proc->pid_queue->next;
         return 0;
     }
     pid_entry_t *p = proc->pid_queue;
-    bool found = false;
     while (p->next) {
         if (p->next->pid == pid) {
-            found = true;
             pid_entry_t* next = p->next;
             p->next = p->next->next;
             free(next);
         }
         p = p->next;
     }
-    return !found;
+    return 0;
 }
 
 static int deregister_to_all_proc(pid_t pid) {
     int err = 0;
     for (int i = 1; i < MAX_PROCESS_NUM; i++) {
         if(proc_table[i]) {
-            err = deregister_to_proc(proc_table[i], pid);
+            deregister_to_proc(proc_table[i], pid);
         }
     }
     return err;

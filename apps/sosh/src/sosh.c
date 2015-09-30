@@ -80,7 +80,7 @@ static int cp(int argc, char **argv) {
     int fd, fd_out;
     char *file1, *file2;
     char buf[BUF_SIZ];
-    size_t buf_size = 1024;
+    size_t buf_size = 1024 * 5;
     char *really_big_buf = malloc(buf_size);
     assert(really_big_buf);
     memset(really_big_buf, 0, buf_size);
@@ -393,21 +393,22 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
     create_tmpfiles();
-    in = open("console", O_RDONLY);
 
     //m5_test();
 
-    printf("\n[==== main =====]\n");
     int j = get_pid(0, NULL);
+    printf("\n[==== proc %d starting ...=====]\n", j);
     if (j == 1) {
         char* args[3];
         args[0] = "exec";
-        args[1] = "m3_test";
-        exec(2, args);
+        args[1] = "sosh";
+        args[2] = "&";
+        exec(3, args);
         args[0] = "cp";
         args[1] = "bootimg.elf";
         args[2] = "bootimg1.elf";
         cp(3, args);
+        while(1);
     } else {
         char* args[3];
         args[0] = "cp";
@@ -416,6 +417,10 @@ int main(void) {
         cp(3, args);
     }
 
+    printf("\n[==== proc %d exiting ...=====]\n", j);
+    return 0;
+
+    in = open("console", O_RDONLY);
     bp = buf;
     done = 0;
     new = 1;

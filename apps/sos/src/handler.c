@@ -120,11 +120,12 @@ static int timestamp_handler (void) {
 }
 
 static int open_setup (void) {
-    dprintf(4, "SYS OPEN\n");
     current_process()->cont.file_mode = (fmode_t)seL4_GetMR(1);
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
     ipc_read(OPEN_MESSAGE_START, current_process()->cont.path);
-
+    
+    dprintf(4, "SYS OPEN %s\n", current_process()->cont.path);
+    dprintf(4, "ipc %x %x %x %x\n", seL4_GetMR(2), seL4_GetMR(3), seL4_GetMR(4));
     io_device_t *dev = device_handler_str(current_process()->cont.path);
     int fd = fd_create(current_process()->fd_table, NULL, dev,
                        current_process()->cont.file_mode);

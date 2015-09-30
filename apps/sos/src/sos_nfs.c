@@ -72,7 +72,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     of_entry_t *of = fd_lookup(proc, fd);
     printf("of found %x\n", (unsigned)of);
     assert(of);
-    printf("status: %d\n", status);
+    printf("status: %d %s\n", status, proc->cont.path);
     if (status == NFSERR_NOENT && (of->mode & FM_WRITE)) {
         printf("Open calling for creation.\n");
         // TODO: Implement time stamps
