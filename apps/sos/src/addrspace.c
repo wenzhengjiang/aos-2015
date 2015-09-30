@@ -163,7 +163,7 @@ static void as_free_ptes(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing PTEs\n");
     as->repllist_tail->next = NULL;
     pte_t *head = as->repllist_head;
-    static int as_cnt = 0, head_cnt = 0;
+    int as_cnt = 0, head_cnt = 0;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         if (head == as->repllist_head) head_cnt++; 
         assert(head_cnt <= 1);
@@ -211,9 +211,9 @@ void as_free(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing address space\n");
     assert(as);
     as_free_region(as);
-    //as_free_kpts(as);
+    as_free_kpts(as);
     as_free_ptes(as);
-    //as_free_pd(as);
+    as_free_pd(as);
     free(as);
     dprintf(4, "[AS] address space free'd\n");
 }
@@ -463,6 +463,8 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
 void as_activate(sos_addrspace_t* as) {
     int err;
     as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
+    pte_t* pte = as_lookup_pte(as, PROCESS_IPC_BUFFER);
+    pte->pinned = true;
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
 }

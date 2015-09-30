@@ -96,7 +96,10 @@ int sos_sys_open(const char *path, fmode_t mode) {
     seL4_SetMR(0, (seL4_Word)SOS_SYSCALL_OPEN);
     seL4_SetMR(1, (seL4_Word)mode);
     ipc_write(OPEN_MESSAGE_START, path);
+    char data[100];
+    sprintf(data, "sys_open %x %x %x %x\n", seL4_GetMR(2), seL4_GetMR(3), seL4_GetMR(4));
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    sos_debug_print(data);
     if (seL4_MessageInfo_get_label(reply) != seL4_NoFault)
         return -1;
     else 

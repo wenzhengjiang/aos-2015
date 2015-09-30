@@ -89,7 +89,7 @@ void syscall_loop(seL4_CPtr ep) {
     register_handlers();
     int pid = setjmp(ipc_event_env);
     while (1) {
-        dprintf(5, "[MAIN] Restart syscall loop\n");
+        dprintf(4, "[MAIN] Restart syscall loop\n");
         seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
@@ -108,7 +108,7 @@ void syscall_loop(seL4_CPtr ep) {
             assert(!"SOME KIND OF ERROR\n");
             continue;
         } else {
-            dprintf(5, "[MAIN] New continuation\n");
+            dprintf(4, "[MAIN] New continuation\n");
             message = seL4_Wait(ep, &badge);
             label = seL4_MessageInfo_get_label(message);
             if (badge < MAX_PROCESS_NUM) {
@@ -130,9 +130,6 @@ void syscall_loop(seL4_CPtr ep) {
                 if(callback_pid) {
                     printf("Setting PID for continuation %d\n", callback_pid);
                     pid = callback_pid;
-//                    if (current_process()) {
-//                        pid = current_process()->pid;
-//                    }
                 } else {
                     printf("Not setting PID for continuation\n");
                     pid = 0;
@@ -172,6 +169,7 @@ void syscall_loop(seL4_CPtr ep) {
             proc->cont.syscall_loop_initiations++;
             /* System call */
             handle_syscall(proc->cont.syscall_number);
+            dprintf(0, "handle_syscall end\n");
         }else{
             ERR("Rootserver got an unknown message\n");
         }
@@ -367,7 +365,7 @@ int main(void) {
     dprintf(-1, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
 
-    while(1) {};
+    while(1) {printf("game over\n");};
 
     /* Not reached */
     return 0;
