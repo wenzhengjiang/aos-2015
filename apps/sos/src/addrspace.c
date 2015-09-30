@@ -173,8 +173,6 @@ static void as_free_ptes(sos_addrspace_t *as) {
             dprintf(4, "[AS] freeing swap\n");
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
-            if (as->repllist_head->addr == 0x20627) as_cnt++;
-            assert(as_cnt <= 1);
 
             dprintf(4, "[AS] freeing frame\n");
             printf("Freeing from node %p\n", as->repllist_head);
@@ -303,20 +301,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     pt->pinned = false;
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
-    { static int add_page_cnt = 0;
-      static sos_addrspace_t *prev_as = NULL;
-      static client_vaddr prev_caddr = 0;
-
-    if (pt->addr == 0x20627) {
-        add_page_cnt++;
-        if(add_page_cnt > 1 && as == prev_as) {
-            printf("client = %08x, %08x\n", prev_caddr, vaddr);
-            assert(!"add_page");
-        }
-        prev_as = as;
-        prev_caddr = vaddr;
-    }
-    }
+    
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
         as->repllist_head = pt;

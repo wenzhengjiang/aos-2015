@@ -41,7 +41,6 @@ struct frame_entry {
     seL4_CPtr cap;
     struct frame_entry * next_free;
     seL4_Word paddr;
-    size_t map_req_count;
 };
 
 typedef struct frame_entry frame_entry_t;
@@ -84,11 +83,7 @@ int sos_map_frame(seL4_Word vaddr) {
     seL4_CPtr cap = frame_cap(vaddr);
     assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
-    frame_entry_t *cur_frame = &frame_table[idx];
-    //cur_frame->map_req_count++;
-    //if (cur_frame->map_req_count > 1) {
-    //    return 0;
-    //}
+    
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ERR("Unable to map page\n");
@@ -109,23 +104,10 @@ int sos_unmap_frame(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     printf("vaddr, %x, idx: %d\n", vaddr, idx);
     frame_entry_t *cur_frame = &frame_table[idx];
-    {
-    static int unmap_frame_cnt = 0;
-    if (vaddr == 0x20627000) unmap_frame_cnt++;
-    assert(unmap_frame_cnt <= 1);
+    dprintf(2, "[FRAME] Freeing frame\n");
+    if (frame_free(vaddr)) {
+        ERR("[FRAME] Error during frame_free\n");
     }
-
-
-    //cur_frame->map_req_count--;
-
-    //if (cur_frame->map_req_count == 0) {
-        dprintf(2, "[FRAME] Freeing frame\n");
-        if (frame_free(vaddr)) {
-            ERR("[FRAME] Error during frame_free\n");
-        }
-        return 0;
-    //}
-    // seL4_ARM_Page_Unmap(cur_frame->cap);
     return 0;
 }
 
@@ -164,7 +146,6 @@ static int frame_map_page(unsigned idx) {
     memset((void*)vaddr, 0, PAGE_SIZE);
     frame_table[idx].cap = cap;
     frame_table[idx].paddr = paddr;
-    //frame_table[idx].map_req_count++;
     return 0;
 }
 
@@ -203,7 +184,6 @@ void frame_init(void) {
         else {
             frame_table[i].next_free = NULL;
         }
-        //frame_table[i].map_req_count = 0;
     }
 }
 
@@ -269,15 +249,6 @@ int frame_free(seL4_Word vaddr) {
     }
     frame_entry_t *cur_frame = &frame_table[idx];
     assert(cur_frame != NULL);
-    //if (cur_frame->map_req_count != 0) {
-    //    return EPERM;
-    //}
-    {
-    static int frame_cnt = 0;
-    if (vaddr == 0x20627000) frame_cnt++;
-    assert(frame_cnt <= 1);
-    }
-
     assert(cur_frame->next_free == NULL);
     assert(cur_frame->cap != 0);
     dprintf(3, "[FRAME] Unmapping page\n");
