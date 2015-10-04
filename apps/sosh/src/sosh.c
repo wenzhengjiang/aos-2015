@@ -104,7 +104,6 @@ static int cp(int argc, char **argv) {
     int pid = sos_my_id();
     int cnt =  0;
     while ((num_read = read(fd, really_big_buf, buf_size)) > 0) {
-        printf("proc %d\n", num_read);
         gettimeofday(&start_time, NULL);
         num_written = write(fd_out, really_big_buf, num_read);
         gettimeofday(&end_time, NULL);
@@ -382,30 +381,29 @@ int main(void) {
 
     //m5_test();
 
-    int j = get_pid(0, NULL);
-    printf("\n[==== proc %d starting ...=====]\n", j);
-    if (j == 1) {
-        char* args[3];
-        args[0] = "exec";
-        args[1] = "sosh";
-        args[2] = "&";
-        exec(3, args);
-        args[0] = "cp";
-        args[1] = "bootimg.elf";
-        args[2] = "bootimg1.elf";
-        cp(3, args);
-        while(1);
-    } else {
-        char* args[3];
-        args[0] = "cp";
-        args[1] = "bootimg.elf";
-        args[2] = "bootimg2.elf";
-        cp(3, args);
-    }
-
-    printf("\n[==== proc %d exiting ...=====]\n", j);
-
     in = open("console", O_RDONLY);
+    int j = get_pid(0, NULL);
+    //printf("\n[==== proc %d starting ...=====]\n", j);
+    //if (j == 1) {
+    //    char* args[3];
+    //    args[0] = "exec";
+    //    args[1] = "sosh";
+    //    exec(2, args);
+    //    args[0] = "cp";
+    //    args[1] = "bootimg.elf";
+    //    args[2] = "bootimg1.elf";
+    //    cp(3, args);
+    //    while(1);
+    //} else {
+    //    char* args[3];
+    //    args[0] = "cp";
+    //    args[1] = "bootimg.elf";
+    //    args[2] = "bootimg2.elf";
+    //    cp(3, args);
+    //}
+
+    //printf("\n[==== proc %d exiting ...=====]\n", j);
+
     bp = buf;
     done = 0;
     new = 1;

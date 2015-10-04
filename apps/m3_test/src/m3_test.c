@@ -21,9 +21,15 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <syscall.h>
+#include <sos.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
 #include "m3_test.h"
+
 
 #include <sel4/sel4.h>
 
@@ -78,7 +84,39 @@ thread_block(void){
     seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
 }
 
+static void cp_test(void) {
+    int fd, fd_out;
+    char *file1, *file2;
+    size_t buf_size = 1024 * 5;
+    char *really_big_buf = malloc(buf_size);
+    assert(really_big_buf);
+    memset(really_big_buf, 0, buf_size);
+
+    int num_read, num_written = 0;
+
+    pid_t pid = sos_my_id();
+    file1 = "bootimg.elf";
+    file2 = "bootimgx.elf";
+    file2[7] = '0' + pid;
+    fd = open(file1, O_RDONLY);
+    fd_out = open(file2, O_WRONLY);
+
+    assert(fd >= 0);
+    printf("\n\n=== COPYING START %d ===\n", pid);
+    int cnt =  0;
+    while ((num_read = read(fd, really_big_buf, buf_size)) > 0) {
+        num_written = write(fd_out, really_big_buf, num_read);
+        printf("proc %d - %d\n", pid, cnt++);
+    }
+
+    if (num_read == -1 || num_written == -1) {
+        printf("error on cp %d, %d\n", num_read, num_written);
+    }
+    printf("\n\n=== COPYING END ===\n");
+   
+}
 int main(void){
-    pt_test();
+    //pt_test();
+    cp_test();
     return 0;
 }

@@ -2024,7 +2024,7 @@ long sys_reboot(va_list ap)
 }
 long sys_munmap(va_list ap)
 {
-    assert(!"sys_munmap not implemented");
+//    assert(!"sys_munmap not implemented");
     return 0;
 }
 long sys_truncate(va_list ap)

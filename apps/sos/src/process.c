@@ -202,6 +202,7 @@ void process_delete(sos_proc_t* proc) {
     cspace_destroy(proc->cspace);
     proc_table[proc->pid] = NULL;
     free(proc);
+    dprintf(4, "process_delete finished\n");
 }
 
 sos_addrspace_t *current_as(void) {
@@ -246,6 +247,7 @@ int process_wake_waiters(sos_proc_t *proc) {
         sos_proc_t* wake_proc = process_lookup(p->pid);
         assert(wake_proc->waiting_pid == proc->pid || wake_proc->waiting_pid == -1);
         wake_proc->waiting_pid = 0;
+        dprintf(3, "wake %d\n", p->pid);
         syscall_end_continuation(wake_proc, proc->pid, true);
     }
     return 0;
