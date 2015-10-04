@@ -68,8 +68,9 @@
 extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
+pid_entry_t *callback_queue = NULL;
+
 jmp_buf ipc_event_env;
-pid_t callback_pid = 0;
 
 /*
  * A dummy starting syscall
@@ -93,12 +94,18 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
-        if (pid > 0) {
+        if (callback_queue != NULL) {
             dprintf(4, "[MAIN] Applying continuation\n");
             // m7 TODO: Need to update the current process
-            set_current_process(pid);
-            proc = process_lookup(pid);
+            set_current_process(callback_queue->pid);
+            proc = process_lookup(callback_queue->pid);
             //message = proc->cont.ipc_message;
+
+            // Update callback queue
+            pid_entry_t *head = callback_queue->next;
+            free(callback_queue);
+            callback_queue = head;
+
             label = proc->cont.ipc_label;
         } else if (pid < -1) { // got error
             if (pid == SYSCALL_INIT_PROC_TERMINATED) {
@@ -124,16 +131,10 @@ void syscall_loop(seL4_CPtr ep) {
                 timer_interrupt();
             }
             if (badge & IRQ_BADGE_NETWORK) {
-                callback_pid = 0;
                 dprintf(4, "[MAIN] Starting network interrupt\n");
                 network_irq();
-                if(callback_pid) {
-                    printf("Setting PID for continuation %d\n", callback_pid);
-                    pid = callback_pid;
-                } else {
-                    printf("Not setting PID for continuation\n");
-                    pid = 0;
-                }
+                dprintf(4, "[MAIN] Leaving network interrupt\n");
+                pid = 0;
                 continue;
             }
         } else if(label == seL4_VMFault){

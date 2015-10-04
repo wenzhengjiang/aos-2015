@@ -31,6 +31,8 @@ extern io_device_t serial_io;
 extern io_device_t nfs_io;
 extern seL4_CPtr _sos_ipc_ep_cap;
 
+extern pid_entry_t *callback_queue;
+
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
 extern jmp_buf ipc_event_env;
@@ -45,6 +47,16 @@ static inline unsigned CONST umax(unsigned a, unsigned b) {
 
 timestamp_t start_time, end_time;
 
+void add_callback_pid(pid_t pid) {
+    pid_entry_t *new_pid = malloc(sizeof(pid_entry_t));
+    assert(new_pid);
+    new_pid->pid = pid;
+    new_pid->next = callback_queue;
+    callback_queue = new_pid;
+    for (new_pid = callback_queue->next; new_pid != NULL; new_pid = new_pid->next) {
+        assert(new_pid->pid != pid);
+    }
+}
 void iov_free(iovec_t *iov) {
     iovec_t *cur;
     while(iov) {
