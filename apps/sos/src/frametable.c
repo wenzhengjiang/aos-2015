@@ -217,6 +217,10 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             proc->cont.page_replacement_victim = NULL;
             *vaddr = proc->cont.original_page_addr;
             proc->cont.original_page_addr = 0;
+            if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
+                proc->frame_cnt2++;
+                ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
+            }
             goto FRAME_ALLOC_RETURN;
         }
     }
@@ -252,7 +256,7 @@ int frame_free(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
     if (idx <= 0 || idx > nframes) {
-        ERR("frame_free: illegal faddr received\n");
+        ERR("frame_free: illegal faddr received %d\n", idx);
         return EINVAL;
     }
     frame_entry_t *cur_frame = &frame_table[idx];

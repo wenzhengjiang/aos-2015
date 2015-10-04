@@ -182,11 +182,10 @@ static void as_free_ptes(sos_addrspace_t *as) {
                 if (err != CSPACE_NOERROR) {
                     ERR("[AS]: failed to delete page cap\n");
                 }
-                printf("Unmapping\n");
-                sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr));
-                as->repllist_head->addr = 0;
-                as->repllist_head->page_cap = seL4_CapNull;
             }
+            assert(sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr)) == 0);
+            as->repllist_head->addr = 0;
+            as->repllist_head->page_cap = seL4_CapNull;
         }
         free(as->repllist_head);
         as->repllist_head = pt;
@@ -458,23 +457,27 @@ void as_activate(sos_addrspace_t* as) {
  * Should be called prior to the initialisation of a new process' TCB
  * @return pointer to the newly created address space (vspace)
  */
-sos_addrspace_t* as_create(void) {
+void as_create(sos_addrspace_t **pas) {
     int err;
     dprintf(3, "[AS] as_create\n");
-    // TODO memory leak!!!
-    sos_addrspace_t *as = malloc(sizeof(sos_addrspace_t));
-    conditional_panic(!as, "No memory for address space");
-    memset(as, 0, sizeof(sos_addrspace_t));
-    printf("finished memset\n");
-    as->sos_pd_addr = ut_alloc(seL4_PageDirBits);
-    conditional_panic(!as->sos_pd_addr, "No memory for new Page Directory");
-    printf("cspace_ut_retyping\n");
-    err = cspace_ut_retype_addr(as->sos_pd_addr,
-                                seL4_ARM_PageDirectoryObject,
-                                seL4_PageDirBits,
-                                cur_cspace,
-                                &as->sos_pd_cap);
-    conditional_panic(err, "Failed to allocate page directory cap for client");
+    sos_addrspace_t *as = NULL;
+    if (*pas == NULL) {
+        as = malloc(sizeof(sos_addrspace_t));
+        conditional_panic(!as, "No memory for address space");
+        memset(as, 0, sizeof(sos_addrspace_t));
+        printf("finished memset\n");
+        as->sos_pd_addr = ut_alloc(seL4_PageDirBits);
+        conditional_panic(!as->sos_pd_addr, "No memory for new Page Directory");
+        printf("cspace_ut_retyping\n");
+        err = cspace_ut_retype_addr(as->sos_pd_addr,
+                                    seL4_ARM_PageDirectoryObject,
+                                    seL4_PageDirBits,
+                                    cur_cspace,
+                                    &as->sos_pd_cap);
+        conditional_panic(err, "Failed to allocate page directory cap for client");
+        *pas = as;
+    } else 
+        as = *pas;
     // Create the page directory
     printf("Allocating new frame for PD\n");
     if (!as->pd) {
@@ -482,8 +485,9 @@ sos_addrspace_t* as_create(void) {
         conditional_panic(!err, "Unable to get frame for PD!\n");
         printf("allocating page for buf addr\n");
     }
-    as_alloc_page(as, &as->sos_ipc_buf_addr);
-    if (current_process()) current_process()->cont.alloc_page_frame = 0;
+    if (!as->sos_ipc_buf_addr) {
+        as_alloc_page(as, &as->sos_ipc_buf_addr);
+        if (current_process()) current_process()->cont.alloc_page_frame = 0;
+    }
     dprintf(3, "[AS] as_create success\n");
-    return as;
 }
