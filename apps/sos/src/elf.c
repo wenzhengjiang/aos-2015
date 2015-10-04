@@ -170,13 +170,13 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
-        proc->status.size += segment_size;
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
         err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
         conditional_panic(err != 0, "Elf loading failed!\n");
         proc->cont.elf_segment_pos = 0;
+        proc->status.size += segment_size;
     }
     dprintf(2, "elf_load finished");
     return 0;

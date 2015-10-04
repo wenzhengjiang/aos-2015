@@ -100,8 +100,9 @@ static int init_fd_table(sos_proc_t *proc) {
 }
 
 static int get_next_pid() {
-    static int next_pid = 1;
+    static int next_pid = 0;
     int cnt = 0;
+    next_pid = (next_pid + 1) % MAX_PROCESS_NUM;
     while (next_pid == 0 || proc_table[next_pid]) {
         next_pid = (next_pid+1) % MAX_PROCESS_NUM;
         cnt++;
@@ -192,17 +193,14 @@ void process_delete(sos_proc_t* proc) {
     ut_free(proc->tcb_addr, seL4_TCBBits);
     as_free(proc->vspace);
     dprintf(4, "[AS] degregister_wait\n");
-    process_deregister_wait(proc, proc->pid);
+    //process_deregister_wait(proc, proc->pid);
     dprintf(4, "[AS] fd_table\n");
     free_fd_table(proc->fd_table);
-    //dprintf(4, "[AS] cont.iov\n");
     iov_free(proc->cont.iov);
-    //dprintf(4, "[AS] wake_waiters\n");
     process_wake_waiters(proc);
-    //dprintf(4, "[AS] pid_queue\n");
     process_free_pid_queue(proc);
-    //dprintf(4, "[AS] cspace\n");
     cspace_destroy(proc->cspace);
+    proc_table[proc->pid] = NULL;
     free(proc);
 }
 

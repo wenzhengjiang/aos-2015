@@ -176,16 +176,17 @@ static void as_free_ptes(sos_addrspace_t *as) {
 
             dprintf(4, "[AS] freeing frame\n");
             printf("Freeing from node %p\n", as->repllist_head);
-            assert(as->repllist_head->page_cap != seL4_CapNull);
-            cspace_revoke_cap(cur_cspace, as->repllist_head->page_cap);
-            cspace_err_t err = cspace_delete_cap(cur_cspace, as->repllist_head->page_cap);
-            if (err != CSPACE_NOERROR) {
-                ERR("[AS]: failed to delete page cap\n");
+            if(as->repllist_head->page_cap != seL4_CapNull) {
+                cspace_revoke_cap(cur_cspace, as->repllist_head->page_cap);
+                cspace_err_t err = cspace_delete_cap(cur_cspace, as->repllist_head->page_cap);
+                if (err != CSPACE_NOERROR) {
+                    ERR("[AS]: failed to delete page cap\n");
+                }
+                printf("Unmapping\n");
+                sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr));
+                as->repllist_head->addr = 0;
+                as->repllist_head->page_cap = seL4_CapNull;
             }
-            printf("Unmapping\n");
-            sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr));
-            as->repllist_head->addr = 0;
-            as->repllist_head->page_cap = seL4_CapNull;
         }
         free(as->repllist_head);
         as->repllist_head = pt;

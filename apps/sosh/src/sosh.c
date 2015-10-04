@@ -80,7 +80,7 @@ static int cp(int argc, char **argv) {
     int fd, fd_out;
     char *file1, *file2;
     char buf[BUF_SIZ];
-    size_t buf_size = 1024*100;
+    size_t buf_size = 1024 * 5;
     char *really_big_buf = malloc(buf_size);
     assert(really_big_buf);
     memset(really_big_buf, 0, buf_size);
@@ -100,19 +100,23 @@ static int cp(int argc, char **argv) {
     fd_out = open(file2, O_WRONLY);
 
     assert(fd >= 0);
-    printf("\n\n=== WRITE PERFORMANCE RESULTS ===\n");
+    printf("\n\n=== COPYING START ===\n");
+    int pid = sos_my_id();
+    int cnt =  0;
     while ((num_read = read(fd, really_big_buf, buf_size)) > 0) {
+        printf("proc %d\n", num_read);
         gettimeofday(&start_time, NULL);
         num_written = write(fd_out, really_big_buf, num_read);
         gettimeofday(&end_time, NULL);
         uint64_t elapsed = (uint64_t)((end_time.tv_sec - start_time.tv_sec) * 1000000) + (uint64_t)(end_time.tv_usec - start_time.tv_usec);
-        printf("%llu ", elapsed);
+        printf("proc %d - %d\n", pid, cnt++);
     }
 
     if (num_read == -1 || num_written == -1) {
         printf("error on cp %d, %d\n", num_read, num_written);
         return 1;
     }
+    printf("\n\n=== COPYING END ===\n");
 
     return 0;
 }
@@ -307,49 +311,14 @@ static int get_pid(int argc, char *argv[]) {
     return pid;
 }
 
-static int kill(int argc, char **argv) {
-    int err;
-    if (argc != 2) {
-        printf("Usage: kill pid\n");
-        return 1;
-    }
-
-    pid_t pid = atoi(argv[1]);
-    err = sos_process_delete(pid);
-    if (err != 0) {
-        printf("Failed!\n");
-    } else {
-        printf("Killed pid=%d\n", pid);
-    }
-    return 0;
-}
-
 struct command {
     char *name;
     int (*command)(int argc, char **argv);
 };
 
-static int kill(int argc, char **argv) {
-    int err;
-
-    if (argc != 2) {
-        printf("Usage: kill pid\n");
-        return 1;
-    }
-
-    pid_t pid = atoi(argv[1]);
-    err = sos_process_delete(pid);
-    if (err != 0) {
-        printf("Failed!\n");
-    } else {
-        printf("Killed pid=%d\n", pid);
-    }
-    return 0;
-}
-
 struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
-        "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep}, {
-        "kill", kill }, {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid} };
+        "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
+                              {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid} };
 
 
 static void create_tmpfiles(void) {
@@ -410,16 +379,38 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
     create_tmpfiles();
+
+    //m5_test();
+
+    int j = get_pid(0, NULL);
+    printf("\n[==== proc %d starting ...=====]\n", j);
+    if (j == 1) {
+        char* args[3];
+        args[0] = "exec";
+        args[1] = "sosh";
+        args[2] = "&";
+        exec(3, args);
+        args[0] = "cp";
+        args[1] = "bootimg.elf";
+        args[2] = "bootimg1.elf";
+        cp(3, args);
+        while(1);
+    } else {
+        char* args[3];
+        args[0] = "cp";
+        args[1] = "bootimg.elf";
+        args[2] = "bootimg2.elf";
+        cp(3, args);
+    }
+
+    printf("\n[==== proc %d exiting ...=====]\n", j);
+
     in = open("console", O_RDONLY);
-    assert(in >= 0);
-
-    m5_test();
-
     bp = buf;
     done = 0;
     new = 1;
 
-    // sos_debug_print("SOS starting\n");
+//    sos_debug_print("SOS starting\n");
     printf("\n[SOS Starting]\n");
 
     while (!done) {
