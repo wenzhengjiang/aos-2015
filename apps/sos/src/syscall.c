@@ -76,7 +76,6 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success) {
     iov_free(proc->cont.iov);
     memset(&proc->cont, 0, sizeof(cont_t));
     dprintf(4, "SYSCALL ENDED\n", retval);
-    if (!success) while(1);
 }
 
 static bool check_region(sos_addrspace_t *as, client_vaddr page, iop_direction_t dir) {

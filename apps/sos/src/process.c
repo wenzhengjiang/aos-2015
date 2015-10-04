@@ -115,36 +115,58 @@ static int get_next_pid() {
  */
 sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     //dprintf(3, "process_create\n");
-    sos_proc_t* proc = malloc(sizeof(sos_proc_t));
-    if (proc == NULL) {
-        return NULL;
+    dprintf(3, "process_create\n");
+    sos_proc_t* proc;
+    if (!current_process()) {
+        proc = malloc(sizeof(sos_proc_t));
+        if (!proc) {
+            return NULL;
+        }
+        memset((void*)proc, 0, sizeof(sos_proc_t));
+        proc->pid = get_next_pid();
+        assert(proc->pid >= 1);
+        proc_table[proc->pid] = proc;
+        proc->cont.spawning_process = (void*)-1;
+        set_current_process(proc->pid);
+    } else if (!current_process()->cont.spawning_process) {
+        proc = malloc(sizeof(sos_proc_t));
+        if (!proc) {
+            return NULL;
+        }
+        memset((void*)proc, 0, sizeof(sos_proc_t));
+        proc->pid = get_next_pid();
+        assert(proc->pid >= 1);
+        proc_table[proc->pid] = proc;
+        current_process()->cont.spawning_process = proc;
+    } else {
+        if (current_process()->cont.spawning_process != (void*)-1) {
+            proc = current_process()->cont.spawning_process;
+        } else {
+            proc = current_process();
+        }
     }
-    if (current_process()) {
-        current_process()->cont.spawning_proc = proc;
+    if (!proc->vspace) {
+        assert(proc->pid >= 1);
+        proc->vspace = as_create();
+        init_cspace(proc);
+        assert(proc->vspace);
+        proc->user_ep_cap = init_ep(proc, fault_ep);
+        printf("Initialising TCB\n");
+        init_tcb(proc);
+        printf("Finished initialising TCB\n");
     }
-    memset((void*)proc, 0, sizeof(sos_proc_t));
-    proc->pid = get_next_pid();
-    if (proc->pid == -1) {
-        free(proc);
-        return NULL;
+    if (!proc->fd_table) {
+        int err = init_fd_table(proc);
+        proc->status.pid = proc->pid;
+        proc->status.size = 0;
+        proc->status.stime = time_stamp() / 1000;
+        strncpy(proc->status.command, name, N_NAME); 
+        assert(!err);
+        proc_table[proc->pid] = proc;
+        printf("Process create finished\n");
+        //dprintf(3, "process_create finished\n");
+        assert(proc->vspace);
     }
-    proc->vspace = as_create();
-    init_cspace(proc);
-    assert(proc->vspace);
-    proc->user_ep_cap = init_ep(proc, fault_ep);
-    printf("Initialising TCB\n");
-    init_tcb(proc);
-    printf("Finished initialising TCB\n");
-    int err = init_fd_table(proc);
-    proc->status.pid = proc->pid;
-    proc->status.size = 0;
-    proc->status.stime = time_stamp() / 1000;
-    strncpy(proc->status.command, name, N_NAME); 
-
-    assert(!err);
-    proc_table[proc->pid] = proc;
-    printf("Process create finished\n");
-    //dprintf(3, "process_create finished\n");
     return proc;
 }
 
@@ -243,20 +265,14 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     char* elf_base;
     unsigned long elf_size;
     printf("check continuation\n");
-    if (current_process() != NULL) {
-        if (current_process()->cont.spawning_proc) {
-            proc = (sos_proc_t*)current_process()->cont.spawning_proc;
-        }
-    }
-
-    if (!proc) {
-        proc = process_create(app_name, fault_ep);
-    }
+    proc = process_create(app_name, fault_ep);
 
     if (!proc) return -1;
 
     printf("proc_as\n");
     sos_addrspace_t *as = proc_as(proc);
+    assert(as);
+    printf("proc_as'd\n");
 
     /* parse the cpio image */
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
