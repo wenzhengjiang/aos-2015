@@ -49,7 +49,7 @@ typedef struct continuation {
     size_t proc_stat_n;
     int elf_header;
     unsigned elf_segment_pos;
-    void* spawning_proc;
+    void* spawning_process;
     bool from_alloc_page;
     seL4_Word alloc_page_frame;
 } cont_t;
