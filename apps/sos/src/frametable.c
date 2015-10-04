@@ -28,9 +28,9 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 /* Maximum number of frames which will fit in our region */
-//#define SMALL_FT
+#define SMALL_FT
 #ifdef SMALL_FT
-  #define MAX_FRAMES 1800
+  #define MAX_FRAMES 2500
 #else
   #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 #endif
@@ -200,6 +200,8 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         return 0;
     }
     sos_proc_t *proc = current_process();
+    assert(proc);
+    
     if (proc) {
         sos_addrspace_t *as = proc->vspace;
         if (!frame_available_frames()) {
@@ -218,6 +220,11 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             goto FRAME_ALLOC_RETURN;
         }
     }
+    if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
+        ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
+    } else 
+        proc->frame_cnt++;
+
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
     unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t);
@@ -231,7 +238,8 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
 FRAME_ALLOC_RETURN:
-    if(proc && proc->cont.from_alloc_page) proc->cont.alloc_page_frame = *vaddr;
+
+    
     return *vaddr;
 }
 
@@ -266,5 +274,11 @@ int frame_free(seL4_Word vaddr) {
     assert(free_list != NULL);
     dprintf(2, "[FRAME] Unmap complete\n");
     
+    sos_proc_t* proc = current_process();
+    if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
+        ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt2++;
+    } else 
+        proc->frame_cnt2++;
+
     return 0;
 }

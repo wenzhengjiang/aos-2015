@@ -50,7 +50,6 @@ typedef struct continuation {
     int elf_header;
     unsigned elf_segment_pos;
     void* spawning_process;
-    bool from_alloc_page;
     seL4_Word alloc_page_frame;
 } cont_t;
 
@@ -73,6 +72,9 @@ typedef struct process {
     pid_entry_t* pid_queue; // processes waiting for me
 
     sos_process_t status;
+
+    int frame_cnt;
+    int frame_cnt2;
 } sos_proc_t;
 
 

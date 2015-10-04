@@ -228,9 +228,7 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
         *sos_vaddr = proc->cont.alloc_page_frame;
     } else {
         // Create a frame
-        if (proc) proc->cont.from_alloc_page = true;
-        frame_alloc(sos_vaddr);
-        if (proc) proc->cont.from_alloc_page = false;
+        proc->cont.alloc_page_frame = frame_alloc(sos_vaddr);
         conditional_panic(*sos_vaddr == 0, "Unable to allocate memory from the SOS frametable\n");
     }
 
@@ -463,6 +461,7 @@ void as_activate(sos_addrspace_t* as) {
 sos_addrspace_t* as_create(void) {
     int err;
     dprintf(3, "[AS] as_create\n");
+    // TODO memory leak!!!
     sos_addrspace_t *as = malloc(sizeof(sos_addrspace_t));
     conditional_panic(!as, "No memory for address space");
     memset(as, 0, sizeof(sos_addrspace_t));
@@ -478,9 +477,11 @@ sos_addrspace_t* as_create(void) {
     conditional_panic(err, "Failed to allocate page directory cap for client");
     // Create the page directory
     printf("Allocating new frame for PD\n");
-    err = (int)frame_alloc((seL4_Word*)&as->pd);
-    conditional_panic(!err, "Unable to get frame for PD!\n");
-    printf("allocating page for buf addr\n");
+    if (!as->pd) {
+        err = (int)frame_alloc((seL4_Word*)&as->pd);
+        conditional_panic(!err, "Unable to get frame for PD!\n");
+        printf("allocating page for buf addr\n");
+    }
     as_alloc_page(as, &as->sos_ipc_buf_addr);
     if (current_process()) current_process()->cont.alloc_page_frame = 0;
     dprintf(3, "[AS] as_create success\n");
