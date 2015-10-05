@@ -48,8 +48,10 @@ static void init_tcb(sos_proc_t *proc) {
     int err;
 
     /* Create a new TCB object */
-    proc->tcb_addr = ut_alloc(seL4_TCBBits);
-    conditional_panic(!proc->tcb_addr, "No memory for new TCB");
+    if(!proc->tcb_addr) {
+        proc->tcb_addr = ut_alloc(seL4_TCBBits);
+        conditional_panic(!proc->tcb_addr, "No memory for new TCB");
+    }
     err =  cspace_ut_retype_addr(proc->tcb_addr,
             seL4_TCBObject,
             seL4_TCBBits,
@@ -89,6 +91,7 @@ static seL4_CPtr init_ep(sos_proc_t *proc, seL4_CPtr fault_ep) {
 }
 
 static int init_fd_table(sos_proc_t *proc) {
+    if (proc->fd_table) return 0;
     frame_alloc((seL4_Word*)&proc->fd_table);
     if (!proc->fd_table) {
         return ENOMEM;
@@ -146,9 +149,9 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
             proc = current_process();
         }
     }
-    if (!proc->vspace) {
+    if (!proc->vspace || !proc->vspace->sos_ipc_buf_addr) {
         assert(proc->pid >= 1);
-        proc->vspace = as_create();
+        as_create(&proc->vspace);
         init_cspace(proc);
         assert(proc->vspace);
         proc->user_ep_cap = init_ep(proc, fault_ep);
@@ -203,7 +206,7 @@ void process_delete(sos_proc_t* proc) {
     proc_table[proc->pid] = NULL;
     if(proc->frame_cnt - proc->frame_cnt2 > 3) {
         dprintf(-1, "alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
-        assert(!"bad frame_cnt");
+        //assert(!"bad frame_cnt");
     }
     free(proc);
     dprintf(4, "process_delete finished\n");
@@ -271,7 +274,7 @@ static int count_node(sos_proc_t *proc) {
     printf("length of list = %d\n", cnt);
 }
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
-    sos_proc_t* proc = NULL;
+    static sos_proc_t* proc = NULL;
     printf("start_process\n");
     int err;
 

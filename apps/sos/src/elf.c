@@ -178,6 +178,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         proc->cont.elf_segment_pos = 0;
         proc->status.size += segment_size;
     }
+    proc->cont.elf_header = i;
     dprintf(2, "elf_load finished");
     return 0;
 }
