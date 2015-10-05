@@ -57,14 +57,19 @@ static inline void try_send_buffer(int i) {
     dprintf(4, "[SERIAL] Checking iovs\n");
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
         assert(v->sz);
+        pte_t* pt = as_lookup_pte(proc->vspace, v->vstart);
+        if (pt == NULL) {
+            // The process has been killed.  We no longer care.
+            ERR("Read failure.  Reader has been killed(?)\n");
+            return;
+        }
         int n = min(buflen - pos, v->sz);
         sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, v->vstart);
         assert(dst);
         memcpy((char*)dst, buf+pos, n);
         pos += n;
-        pte_t* pt = as_lookup_pte(proc->vspace, v->vstart);
-        // Pin the page
-        pt->pinned = true;
+        // unpin the page
+        pt->pinned = false;
     }
     // reply to client reader
     syscall_end_continuation(proc, pos, true);
@@ -141,9 +146,6 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
         if (!reg) {
             process_delete(current_process());
         }
-        pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
-        // Pin the page
-        pt->pinned = false;
         // TODO: Needs refactor as codeblock appears a few times thruout SOS
         if (as_page_exists(current_process()->vspace, vec->vstart)) {
             dprintf(4, "page exists\n");
@@ -156,6 +158,8 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
             dprintf(4, "create new page\n");
             process_create_page(vec->vstart, reg->rights);
         }
+        pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
+        pt->pinned = true;
     }
     return 0;
 }

@@ -57,6 +57,19 @@ void add_callback_pid(pid_t pid) {
         assert(new_pid->pid != pid);
     }
 }
+
+void unpin_iov(sos_addrspace_t *as, iovec_t *iov) {
+    iovec_t *cur;
+    while(iov) {
+        cur = iov;
+        iov = iov->next;
+        pte_t *pt = as_lookup_pte(as, cur->vstart);
+        if (pt) {
+            pt->pinned = false;
+        }
+    }
+}
+
 void iov_free(iovec_t *iov) {
     iovec_t *cur;
     while(iov) {
