@@ -388,13 +388,15 @@ void two_coye(void) {
         args[1] = "sosh";
         args[2] = "&";
         exec(3, args);
-        exec(3,args);
+        args[0] = "cp";
+        args[1] = "bootimg.elf";
+        args[2] = "bootimg1.elf";
+        cp(3, args);
     } else {
         char* args[3];
         args[0] = "cp";
         args[1] = "bootimg.elf";
-        args[2] = "bootimgx.elf";
-        args[2][7] = '0' + j;
+        args[2] = "bootimg2.elf";
         cp(3, args);
     }
 
@@ -427,7 +429,8 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
-    large_num_proc_test(10);
+    //large_num_proc_test(10);
+    two_coye();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;

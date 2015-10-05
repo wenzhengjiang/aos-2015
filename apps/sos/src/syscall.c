@@ -365,12 +365,13 @@ int sos__sys_waitpid(void) {
 int sos__sys_proc_delete(void) {
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* proc = process_lookup(pid);
-    sos_proc_t * saved_proc = current_process();
+    pid_t saved_pid = current_process()->pid;
     set_current_process(pid);
     process_delete(proc);
-    set_current_process(saved_proc->pid);
-    if (saved_proc->pid != pid)
-        syscall_end_continuation(saved_proc, 0, true);
+    if (saved_pid != pid) {
+        set_current_process(saved_pid);
+        syscall_end_continuation(process_lookup(saved_pid), 0, true);
+    }
     return 0;
 }
 
