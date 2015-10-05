@@ -7,6 +7,7 @@
 #include "addrspace.h"
 #include "page_replacement.h"
 #include "process.h"
+#include "syscall.h"
 #include "swap.h"
 #include "handler.h"
 #include <assert.h>
@@ -31,7 +32,12 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
         if (head == as->repllist_head) {
             if (loop_count > 1) {
                 dprintf(1, "No pages left for eviction. Invoking 'OOM killer'\n");
-                process_delete(current_process());
+                if (current_process()->cont.spawning_process) {
+                    process_delete(current_process()->cont.spawning_process);
+                    syscall_end_continuation(current_process(), -1, false);
+                } else {
+                    process_delete(current_process());
+                }
                 longjmp(ipc_event_env, -1);
             }
             loop_count++;

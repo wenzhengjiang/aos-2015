@@ -205,8 +205,7 @@ void process_delete(sos_proc_t* proc) {
     cspace_destroy(proc->cspace);
     proc_table[proc->pid] = NULL;
     if(proc->frame_cnt - proc->frame_cnt2 != 0) {
-        dprintf(-1, "alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
-        assert(!"bad frame_cnt");
+        dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
     }
     free(proc);
     dprintf(4, "process_delete finished\n");
