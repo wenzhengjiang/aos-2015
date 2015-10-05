@@ -85,8 +85,16 @@ static inline int CONST min(int a, int b)
 
 void syscall_loop(seL4_CPtr ep) {
     sos_proc_t *proc = NULL;
+    static bool bootstrapped = false;
+    static bool bootstrap_init = false;
     register_handlers();
     int pid = setjmp(ipc_event_env);
+    if (!bootstrap_init) {
+        bootstrap_init = true;
+        start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
+        memset(&current_process()->cont, 0, sizeof(cont_t));
+        bootstrapped = true;
+    }
     while (1) {
         dprintf(4, "[MAIN] Restart syscall loop\n");
         seL4_Word badge = 0;
@@ -95,7 +103,7 @@ void syscall_loop(seL4_CPtr ep) {
         if (has_waiting_proc()) {
             dprintf(4, "[MAIN] Applying continuation\n");
             // m7 TODO: Need to update the current process
-            pid_t pid = next_waiting_proc();
+            pid = next_waiting_proc();
             set_current_process(pid);
             proc = process_lookup(pid);
 
@@ -114,13 +122,13 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge < MAX_PROCESS_NUM) {
                 set_current_process((int)badge);
                 proc = current_process();
-                printf("Received %u from process\n", proc->pid);
+                dprintf(4, "Received %u from process\n", proc->pid);
             }
         }
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge &  IRQ_BADGE_CLOCK) {
-                dprintf(5, "[MAIN] Starting timer interrupt\n");
+                dprintf(4, "[MAIN] Starting timer interrupt\n");
                 timer_interrupt();
             }
             if (badge & IRQ_BADGE_NETWORK) {
@@ -130,6 +138,11 @@ void syscall_loop(seL4_CPtr ep) {
                 pid = 0;
                 continue;
             }
+        } else if (pid > 0 && !bootstrapped) {
+            printf("pid: %d\n", pid);
+            start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
+            memset(&current_process()->cont, 0, sizeof(cont_t));
+            bootstrapped = true;
         } else if(label == seL4_VMFault){
             /* Page fault */
             // Only print out debugging information before the first fault attempt
@@ -350,16 +363,12 @@ int main(void) {
     sos_nfs_init(CONFIG_SOS_NFS_DIR);
 
     sos_serial_init();
-    /* Start the user application */
-    assert(_sos_ipc_ep_cap);
-    pid_t pid = start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
-    assert(pid > 0);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(-1, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
 
-    while(1) {printf("game over\n");};
+    while(1) { printf("game over\n"); }
 
     /* Not reached */
     return 0;

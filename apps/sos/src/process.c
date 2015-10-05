@@ -37,6 +37,7 @@ static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 static sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
+static int running_processes = 0;
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
@@ -208,6 +209,10 @@ void process_delete(sos_proc_t* proc) {
         dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
     }
     free(proc);
+    running_processes--;
+    if (running_processes == 0) {
+        longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
+    }
     dprintf(4, "process_delete finished\n");
 }
 
@@ -307,9 +312,9 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     context.sp = PROCESS_STACK_TOP;
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
+    running_processes++;
     return proc->pid;
 }
-
 
 int register_to_all_proc(pid_t pid) {
     int err = 0;
@@ -329,49 +334,6 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
     pe->next = proc->pid_queue;
     proc->pid_queue = pe;
     return 0;
-}
-
-static int deregister_to_proc(sos_proc_t* proc, pid_t pid) {
-    assert(proc);
-    if (proc->pid == 1) {
-        // pid_queue is NULL when it's the initial process
-        // We halt the system now.
-        longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
-    }
-    if (!proc->pid_queue) return 0;
-    if (proc->pid_queue->pid == pid) {
-        proc->pid_queue = proc->pid_queue->next;
-        return 0;
-    }
-    pid_entry_t *p = proc->pid_queue;
-    while (p->next) {
-        if (p->next->pid == pid) {
-            pid_entry_t* next = p->next;
-            p->next = p->next->next;
-            free(next);
-        }
-        p = p->next;
-    }
-    return 0;
-}
-
-static int deregister_to_all_proc(pid_t pid) {
-    int err = 0;
-    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
-        if(proc_table[i]) {
-            deregister_to_proc(proc_table[i], pid);
-        }
-    }
-    return err;
-}
-
-int process_deregister_wait(sos_proc_t* proc, pid_t pid) {
-    if (pid == 0) {
-        return 0;
-    } else if (pid == -1) {
-        return deregister_to_all_proc(pid);
-    }
-    return deregister_to_proc(proc, pid);
 }
 
 int get_all_proc_stat(char *buf, size_t maxn) {
