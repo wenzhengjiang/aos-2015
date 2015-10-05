@@ -163,7 +163,7 @@ static void as_free_ptes(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing PTEs\n");
     as->repllist_tail->next = NULL;
     pte_t *head = as->repllist_head;
-    int as_cnt = 0, head_cnt = 0;
+    int head_cnt = 0;
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         if (head == as->repllist_head) head_cnt++; 
         assert(head_cnt <= 1);

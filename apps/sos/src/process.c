@@ -204,9 +204,9 @@ void process_delete(sos_proc_t* proc) {
     process_free_pid_queue(proc);
     cspace_destroy(proc->cspace);
     proc_table[proc->pid] = NULL;
-    if(proc->frame_cnt - proc->frame_cnt2 > 3) {
+    if(proc->frame_cnt - proc->frame_cnt2 != 0) {
         dprintf(-1, "alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
-        //assert(!"bad frame_cnt");
+        assert(!"bad frame_cnt");
     }
     free(proc);
     dprintf(4, "process_delete finished\n");
@@ -261,7 +261,6 @@ int process_wake_waiters(sos_proc_t *proc) {
 }
 
 static int count_node(sos_proc_t *proc) {
-
     sos_addrspace_t* as = proc_as(proc);
     pte_t* head = as->repllist_head;;
     as->repllist_tail->next = NULL;

@@ -58,6 +58,7 @@ void add_waiting_proc(pid_t pid) {
         assert(waiting_procs[i] != pid);  
     }
 }
+
 pid_t next_waiting_proc() {
     nproc--;
     assert(waiting_procs[head]);    
@@ -68,6 +69,17 @@ pid_t next_waiting_proc() {
 }
 bool has_waiting_proc() {
    return nproc != 0;
+
+void unpin_iov(sos_addrspace_t *as, iovec_t *iov) {
+    iovec_t *cur;
+    while(iov) {
+        cur = iov;
+        iov = iov->next;
+        pte_t *pt = as_lookup_pte(as, cur->vstart);
+        if (pt) {
+            pt->pinned = false;
+        }
+    }
 }
 
 void iov_free(iovec_t *iov) {
