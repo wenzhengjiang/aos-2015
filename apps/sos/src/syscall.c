@@ -69,6 +69,7 @@ pid_t next_waiting_proc() {
 }
 bool has_waiting_proc() {
    return nproc != 0;
+}
 
 void unpin_iov(sos_addrspace_t *as, iovec_t *iov) {
     iovec_t *cur;
@@ -364,8 +365,12 @@ int sos__sys_waitpid(void) {
 int sos__sys_proc_delete(void) {
     pid_t pid = current_process()->cont.pid;
     sos_proc_t* proc = process_lookup(pid);
-
+    sos_proc_t * saved_proc = current_process();
+    set_current_process(pid);
     process_delete(proc);
+    set_current_process(saved_proc->pid);
+    if (saved_proc->pid != pid)
+        syscall_end_continuation(saved_proc, 0, true);
     return 0;
 }
 

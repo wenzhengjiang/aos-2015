@@ -50,7 +50,12 @@ static inline void try_send_buffer(int i) {
     assert(proc);
     if (line_buflen[i] == 0 || proc->cont.reply_cap == seL4_CapNull)
         return ;
-    assert(proc->cont.iov);
+    if (proc->cont.syscall_number != SOS_SYSCALL_READ )
+        return;
+    if (!proc->cont.iov) {
+        printf("process %d was broken\b", reader_pid);
+        assert(proc->cont.iov);
+    }
     char *buf = line_buf[i];
     int buflen = line_buflen[i];
     int pos = 0;
@@ -137,6 +142,7 @@ int sos_serial_open(const char* filename, fmode_t mode) {
 
 int sos_serial_read(iovec_t* vec, int fd, int count) {
     (void)count;
+    assert(vec);
     sos_proc_t* proc = current_process();
     assert(proc != NULL);
     cont_t *cont = &(proc->cont);
