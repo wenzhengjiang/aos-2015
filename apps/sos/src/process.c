@@ -325,8 +325,8 @@ int register_to_all_proc(pid_t pid) {
 int register_to_proc(sos_proc_t* proc, pid_t pid) {
     assert(proc);
     pid_entry_t * pe = malloc(sizeof(pid_entry_t));
-    pe->pid = pid;
     if (pe == NULL) return ENOMEM;
+    pe->pid = pid;
     pe->next = proc->pid_queue;
     proc->pid_queue = pe;
     return 0;

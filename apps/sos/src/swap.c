@@ -162,21 +162,15 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     }
     assert(count == PAGE_SIZE);
     assert(proc->cont.swap_status != SWAP_SUCCESS);
-    printf("middle of read callback\n");
     proc->cont.swap_status = SWAP_SUCCESS;
-    printf("ading callback pid\n");
     add_callback_pid(token);
-    printf("callback pid okay (amazing)\n");
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
     int code = 0;
-    printf("copy starting\n");
     for (int i = 0; i < PAGE_SIZE; i++) {
         code += ((char*)proc->cont.swap_page)[i];
     }
-    printf("code calc okay\n");
     assert(swap_table[proc->cont.swap_file_offset/PAGE_SIZE].chksum == code);
     swap_free(proc->cont.swap_file_offset);
-    printf("all done\n");
 }
 
 void sos_swap_read(sos_vaddr page, swap_addr pos) {
