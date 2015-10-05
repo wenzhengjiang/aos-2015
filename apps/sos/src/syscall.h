@@ -44,7 +44,10 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 
 void iov_free(iovec_t *iov);
 
-void add_callback_pid(pid_t pid);
+
+void add_waiting_proc(pid_t pid) ;
+pid_t next_waiting_proc(void) ;
+bool has_waiting_proc(void) ;
 
 iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir);
 void ipc_write(int start, char* msgdata, size_t length);

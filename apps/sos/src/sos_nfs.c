@@ -155,7 +155,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
-    add_callback_pid(token);
+    add_waiting_proc(token);
 }
 
 // TODO: Tidy up these params
@@ -201,7 +201,7 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
         syscall_end_continuation(proc, proc->cont.counter, true);
         return;
     }
-    add_callback_pid(token);
+    add_waiting_proc(token);
 }
 
 int sos_nfs_write(iovec_t* iov, int fd, int count) {
@@ -313,7 +313,7 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
         return;
     }
     proc->cont.cookie = nfscookie;
-    add_callback_pid(token);
+    add_waiting_proc(token);
 }
 
 int sos_nfs_readdir(void) {

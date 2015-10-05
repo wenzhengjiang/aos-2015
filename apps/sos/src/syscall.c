@@ -31,7 +31,8 @@ extern io_device_t serial_io;
 extern io_device_t nfs_io;
 extern seL4_CPtr _sos_ipc_ep_cap;
 
-extern pid_entry_t *callback_queue;
+static pid_t waiting_procs[MAX_PROCESS_NUM];
+static int head = 0, tail = -1, nproc = 0;
 
 int pkg_size, pkg_num;
 bool nfs_pkg = false; 
@@ -47,16 +48,28 @@ static inline unsigned CONST umax(unsigned a, unsigned b) {
 
 timestamp_t start_time, end_time;
 
-void add_callback_pid(pid_t pid) {
-    pid_entry_t *new_pid = malloc(sizeof(pid_entry_t));
-    assert(new_pid);
-    new_pid->pid = pid;
-    new_pid->next = callback_queue;
-    callback_queue = new_pid;
-    for (new_pid = callback_queue->next; new_pid != NULL; new_pid = new_pid->next) {
-        assert(new_pid->pid != pid);
+void add_waiting_proc(pid_t pid) {
+    assert(pid);
+    nproc++;
+    tail = (tail+1) % MAX_PROCESS_NUM;
+    waiting_procs[tail] = pid;
+    assert(nproc <= MAX_PROCESS_NUM);
+    for (int i =  head; i < tail; i = (i+1)%MAX_PROCESS_NUM) {
+        assert(waiting_procs[i] != pid);  
     }
 }
+pid_t next_waiting_proc() {
+    nproc--;
+    assert(waiting_procs[head]);    
+    pid_t ret = waiting_procs[head];
+    waiting_procs[head] = 0;
+    head = (head+1)%MAX_PROCESS_NUM;
+    return ret;
+}
+bool has_waiting_proc() {
+   return nproc != 0;
+}
+
 void iov_free(iovec_t *iov) {
     iovec_t *cur;
     while(iov) {

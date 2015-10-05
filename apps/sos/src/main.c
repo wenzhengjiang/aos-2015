@@ -68,8 +68,6 @@
 extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
-pid_entry_t *callback_queue = NULL;
-
 jmp_buf ipc_event_env;
 
 /*
@@ -94,17 +92,12 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_Word badge = 0;
         seL4_Word label;
         seL4_MessageInfo_t message;
-        if (callback_queue != NULL) {
+        if (has_waiting_proc()) {
             dprintf(4, "[MAIN] Applying continuation\n");
             // m7 TODO: Need to update the current process
-            set_current_process(callback_queue->pid);
-            proc = process_lookup(callback_queue->pid);
-            //message = proc->cont.ipc_message;
-
-            // Update callback queue
-            pid_entry_t *head = callback_queue->next;
-            free(callback_queue);
-            callback_queue = head;
+            pid_t pid = next_waiting_proc();
+            set_current_process(pid);
+            proc = process_lookup(pid);
 
             label = proc->cont.ipc_label;
         } else if (pid < -1) { // got error

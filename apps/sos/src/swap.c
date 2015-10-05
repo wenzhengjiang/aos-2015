@@ -58,7 +58,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
     }
     swap_handle = *fh;
     inited = true;
-    add_callback_pid(token);
+    add_waiting_proc(token);
     return;
 }
 
@@ -101,7 +101,7 @@ swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int c
     if (proc->cont.swap_cnt == PAGE_SIZE) {
         proc->cont.swap_status = SWAP_SUCCESS;
         proc->cont.swap_cnt = 0;
-        add_callback_pid(token);
+        add_waiting_proc(token);
         return;
     } else {
         int cnt = proc->cont.swap_cnt;
@@ -165,7 +165,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     printf("middle of read callback\n");
     proc->cont.swap_status = SWAP_SUCCESS;
     printf("ading callback pid\n");
-    add_callback_pid(token);
+    add_waiting_proc(token);
     printf("callback pid okay (amazing)\n");
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
     int code = 0;
