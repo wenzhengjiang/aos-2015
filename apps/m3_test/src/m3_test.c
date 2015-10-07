@@ -97,7 +97,6 @@ static void cp_test(void) {
     pid_t pid = sos_my_id();
     file1 = "bootimg.elf";
     file2 = "bootimgx.elf";
-    file2[7] = '0' + pid;
     fd = open(file1, O_RDONLY);
     fd_out = open(file2, O_WRONLY);
 
