@@ -430,7 +430,7 @@ int main(void) {
     char *bp, *p;
 
     //large_num_proc_test(10);
-    two_coye();
+    //two_coye();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;
