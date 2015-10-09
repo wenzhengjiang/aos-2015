@@ -287,14 +287,20 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         proc->cont.file_mode = FM_READ;
         strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
         proc->cont.binary_nfs_open = true;
+        assert(proc->fd_table);
+        assert(proc->fd_table[proc->cont.fd]);
+        assert(proc->fd_table[proc->cont.fd]->io);
+        assert(current_process());
         (proc->fd_table[proc->cont.fd])->io->open(proc->cont.path, proc->cont.file_mode);
-        frame_alloc(&proc->cont.elf_load_addr);
-        proc->cont.iov = iov_create(proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
+        longjmp(ipc_event_env, -1);
     }
 
     if (!proc->cont.binary_nfs_read) {
+        frame_alloc(&proc->cont.elf_load_addr);
+        proc->cont.iov = iov_create(proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
         proc->cont.binary_nfs_read = true;
         (proc->fd_table[proc->cont.fd])->io->read(proc->cont.iov, proc->cont.fd, PAGE_SIZE);
+        longjmp(ipc_event_env, -1);
         dprintf(1, "\nStarting \"%s\"...\n", app_name);
     }
 

@@ -43,6 +43,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
 
     sos_region_t* reg = as_vaddr_region(as, faultaddr);
+
     if (!reg) {
         ERR("[VMF] Addr %x is not in the reg\n", faultaddr);
         return EFAULT;
@@ -55,8 +56,9 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         ERR("[VMF] Cannot write to address: %x\n", faultaddr);
         return EACCES;
     }
+
     dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
-    if (as_page_exists(as, faultaddr)) {
+    if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
         if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
             swap_replace_page(as, faultaddr);
         } else if (is_referenced(as, faultaddr)) {
@@ -71,11 +73,14 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             process_create_page(faultaddr, reg->rights);
             proc->cont.create_page_done = true;
         }
-
+        printf("page doesn't exist\n");
         pte_t *pt = as_lookup_pte(as, faultaddr);
         assert(pt);
         seL4_Word aligned_addr = PAGE_ALIGN(faultaddr);
-        if (reg->elf_addr) {
+        printf("reg->elf:%x\n", reg->elf_addr);
+        if (reg->elf_addr != -1) {
+            proc->cont.fd = BINARY_READ_FD;
+            printf("LOADING INTO VSPACE\n");
             load_page_into_vspace(proc,
                                   proc->vspace->sos_pd_cap,
                                   (aligned_addr - reg->start) + reg->elf_addr,

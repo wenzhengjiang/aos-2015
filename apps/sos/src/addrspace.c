@@ -345,7 +345,7 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
  * @param rights the permissions that should be offered to the region
  * @return the newly created region
  */
-sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word end, int rights, uint64_t elf_addr) {
+sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word end, int rights, seL4_Word elf_addr) {
     assert(as);
     sos_region_t *new_region;
     // Quick check to make sure we don't overlap another region.  Does not
@@ -410,9 +410,9 @@ static int create_non_segment_regions(sos_addrspace_t *as) {
 
     heap_start = PAGE_ALIGN(heap_start);
     sos_region_t* ipc;
-    as->heap_region = as_region_create(as, heap_start, heap_start, RW_PAGE, 0);
-    as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, RW_PAGE, 0);
-    ipc = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + PAGE_SIZE, RW_PAGE, 0);
+    as->heap_region = as_region_create(as, heap_start, heap_start, RW_PAGE, -1);
+    as->stack_region = as_region_create(as, PROCESS_STACK_BOTTOM, PROCESS_STACK_TOP, RW_PAGE, -1);
+    ipc = as_region_create(as, PROCESS_IPC_BUFFER, PROCESS_IPC_BUFFER + PAGE_SIZE, RW_PAGE, -1);
 
     if (as->stack_region == NULL || ipc == NULL || as->heap_region == NULL) {
         ERR("Default regions setup failed\n");

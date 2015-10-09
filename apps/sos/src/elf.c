@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <cspace/cspace.h>
 #include <errno.h>
+#include <setjmp.h>
 
 #include "elf.h"
 #include "process.h"
@@ -39,6 +40,7 @@
 
 
 extern seL4_ARM_PageDirectory dest_as;
+extern jmp_buf ipc_event_env;
 
 /*
  * Convert ELF permissions into seL4 permissions.
@@ -92,7 +94,7 @@ int load_page_into_vspace(sos_proc_t* proc,
 
     /* We work a page at a time in the destination vspace. */
     assert(as);
-    assert((src == PAGE_ALIGN(src)) && (dst == PAGE_ALIGN(dst))); 
+    assert(dst == PAGE_ALIGN(dst));
     dprintf(-1, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
 
     unsigned long kdst = as_lookup_sos_vaddr(as, dst);
@@ -102,11 +104,14 @@ int load_page_into_vspace(sos_proc_t* proc,
     int nbytes = PAGESIZE - (dst & PAGEMASK);
 
     proc->cont.iov = iov_create(dst, nbytes, NULL, NULL, false);
+    assert(proc->fd_table[proc->cont.fd]);
+    proc->fd_table[proc->cont.fd]->offset = src;
     if (!proc->cont.binary_nfs_read) {
         proc->cont.binary_nfs_read = true;
         proc->fd_table[BINARY_READ_FD]->io->read(proc->cont.iov,
                                                  proc->cont.fd,
                                                  nbytes);
+        longjmp(ipc_event_env, -1);
     }
 
     /* Not observable to I-cache yet so flush the frame */
@@ -131,7 +136,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
     sos_addrspace_t *as = proc_as(proc);
 
     for (i = 0; i < num_headers; i++) {
-        uint64_t source_addr;
+        seL4_Word source_addr;
         unsigned long flags, segment_size, vaddr;
 
         /* Skip non-loadable segments (such as debugging data). */
@@ -145,6 +150,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         flags = elf_getProgramHeaderFlags(elf_file, i);
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
+        printf("source addr: %x", source_addr);
         sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
         // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
         if (reg == NULL) {

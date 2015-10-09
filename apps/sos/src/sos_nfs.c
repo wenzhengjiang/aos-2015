@@ -14,7 +14,7 @@
 #include "syscall.h"
 #include "addrspace.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 #define SOS_NFS_ERR (-1)
@@ -69,6 +69,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     int fd = proc->cont.fd;
     printf("fd found: %d\n", fd);
     of_entry_t *of = fd_lookup(proc, fd);
+
     printf("of found %x\n", (unsigned)of);
     assert(of);
     printf("status: %d %s\n", status, proc->cont.path);
@@ -104,6 +105,8 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     assert(proc);
     if (!proc->cont.binary_nfs_open) {
         syscall_end_continuation(proc, fd, true);
+    } else {
+        add_waiting_proc(token);
     }
     printf("Finishing nfs_open callback\n");
 }
@@ -121,6 +124,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
+    printf("Read callback: %d\n", count);
     (void)fattr;
     set_current_process(token);
     sos_proc_t *proc;
@@ -131,8 +135,11 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     if (count == 0) {
         if (!proc->cont.binary_nfs_read) {
             syscall_end_continuation(proc, proc->cont.counter, true);
+            return;
+        } else {
+            add_waiting_proc(token);
+            return;
         }
-        return;
     }
 
     if (status != NFS_OK) {
@@ -171,8 +178,8 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     if (iov == NULL) {
         if (!proc->cont.binary_nfs_read) {
             syscall_end_continuation(proc, proc->cont.counter, true);
+            return;
         }
-        return;
     }
     add_waiting_proc(token);
 }
@@ -184,7 +191,9 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     of_entry_t *of = fd_lookup(current_process(), fd);
 
     assert(proc->cont.iov);
-    iov_ensure_loaded(proc->cont.iov);
+    if (!proc->cont.binary_nfs_read) {
+        iov_ensure_loaded(proc->cont.iov);
+    }
 
     dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
     return nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
