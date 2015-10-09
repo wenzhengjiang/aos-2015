@@ -40,6 +40,7 @@ typedef struct continuation {
     size_t length_arg;
     int position_arg;
     fmode_t file_mode;
+    int parent_pid;
     sos_vaddr swap_page;
     size_t swap_file_offset;
     size_t swap_cnt;
@@ -87,6 +88,7 @@ void process_delete(sos_proc_t* proc);
 sos_addrspace_t *proc_as(sos_proc_t *proc);
 sos_addrspace_t *current_as(void);
 sos_proc_t *current_process(void);
+sos_proc_t *effective_process(void);
 sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights);

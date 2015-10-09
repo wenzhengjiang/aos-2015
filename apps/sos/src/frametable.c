@@ -30,7 +30,7 @@
 /* Maximum number of frames which will fit in our region */
 #define SMALL_FT
 #ifdef SMALL_FT
-  #define MAX_FRAMES 3000
+  #define MAX_FRAMES 1050
 #else
   #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
 #endif
@@ -199,7 +199,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         ERR("frame_alloc: passed null pointer\n");
         return 0;
     }
-    sos_proc_t *proc = current_process();
+    sos_proc_t *proc = effective_process();
     assert(proc);
     
     if (proc) {
@@ -278,7 +278,7 @@ int frame_free(seL4_Word vaddr) {
     assert(free_list != NULL);
     dprintf(2, "[FRAME] Unmap complete\n");
     
-    sos_proc_t* proc = current_process();
+    sos_proc_t* proc = effective_process();
     if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
         ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt2++;
     } else 

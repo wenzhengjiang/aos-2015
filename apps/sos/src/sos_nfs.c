@@ -39,7 +39,7 @@ static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     set_current_process(token);
-    sos_proc_t *proc = process_lookup(token);
+    sos_proc_t *proc = effective_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
         fd_free(proc->fd_table, fd);
@@ -64,11 +64,18 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
     set_current_process(token);
     printf("Entering nfs_open callback: %d\n", (int)token);
-    sos_proc_t *proc = process_lookup(token);
+    sos_proc_t *proc = effective_process();
     assert(proc);
     int fd = proc->cont.fd;
     printf("fd found: %d\n", fd);
     of_entry_t *of = fd_lookup(proc, fd);
+
+    pid_t pid;
+    if (proc->cont.parent_pid) {
+        pid = proc->cont.parent_pid;
+    } else {
+        pid = proc->pid;
+    }
 
     printf("of found %x\n", (unsigned)of);
     assert(of);
@@ -86,7 +93,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
         dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.path, proc->cont.fd);
-        nfs_create(&mnt_point, proc->cont.path, &default_attr, sos_nfs_create_callback, proc->pid);
+        nfs_create(&mnt_point, proc->cont.path, &default_attr, sos_nfs_create_callback, pid);
         return;
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
@@ -106,14 +113,23 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     if (!proc->cont.binary_nfs_open) {
         syscall_end_continuation(proc, fd, true);
     } else {
-        add_waiting_proc(token);
+        if (proc->cont.parent_pid) {
+            add_waiting_proc(proc->cont.parent_pid);
+        } else {
+            add_waiting_proc(proc->pid);
+        }
     }
     printf("Finishing nfs_open callback\n");
 }
 
 int sos_nfs_open(const char* filename, fmode_t mode) {
-    sos_proc_t *proc = current_process();
-    pid_t pid = current_process()->pid;
+    sos_proc_t *proc = effective_process();
+    pid_t pid;
+    if (proc->cont.parent_pid) {
+        pid = proc->cont.parent_pid;
+    } else {
+        pid = proc->pid;
+    }
     dprintf(2, "sos_nfs_open %s %d\n", filename, proc->cont.fd);
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
                       (unsigned)pid);
@@ -129,7 +145,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     set_current_process(token);
     sos_proc_t *proc;
     int fd;
-    proc = process_lookup((int)token);
+    proc = effective_process();
     fd = proc->cont.fd;
 
     if (count == 0) {
@@ -137,7 +153,11 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
             syscall_end_continuation(proc, proc->cont.counter, true);
             return;
         } else {
-            add_waiting_proc(token);
+            if (proc->cont.parent_pid) {
+                add_waiting_proc(proc->cont.parent_pid);
+            } else {
+                add_waiting_proc(proc->pid);
+            }
             return;
         }
     }
@@ -181,14 +201,24 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
             return;
         }
     }
-    add_waiting_proc(token);
+
+    if (proc->cont.parent_pid) {
+        add_waiting_proc(proc->cont.parent_pid);
+    } else {
+        add_waiting_proc(proc->pid);
+    }
 }
 
 // TODO: Tidy up these params
 int sos_nfs_read(iovec_t* vec, int fd, int count) {
-    sos_proc_t *proc = current_process();
-    pid_t pid = proc->pid;
-    of_entry_t *of = fd_lookup(current_process(), fd);
+    sos_proc_t *proc = effective_process();
+    pid_t pid;
+    if (proc->cont.parent_pid) {
+        pid = proc->cont.parent_pid;
+    } else {
+        pid = proc->pid;
+    }
+    of_entry_t *of = fd_lookup(proc, fd);
 
     assert(proc->cont.iov);
     if (!proc->cont.binary_nfs_read) {
@@ -196,6 +226,8 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     }
 
     dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
+    printf("READING USING PID %d\n", pid);
+
     return nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
@@ -205,7 +237,7 @@ static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
 
     set_current_process(token);
-    sos_proc_t *proc = proc = process_lookup(token);
+    sos_proc_t *proc = proc = effective_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
@@ -233,9 +265,9 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
 }
 
 int sos_nfs_write(iovec_t* iov, int fd, int count) {
-    of_entry_t *of = fd_lookup(current_process(), fd);
+    of_entry_t *of = fd_lookup(effective_process(), fd);
     dprintf(2, "[WRITE] Using %x for fd %d\n", of, fd);
-    sos_proc_t *proc = current_process();
+    sos_proc_t *proc = effective_process();
     pid_t pid = proc->pid;
 
     assert(proc->cont.iov);
@@ -265,7 +297,7 @@ static void prstat(sos_stat_t sbuf) {
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     set_current_process(token);
-    sos_proc_t* proc = process_lookup(token);
+    sos_proc_t* proc = effective_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         ERR("NFS failed\n");
@@ -285,8 +317,10 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
 
 static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
                                     fhandle_t* fh, fattr_t* fattr) {
-    pid_t pid = current_process()->pid;
-    sos_proc_t* proc = process_lookup(token);
+    set_current_process(token);
+    sos_proc_t* proc = effective_process();
+    pid_t pid = proc->pid;
+
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         ERR("Did not find file\n");
@@ -296,11 +330,11 @@ static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
 }
 
 int sos_nfs_getattr(void) {
-    sos_proc_t *proc = current_process();
+    sos_proc_t *proc = effective_process();
     pid_t pid = proc->pid;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
-    int err = nfs_lookup(&mnt_point, current_process()->cont.path, sos_nfs_lookup_for_attr,
+    int err = nfs_lookup(&mnt_point, effective_process()->cont.path, sos_nfs_lookup_for_attr,
                        (unsigned)pid);
     if (err) {
         ERR("NFS stat said: %d\n", err);
@@ -314,7 +348,7 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     set_current_process(token);
-    sos_proc_t *proc = process_lookup(token);
+    sos_proc_t *proc = effective_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
@@ -345,11 +379,11 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
 }
 
 int sos_nfs_readdir(void) {
-    pid_t pid = current_process()->pid;
-    if (current_process()->cont.length_arg == 0) {
+    pid_t pid = effective_process()->pid;
+    if (effective_process()->cont.length_arg == 0) {
         return 1;
     }
-    int err = nfs_readdir(&mnt_point, current_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
+    int err = nfs_readdir(&mnt_point, effective_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
     if (err < 0) {
         return -err;
     }

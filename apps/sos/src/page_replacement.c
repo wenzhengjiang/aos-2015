@@ -32,8 +32,9 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
         if (head == as->repllist_head) {
             if (loop_count > 1) {
                 dprintf(1, "No pages left for eviction. Invoking 'OOM killer'\n");
-                if (current_process()->cont.spawning_process) {
-                    process_delete(current_process()->cont.spawning_process);
+                if (current_process()->cont.spawning_process != -1 &&
+                    current_process()->cont.spawning_process != 0) {
+                    process_delete(effective_process());
                     syscall_end_continuation(current_process(), -1, false);
                 } else {
                     process_delete(current_process());
@@ -46,7 +47,6 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
         if(as->repllist_head->pinned || as->repllist_head->swapd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
-            
             continue;
         }
         if(as->repllist_head->refd) {
@@ -75,7 +75,7 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
  * @return Zero if successful, non-zero otherwise.
  */
 int swap_evict_page(sos_addrspace_t *as) {
-    sos_proc_t *proc = current_process();
+    sos_proc_t *proc = effective_process();
     dprintf(3, "[PR] EVICTING PAGE\n");
 
     if (!proc->cont.page_replacement_victim) {
@@ -102,7 +102,7 @@ int swap_evict_page(sos_addrspace_t *as) {
         return 0;
     } else if (proc->cont.swap_status == SWAP_FAILED) {
         ERR("[PR] Deleting process due to swap failure\n");
-        process_delete(current_process());
+        process_delete(effective_process());
         return EIO;
     } else {
         // Wait on network irq
@@ -121,9 +121,9 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
     return pt->swapd;
 }
 
-int swap_replace_page(sos_addrspace_t* as, client_vaddr readin) {
+int swap_replace_page(sos_proc_t* proc, client_vaddr readin) {
     dprintf(3, "[PR] STARTING PAGE REPLACEMENT\n");
-    sos_proc_t *proc = current_process();
+    sos_addrspace_t *as = proc->vspace;
 
     if (!proc->cont.page_replacement_victim || !proc->cont.page_replacement_victim->swapd) {
         assert(as->repllist_head && as->repllist_tail);

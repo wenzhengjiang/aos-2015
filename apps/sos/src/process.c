@@ -146,12 +146,9 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
         assert(proc->pid >= 1);
         proc_table[proc->pid] = proc;
         current_process()->cont.spawning_process = proc;
+        proc->cont.parent_pid = current_process()->pid;
     } else {
-        if (current_process()->cont.spawning_process != (void*)-1) {
-            proc = current_process()->cont.spawning_process;
-        } else {
-            proc = current_process();
-        }
+        proc = effective_process();
     }
     if (!proc->vspace || !proc->vspace->sos_ipc_buf_addr) {
         assert(proc->pid >= 1);
@@ -232,9 +229,19 @@ sos_proc_t *current_process(void) {
     return curproc;
 }
 
+sos_proc_t *effective_process(void) {
+    if (!curproc) {
+        return NULL;
+    }
+    if (curproc->cont.spawning_process != 0 && curproc->cont.spawning_process != -1) {
+        return curproc->cont.spawning_process;
+    }
+    return curproc;
+}
+
 // TODO: Remove this function.  maybe?
 void process_create_page(seL4_Word vaddr, seL4_CapRights rights) {
-    sos_addrspace_t* as = current_process()->vspace;
+    sos_addrspace_t* as = effective_process()->vspace;
     int err = as_create_page(as, vaddr, rights);
     // TODO: Return ENOMEM to client.
     assert(!err);
@@ -290,7 +297,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         assert(proc->fd_table);
         assert(proc->fd_table[proc->cont.fd]);
         assert(proc->fd_table[proc->cont.fd]->io);
-        assert(current_process());
+        assert(effective_process());
         (proc->fd_table[proc->cont.fd])->io->open(proc->cont.path, proc->cont.file_mode);
         longjmp(ipc_event_env, -1);
     }
@@ -318,6 +325,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     context.sp = PROCESS_STACK_TOP;
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
+    memset(&proc->cont, 0, sizeof(cont_t));
     running_processes++;
     return proc->pid;
 }

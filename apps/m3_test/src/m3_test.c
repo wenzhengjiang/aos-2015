@@ -87,7 +87,7 @@ thread_block(void){
 static void cp_test(void) {
     int fd, fd_out;
     char *file1, *file2;
-    size_t buf_size = 1024 * 5;
+    size_t buf_size = 1024 * 20;
     char *really_big_buf = malloc(buf_size);
     assert(really_big_buf);
     memset(really_big_buf, 0, buf_size);
@@ -115,7 +115,7 @@ static void cp_test(void) {
    
 }
 int main(void){
-    //pt_test();
-    cp_test();
+    pt_test();
+    //cp_test();
     return 0;
 }
