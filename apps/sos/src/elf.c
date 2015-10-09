@@ -129,6 +129,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
     /* Ensure that the ELF file looks sane. */
     if (elf_checkFile(elf_file)){
+        printf("Invalid elf file\n");
         return seL4_InvalidArgument;
     }
 
@@ -154,6 +155,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
         // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
         if (reg == NULL) {
+            printf("no reg\n");
             return ENOMEM;
         }
     }

@@ -21,7 +21,7 @@
 #define HANDLER_EXEC   (1)
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 

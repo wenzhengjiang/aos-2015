@@ -5,7 +5,7 @@
 #include "addrspace.h"
 
 int swap_replace_page(sos_proc_t* as, client_vaddr target);
-int swap_evict_page(sos_addrspace_t *as);
+int swap_evict_page(sos_proc_t *as);
 bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr);
 
 #endif

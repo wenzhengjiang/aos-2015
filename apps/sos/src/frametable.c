@@ -27,13 +27,7 @@
 /* Minimum of two values. */
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
-/* Maximum number of frames which will fit in our region */
-#define SMALL_FT
-#ifdef SMALL_FT
-  #define MAX_FRAMES 1050
-#else
-  #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
-#endif
+size_t process_frames = 0;
 
 static unsigned nframes;
 
@@ -199,35 +193,50 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         ERR("frame_alloc: passed null pointer\n");
         return 0;
     }
-    sos_proc_t *proc = effective_process();
+    sos_proc_t *proc = current_process();
+    sos_proc_t *evict_proc = NULL;
     assert(proc);
-    
+
     if (proc) {
         sos_addrspace_t *as = proc->vspace;
+        // There's a bug here where frames may become available while a
+        // process is evicting things when there are multiple processes swapping.
         if (!frame_available_frames()) {
             dprintf(3, "[FRAME] no available frame\n");
-            swap_evict_page(as);
+            if (!proc->cont.page_eviction_process) {
+                proc->cont.page_eviction_process = select_eviction_process();
+                if (!proc->cont.page_eviction_process) {
+                    assert("Didn't expect this");
+                }
+            }
+            evict_proc = proc->cont.page_eviction_process;
+            printf("Evicting from PID: %d\n", evict_proc->pid);
+            swap_evict_page(evict_proc);
         }
+
         if (proc->cont.original_page_addr) {
             dprintf(3, "[FRAME] start to unmap frame\n");
             memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
             assert(proc->cont.original_page_addr % PAGE_SIZE == 0);
-           // sos_unmap_frame(proc->cont.original_page_addr);
             assert(proc->cont.page_replacement_victim->swapd);
             proc->cont.page_replacement_victim = NULL;
             *vaddr = proc->cont.original_page_addr;
             proc->cont.original_page_addr = 0;
+            proc->cont.parent_pid = 0;
             if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
                 proc->frame_cnt2++;
                 ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
             }
-            goto FRAME_ALLOC_RETURN;
+            return *vaddr;
         }
     }
+    printf("Getting frame\n");
     if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
         ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
-    } else 
+    } else {
         proc->frame_cnt++;
+    }
+    process_frames++;
 
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
@@ -241,9 +250,6 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
-FRAME_ALLOC_RETURN:
-
-    
     return *vaddr;
 }
 
@@ -278,11 +284,13 @@ int frame_free(seL4_Word vaddr) {
     assert(free_list != NULL);
     dprintf(2, "[FRAME] Unmap complete\n");
     
-    sos_proc_t* proc = effective_process();
+    sos_proc_t* proc = current_process();
     if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
         ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt2++;
-    } else 
+    } else {
         proc->frame_cnt2++;
+    }
+    process_frames--;
 
     return 0;
 }

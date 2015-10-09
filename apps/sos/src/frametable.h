@@ -4,6 +4,14 @@
 #include <sel4/sel4.h>
 #include <stdbool.h>
 
+/* Maximum number of frames which will fit in our region */
+#define SMALL_FT
+#ifdef SMALL_FT
+  #define MAX_FRAMES 1070
+#else
+  #define MAX_FRAMES ((PROCESS_STACK_TOP - FRAME_VSTART - PAGE_SIZE) / PAGE_SIZE)
+#endif
+
 void frame_init(void);
 seL4_Word frame_alloc(seL4_Word *vaddr);
 int frame_free(seL4_Word vaddr);

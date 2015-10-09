@@ -25,6 +25,7 @@
  * @return PTE of the selected victim
  */
 static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
+    assert(as);
     pte_t* head = as->repllist_head;
     int err;
     int loop_count = 0;
@@ -74,12 +75,12 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
  * @param as Address space from which to evict
  * @return Zero if successful, non-zero otherwise.
  */
-int swap_evict_page(sos_addrspace_t *as) {
-    sos_proc_t *proc = effective_process();
+int swap_evict_page(sos_proc_t *evict_proc) {
     dprintf(3, "[PR] EVICTING PAGE\n");
-
+    sos_proc_t *proc = current_process();
+    assert(proc);
     if (!proc->cont.page_replacement_victim) {
-        proc->cont.page_replacement_victim = swap_choose_replacement_page(as);
+        proc->cont.page_replacement_victim = swap_choose_replacement_page(evict_proc->vspace);
     }
 
     // Continuation
@@ -105,6 +106,7 @@ int swap_evict_page(sos_addrspace_t *as) {
         process_delete(effective_process());
         return EIO;
     } else {
+        printf("Jumping back\n");
         // Wait on network irq
         longjmp(ipc_event_env, -1);
     }
@@ -127,7 +129,7 @@ int swap_replace_page(sos_proc_t* proc, client_vaddr readin) {
 
     if (!proc->cont.page_replacement_victim || !proc->cont.page_replacement_victim->swapd) {
         assert(as->repllist_head && as->repllist_tail);
-        swap_evict_page(as);
+        swap_evict_page(proc);
         assert(proc->cont.page_replacement_victim->swapd);
     }
 

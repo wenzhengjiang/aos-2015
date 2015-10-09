@@ -32,6 +32,7 @@ typedef struct continuation {
     seL4_Word page_replacement_request;
     seL4_Word original_page_addr;
     bool create_page_done;
+    bool as_activated;
     uint32_t cookie;
     bool binary_nfs_open;
     bool binary_nfs_read;
@@ -55,6 +56,7 @@ typedef struct continuation {
     int elf_header;
     unsigned elf_segment_pos;
     void* spawning_process;
+    void* page_eviction_process;
     seL4_Word alloc_page_frame;
 } cont_t;
 
@@ -100,5 +102,6 @@ int register_to_all_proc(pid_t pid);
 int register_to_proc(sos_proc_t* proc, pid_t pid);
 int process_deregister_wait(sos_proc_t* proc, pid_t pid);
 int process_wake_waiters(sos_proc_t *proc);
+sos_proc_t *select_eviction_process(void);
 
 #endif

@@ -174,14 +174,18 @@ int sos_serial_write(iovec_t* vec, int fd, int count) {
     dprintf(3, "[SERIAL] Starting serial_write\n");
     (void)fd;
     (void)count;
-    assert(vec);
     int sent = 0;
+    vec = current_process()->cont.iov;
+    assert(vec);
+
     for (iovec_t *v = vec; v ; v = v->next) {
+        iov_ensure_loaded(v);
         assert(vec->sz);
         sos_vaddr src = as_lookup_sos_vaddr(current_process()->vspace, v->vstart);
         assert(src);
         sent += serial_send(serial, (char*)src, v->sz);
     }
+    printf("ending continuation\n");
     syscall_end_continuation(current_process(), sent, true);
     return 0;
 }

@@ -39,12 +39,31 @@ static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 static sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
-static int running_processes = 0;
+extern size_t process_frames;
+static size_t running_processes = 0;
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
     proc->cspace = cspace_create(1);
     assert(proc->cspace != NULL);
+}
+
+static size_t page_threshold() {
+    return (process_frames / running_processes);
+}
+
+sos_proc_t *select_eviction_process(void) {
+    int i = 0;
+    for (i = 0; i < MAX_PROCESS_NUM; i++) {
+        if (proc_table[i] == NULL) {
+            continue;
+        }
+        printf("page_threshold: %u\n", page_threshold());
+        if (proc_table[i]->frame_cnt - proc_table[i]->frame_cnt2 > page_threshold()) {
+            return proc_table[i];
+        }
+    }
+    return NULL;
 }
 
 static void init_tcb(sos_proc_t *proc) {
@@ -285,6 +304,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
+    running_processes++;
 
     if (!proc) return -1;
 
@@ -304,6 +324,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
 
     if (!proc->cont.binary_nfs_read) {
         frame_alloc(&proc->cont.elf_load_addr);
+        assert(proc->cont.elf_load_addr);
         proc->cont.iov = iov_create(proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
         proc->cont.binary_nfs_read = true;
         (proc->fd_table[proc->cont.fd])->io->read(proc->cont.iov, proc->cont.fd, PAGE_SIZE);
@@ -314,9 +335,12 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     sos_addrspace_t *as = proc_as(proc);
     assert(as);
 
-    /* load the elf image */
-    err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
-    conditional_panic(err, "Failed to load elf image");
+    if (!proc->cont.as_activated) {
+        /* load the elf image */
+        err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
+        conditional_panic(err, "Failed to load elf image");
+        proc->cont.as_activated = true;
+    }
     as_activate(as);
 
     /* Start the new process */
@@ -326,7 +350,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
     memset(&proc->cont, 0, sizeof(cont_t));
-    running_processes++;
     return proc->pid;
 }
 
