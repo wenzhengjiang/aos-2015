@@ -72,11 +72,12 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
 
         pte_t *pt = as_lookup_pte(as, faultaddr);
         assert(pt);
+        seL4_Word aligned_addr = PAGE_ALIGN(faultaddr);
         if (reg->elf_addr) {
             load_page_into_vspace(proc,
                                   proc->vspace->sos_pd_cap,
-                                  (faultaddr - reg->start) + reg->elf_addr,
-                                  faultaddr,
+                                  (aligned_addr - reg->start) + reg->elf_addr,
+                                  aligned_addr,
                                   reg->rights);
         }
     }
