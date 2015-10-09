@@ -276,7 +276,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     seL4_UserContext context;
 
     /* These required for loading program sections */
-    unsigned long elf_size;
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
 

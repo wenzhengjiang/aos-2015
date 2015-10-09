@@ -132,7 +132,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
     for (i = 0; i < num_headers; i++) {
         uint64_t source_addr;
-        unsigned long flags, file_size, segment_size, vaddr;
+        unsigned long flags, segment_size, vaddr;
 
         /* Skip non-loadable segments (such as debugging data). */
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD)
@@ -140,7 +140,6 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
         /* Fetch information about this segment. */
         source_addr = elf_getProgramHeaderOffset(elf_file, i);
-        file_size = elf_getProgramHeaderFileSize(elf_file, i);
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);

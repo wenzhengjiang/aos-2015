@@ -12,8 +12,10 @@
 #include "page_replacement.h"
 #include "process.h"
 #include "syscall.h"
+#include "elf.h"
 
 #define HANDLER_TYPES  (2)
+#define PAGE_ALIGN(a) (a & 0xfffff000)
 
 #define HANDLER_SETUP  (0)
 #define HANDLER_EXEC   (1)

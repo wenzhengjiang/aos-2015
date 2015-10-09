@@ -139,7 +139,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         if (!proc->cont.binary_nfs_read) {
             syscall_end_continuation(proc, SOS_NFS_ERR, false);
         } else {
-            process_delete(token);
+            process_delete(proc);
         }
         return;
     }
