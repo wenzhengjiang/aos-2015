@@ -33,7 +33,7 @@ all: app-images
 	mkdir -p $(TFTPROOT)
 	cp -v $(IMAGE_ROOT)/sos-image-arm-imx6 $(TFTPROOT)/bootimg.elf
 	$(MAKE) reset
-
+	cp build/arm/imx6/*/*.bin $(TFTPROOT)
 .PHONY: reset
 ifeq ($(SERIAL_PORT),)
 reset:
