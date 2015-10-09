@@ -17,6 +17,7 @@ typedef struct region {
     client_vaddr end;
     seL4_CapRights rights;
     struct region* next;
+    uint64_t elf_addr;
 } sos_region_t;
 
 typedef struct kernel_page_table {
@@ -60,7 +61,7 @@ typedef struct iovec {
 } iovec_t;
 
 
-sos_region_t* as_region_create(sos_addrspace_t *as, client_vaddr start, client_vaddr end, int rights);
+sos_region_t* as_region_create(sos_addrspace_t *as, client_vaddr start, client_vaddr end, int rights, uint64_t elf_addr);
 sos_region_t* as_vaddr_region(sos_addrspace_t *as, client_vaddr vaddr);
 int as_create_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
 void as_create(sos_addrspace_t **);

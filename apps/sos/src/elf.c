@@ -13,6 +13,7 @@
 #include <string.h>
 #include <assert.h>
 #include <cspace/cspace.h>
+#include <errno.h>
 
 #include "elf.h"
 #include "process.h"
@@ -155,9 +156,10 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
     }
 
     num_headers = elf_getNumProgramHeaders(elf_file);
-    for (i = proc->cont.elf_header; i < num_headers; i++) {
-        proc->cont.elf_header = i;
-        char *source_addr;
+    sos_addrspace_t *as = proc_as(proc);
+
+    for (i = 0; i < num_headers; i++) {
+        uint64_t source_addr;
         unsigned long flags, file_size, segment_size, vaddr;
 
         /* Skip non-loadable segments (such as debugging data). */
@@ -165,20 +167,19 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
             continue;
 
         /* Fetch information about this segment. */
-        source_addr = elf_file + elf_getProgramHeaderOffset(elf_file, i);
+        source_addr = elf_getProgramHeaderOffset(elf_file, i);
         file_size = elf_getProgramHeaderFileSize(elf_file, i);
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
-        err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
-                                       get_sel4_rights_from_elf(flags) & seL4_AllRights);
-        conditional_panic(err != 0, "Elf loading failed!\n");
-        proc->cont.elf_segment_pos = 0;
-        proc->status.size += segment_size;
+        sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
+        // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
+        if (reg == NULL) {
+            return ENOMEM;
+        }
     }
-    proc->cont.elf_header = i;
     dprintf(2, "elf_load finished");
     return 0;
 }

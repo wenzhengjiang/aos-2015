@@ -300,6 +300,9 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* parse the cpio image */
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
+    for (int i = 0;i  < 100; i++)
+        printf("%d ", elf_base[i]);
+    assert(0);
     conditional_panic(!elf_base, "Unable to locate cpio header");
     /* load the elf image */
     err = elf_load(proc, proc->vspace->sos_pd_cap, elf_base);
