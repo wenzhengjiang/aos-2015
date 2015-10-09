@@ -357,7 +357,7 @@ sos_region_t* as_region_create(sos_addrspace_t *as, seL4_Word start, seL4_Word e
     }
     new_region = malloc(sizeof(sos_region_t));
     conditional_panic(!new_region, "Unable to create new region for process\n");
-    new_region->start = PAGE_ALIGN(start);
+    new_region->start = start;
     new_region->end = PAGE_ALIGN_UP(end);
     new_region->rights = (seL4_CapRights)rights;
     new_region->elf_addr = elf_addr;

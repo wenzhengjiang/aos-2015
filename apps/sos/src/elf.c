@@ -94,7 +94,7 @@ int load_page_into_vspace(sos_proc_t* proc,
 
     /* We work a page at a time in the destination vspace. */
     assert(as);
-    assert(dst == PAGE_ALIGN(dst));
+    //assert(dst == PAGE_ALIGN(dst));
     dprintf(-1, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
 
     unsigned long kdst = as_lookup_sos_vaddr(as, dst);

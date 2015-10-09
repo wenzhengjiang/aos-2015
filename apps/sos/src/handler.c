@@ -81,6 +81,9 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         if (reg->elf_addr != -1) {
             proc->cont.fd = BINARY_READ_FD;
             printf("LOADING INTO VSPACE\n");
+            if (aligned_addr < reg->start) {
+                aligned_addr = reg->start;
+            }
             load_page_into_vspace(proc,
                                   proc->vspace->sos_pd_cap,
                                   (aligned_addr - reg->start) + reg->elf_addr,
