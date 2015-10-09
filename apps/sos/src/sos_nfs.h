@@ -21,4 +21,6 @@ int sos_nfs_readdir(void);
 
 int sos_nfs_init(const char* dir);
 
+extern io_device_t nfs_io;
+
 #endif

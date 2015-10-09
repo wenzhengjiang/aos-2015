@@ -15,6 +15,7 @@
 typedef struct region {
     client_vaddr start;
     client_vaddr end;
+    seL4_Word file_offset;
     seL4_CapRights rights;
     struct region* next;
     uint64_t elf_addr;
@@ -58,6 +59,7 @@ typedef struct iovec {
     client_vaddr vstart;
     size_t sz;
     struct iovec *next;
+    bool sos_iov_flag;
 } iovec_t;
 
 

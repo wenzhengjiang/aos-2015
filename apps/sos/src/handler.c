@@ -19,7 +19,7 @@
 #define HANDLER_EXEC   (1)
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -65,7 +65,20 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             as_reference_page(as, faultaddr, reg->rights);
         }
     } else {
-        process_create_page(faultaddr, reg->rights);
+        if (!proc->cont.create_page_done) {
+            process_create_page(faultaddr, reg->rights);
+            proc->cont.create_page_done = true;
+        }
+
+        pte_t *pt = as_lookup_pte(as, faultaddr);
+        assert(pt);
+        if (reg->elf_addr) {
+            load_page_into_vspace(proc,
+                                  proc->vspace->sos_pd_cap,
+                                  (faultaddr - reg->start) + reg->elf_addr,
+                                  faultaddr,
+                                  reg->rights);
+        }
     }
     return 0;
 }
@@ -287,7 +300,7 @@ void handle_syscall(seL4_Word syscall_number) {
     /* Save the caller */
     seL4_MessageInfo_t reply;
     int ret;
-    printf("Handling syscall number %d\n", syscall_number);
+    dprintf(4, "Handling syscall number %d\n", syscall_number);
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
     if (handlers[syscall_number][HANDLER_SETUP] != NULL &&
         !current_process()->cont.handler_initiated) {

@@ -13,6 +13,7 @@
 #include <nfs/nfs.h>
 #include <cpio/cpio.h>
 #include <clock/clock.h>
+#include <syscallno.h>
 
 #include "process.h"
 #include "addrspace.h"
@@ -22,6 +23,7 @@
 #include <elf/elf.h>
 #include "elf.h"
 #include "file.h"
+#include "sos_nfs.h"
 
 #define verbose 5
 #include <log/debug.h>
@@ -97,8 +99,9 @@ static int init_fd_table(sos_proc_t *proc) {
     if (!proc->fd_table) {
         return ENOMEM;
     }
-    if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,1) < 0) return ENOMEM;
-    if(fd_create_fd(proc->fd_table, 0, &serial_io, FM_WRITE,2) < 0) return ENOMEM;
+    if(fd_create_fd(proc->fd_table, NULL, &serial_io, FM_WRITE, 1) < 0) return ENOMEM;
+    if(fd_create_fd(proc->fd_table, NULL, &serial_io, FM_WRITE, 2) < 0) return ENOMEM;
+    if(fd_create_fd(proc->fd_table, NULL, &nfs_io, FM_READ, BINARY_READ_FD) < 0) return ENOMEM;
 
     return 0;
 }
@@ -264,18 +267,6 @@ int process_wake_waiters(sos_proc_t *proc) {
     return 0;
 }
 
-static int count_node(sos_proc_t *proc) {
-    sos_addrspace_t* as = proc_as(proc);
-    pte_t* head = as->repllist_head;;
-    as->repllist_tail->next = NULL;
-    int cnt = 0;
-    while (head) {
-        cnt++;
-        head = head->next;
-    }
-    as->repllist_tail->next = head;
-    printf("length of list = %d\n", cnt);
-}
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     static sos_proc_t* proc = NULL;
     printf("start_process\n");
@@ -285,33 +276,40 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     seL4_UserContext context;
 
     /* These required for loading program sections */
-    char* elf_base;
     unsigned long elf_size;
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
 
     if (!proc) return -1;
 
-    printf("proc_as\n");
+    if (!proc->cont.binary_nfs_open) {
+        /* TODO: Fix magic numbers */
+        proc->cont.fd = BINARY_READ_FD;
+        proc->cont.file_mode = FM_READ;
+        strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
+        proc->cont.binary_nfs_open = true;
+        (proc->fd_table[proc->cont.fd])->io->open(proc->cont.path, proc->cont.file_mode);
+        frame_alloc(&proc->cont.elf_load_addr);
+        proc->cont.iov = iov_create(proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
+    }
+
+    if (!proc->cont.binary_nfs_read) {
+        proc->cont.binary_nfs_read = true;
+        (proc->fd_table[proc->cont.fd])->io->read(proc->cont.iov, proc->cont.fd, PAGE_SIZE);
+        dprintf(1, "\nStarting \"%s\"...\n", app_name);
+    }
+
     sos_addrspace_t *as = proc_as(proc);
     assert(as);
-    printf("proc_as'd\n");
 
-    /* parse the cpio image */
-    dprintf(1, "\nStarting \"%s\"...\n", app_name);
-    elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
-    for (int i = 0;i  < 100; i++)
-        printf("%d ", elf_base[i]);
-    assert(0);
-    conditional_panic(!elf_base, "Unable to locate cpio header");
     /* load the elf image */
-    err = elf_load(proc, proc->vspace->sos_pd_cap, elf_base);
+    err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
     conditional_panic(err, "Failed to load elf image");
     as_activate(as);
 
     /* Start the new process */
     memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(elf_base);
+    context.pc = elf_getEntryPoint((void*)proc->cont.elf_load_addr);
     context.sp = PROCESS_STACK_TOP;
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
