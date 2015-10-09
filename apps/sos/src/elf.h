@@ -15,5 +15,10 @@
 #include "process.h"
 
 int elf_load(sos_proc_t * proc, seL4_ARM_PageDirectory dest_pd, char* elf_file);
+int load_page_into_vspace(sos_proc_t* proc,
+                          seL4_ARM_PageDirectory dest_as,
+                          char *src, unsigned long segment_size,
+                          unsigned long file_size, unsigned long dst,
+                          unsigned long permissions);
 
 #endif

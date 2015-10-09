@@ -203,7 +203,7 @@ void iov_ensure_loaded(iovec_t* iov) {
     }
 }
 
-static iovec_t* iov_create(client_vaddr vstart, size_t sz, iovec_t *iohead, iovec_t *iotail) {
+iovec_t* iov_create(seL4_Word vstart, size_t sz, iovec_t *iohead, iovec_t *iotail, bool sos_iov_flag) {
     iovec_t *ionew = malloc(sizeof(iovec_t));
     if (ionew == NULL) {
         iov_free(iohead);
@@ -212,6 +212,7 @@ static iovec_t* iov_create(client_vaddr vstart, size_t sz, iovec_t *iohead, iove
     ionew->vstart = vstart;
     ionew->sz = sz;
     ionew->next = NULL;
+    ionew->sos_iov_flag = sos_iov_flag;
 
     if (iohead == NULL) {
         return ionew;
@@ -233,7 +234,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
             ERR("Client page lookup %x failed\n", buf);
             return NULL;
         }
-        iohead = iov_create(buf, 0, NULL, NULL);
+        iohead = iov_create(buf, 0, NULL, NULL, false);
         return iohead;
     }
     dprintf(1, "cbuf_to_iov: %d bytes\n", nbyte);
@@ -246,7 +247,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir) {
             return NULL;
         }
         dprintf(1, "cbuf_to_iov: delta=%d\n", buf_delta);
-        iohead = iov_create(buf, buf_delta, iohead, iotail);
+        iohead = iov_create(buf, buf_delta, iohead, iotail, false);
         if (iotail == NULL) iotail = iohead;
         else iotail = iotail->next;
 

@@ -18,6 +18,7 @@
 #include "process.h"
 #include "addrspace.h"
 #include "frametable.h"
+#include "syscall.h"
 
 #include <device/vmem_layout.h>
 #include <ut/ut.h>
@@ -57,11 +58,11 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
 /*
  * Inject data into the given vspace.
  */
-static int load_segment_into_vspace(sos_proc_t* proc,
-                                    seL4_ARM_PageDirectory dest_as,
-                                    char *src, unsigned long segment_size,
-                                    unsigned long file_size, unsigned long dst,
-                                    unsigned long permissions) {
+int load_page_into_vspace(sos_proc_t* proc,
+                          seL4_ARM_PageDirectory dest_as,
+                          char *src, unsigned long segment_size,
+                          unsigned long file_size, unsigned long dst,
+                          unsigned long permissions) {
 
     /* Overview of ELF segment loading
 
@@ -92,54 +93,33 @@ static int load_segment_into_vspace(sos_proc_t* proc,
     /* We work a page at a time in the destination vspace. */
     assert(as);
 
-    sos_region_t *reg = NULL;
-    reg = as_vaddr_region(as, dst);
-    if (proc->cont.elf_segment_pos == 0) {
-        if (reg == NULL) {
-            reg = as_region_create(as, (seL4_Word)dst, ((seL4_Word)dst + segment_size), (int)permissions);
-        }
+    seL4_Word paddr;
+    seL4_CPtr sos_cap;
+    seL4_Word vpage;
+    unsigned long kdst;
+    int nbytes;
+    vpage  = PAGE_ALIGN(dst);
+
+    dprintf(-1, "load_segment_into_vspace: src=%08x,dst=%08x\n", src, dst);
+
+    kdst   = as_lookup_sos_vaddr(as, dst);
+    sos_cap = frame_cap(kdst);
+    assert(sos_cap != seL4_CapNull);
+    /* Now copy our data into the destination vspace. */
+    nbytes = PAGESIZE - (dst & PAGEMASK);
+
+    proc->cont.iov = iov_create(dst, nbytes, NULL, NULL, false);
+    if (!proc->cont.binary_nfs_read) {
+        proc->cont.binary_nfs_read = true;
+        proc->fd_table[BINARY_READ_FD]->io->read(proc->cont.iov,
+                                                 proc->cont.fd,
+                                                 nbytes);
     }
 
-    if (reg == NULL) {
-        // failed to create a region
-        return 1;
-    }
+    /* Not observable to I-cache yet so flush the frame */
+    seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
-    dst += proc->cont.elf_segment_pos;
-    src += proc->cont.elf_segment_pos;
-
-    while(proc->cont.elf_segment_pos < segment_size) {
-        seL4_Word paddr;
-        seL4_CPtr sos_cap;
-        seL4_Word vpage, kvpage;
-        unsigned long kdst;
-        int nbytes;
-        vpage  = PAGE_ALIGN(dst);
-        kvpage = PAGE_ALIGN(kdst);
-
-        dprintf(-1, "load_segment_into_vspace: src=%08x,dst=%08x\n", src, dst);
-
-        /* First we need to create a frame */
-        as_create_page(as, vpage, permissions);
-
-        kdst   = as_lookup_sos_vaddr(as, dst);
-        sos_cap = frame_cap(kdst);
-        assert(sos_cap != seL4_CapNull);
-        /* Now copy our data into the destination vspace. */
-        nbytes = PAGESIZE - (dst & PAGEMASK);
-        if (proc->cont.elf_segment_pos < file_size){
-            memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - proc->cont.elf_segment_pos));
-        }
-
-        /* Not observable to I-cache yet so flush the frame */
-        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
-
-        proc->cont.elf_segment_pos += nbytes;
-        dst += nbytes;
-        src += nbytes;
-        
-    }
-    dprintf(-1, "load_segment_into_vspace: finished\n");
+    dprintf(-1, "load_page_into_vspace: finished\n");
     return 0;
 }
 

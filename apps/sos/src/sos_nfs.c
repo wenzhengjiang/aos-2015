@@ -90,7 +90,11 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc->fd_table, fd);
-        syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        if (!proc->cont.binary_nfs_open) {
+            syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        } else {
+            process_delete(token);
+        }
         return;
     }
     printf("File already existsh on FS.\n");
@@ -98,7 +102,9 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     of->fhandle = (fhandle_t*)malloc(sizeof(fhandle_t));
     *(of->fhandle) = *fh;
     assert(proc);
-    syscall_end_continuation(proc, fd, true);
+    if (!proc->cont.binary_nfs_open) {
+        syscall_end_continuation(proc, fd, true);
+    }
     printf("Finishing nfs_open callback\n");
 }
 
@@ -123,19 +129,30 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     fd = proc->cont.fd;
 
     if (count == 0) {
-        syscall_end_continuation(proc, proc->cont.counter, true);
+        if (!proc->cont.binary_nfs_read) {
+            syscall_end_continuation(proc, proc->cont.counter, true);
+        }
         return;
     }
 
     if (status != NFS_OK) {
-        syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        if (!proc->cont.binary_nfs_read) {
+            syscall_end_continuation(proc, SOS_NFS_ERR, false);
+        } else {
+            process_delete(token);
+        }
         return;
     }
     proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
 
-    sos_vaddr dst = as_lookup_sos_vaddr(proc->vspace, proc->cont.iov->vstart);
+    sos_vaddr dst;
+    if (proc->cont.iov->sos_iov_flag) {
+        dst = proc->cont.iov->vstart;
+    } else {
+        dst = as_lookup_sos_vaddr(proc->vspace, proc->cont.iov->vstart);
+    }
     assert(dst);
 
     memcpy((char*)dst, data, (size_t)count);
@@ -152,7 +169,9 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     }
 
     if (iov == NULL) {
-        syscall_end_continuation(proc, proc->cont.counter, true);
+        if (!proc->cont.binary_nfs_read) {
+            syscall_end_continuation(proc, proc->cont.counter, true);
+        }
         return;
     }
     add_waiting_proc(token);
