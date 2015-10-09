@@ -353,11 +353,17 @@ int sos__sys_waitpid(void) {
         dprintf(3, "%d is already waiting on cur_proc->waiting_pid: %d\n", cur_proc->pid, cur_proc->waiting_pid);
         assert(cur_proc->waiting_pid == 0);
     }
-    cur_proc->waiting_pid = pid;
     if (pid == -1) {
+        cur_proc->waiting_pid = pid;
         err = register_to_all_proc(cur_proc->pid);
     } else {
-        err = register_to_proc(process_lookup(pid), cur_proc->pid);
+        sos_proc_t *ch_proc = process_lookup(pid);
+        if (!ch_proc) {
+            syscall_end_continuation(cur_proc, 0, true);
+        } else {
+            cur_proc->waiting_pid = pid;
+            err = register_to_proc(ch_proc, cur_proc->pid);
+        }
     }
     dprintf(3, "sos__sys_waitpid end %d\n", err);
     return err;
