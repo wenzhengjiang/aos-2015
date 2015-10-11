@@ -68,7 +68,7 @@ pid_t next_waiting_proc() {
     return ret;
 }
 bool has_waiting_proc() {
-   return nproc > 0;
+    return nproc > 0;
 }
 
 void unpin_iov(sos_addrspace_t *as, iovec_t *iov) {

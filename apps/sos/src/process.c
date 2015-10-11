@@ -14,7 +14,6 @@
 #include <cpio/cpio.h>
 #include <clock/clock.h>
 #include <syscallno.h>
-
 #include "process.h"
 #include "addrspace.h"
 #include "page_replacement.h"
@@ -36,12 +35,17 @@
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
+static pid_entry_t * free_proc_head = NULL, *running_proc_head = NULL;
+static pid_entry_t pid_table[MAX_PROCESS_NUM];
+
 static sos_proc_t *curproc = NULL;
 extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
 extern size_t process_frames;
 static size_t running_processes = 0;
 extern size_t addrspace_pages;
+
+static pid_entry_t *last_evicted_proc = NULL;
 
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
@@ -54,22 +58,25 @@ static size_t page_threshold() {
 }
 
 sos_proc_t *select_eviction_process(void) {
-    static int i = 0;
-    int starting_idx = i;
-    while (i < MAX_PROCESS_NUM) {
-        i = (i+1) % MAX_PROCESS_NUM;
-        if (i == starting_idx) {
-            break;
-        }
-        if (proc_table[i] == NULL) {
-            continue;
-        }
+
+    if (last_evicted_proc == NULL) last_evicted_proc = running_proc_head;
+
+    pid_entry_t *cur_proc= last_evicted_proc->next;
+    int cnt = 0;
+
+    while(last_evicted_proc != cur_proc) {
+        if (++cnt > running_processes) break;
+        if (cur_proc == NULL) cur_proc = running_proc_head;
+
+        int i = cur_proc->pid;
         printf("page_threshold: %u\n", page_threshold());
         printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
         if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
             return proc_table[i];
         }
+        cur_proc = cur_proc->next;
     }
+
     return current_process();
 }
 
@@ -133,15 +140,27 @@ static int init_fd_table(sos_proc_t *proc) {
 }
 
 static int get_next_pid() {
-    static int next_pid = 0;
-    int cnt = 0;
-    next_pid = (next_pid + 1) % MAX_PROCESS_NUM;
-    while (next_pid == 0 || proc_table[next_pid]) {
-        next_pid = (next_pid+1) % MAX_PROCESS_NUM;
-        cnt++;
-        if (cnt == MAX_PROCESS_NUM) return -1;
+    if (free_proc_head == NULL) return -1;
+    pid_entry_t * pe = free_proc_head;
+    free_proc_head = free_proc_head->next;
+    free_proc_head->prev = NULL;
+
+    pe->next = running_proc_head;
+    running_proc_head = pe;
+    if (pe->next) pe->next->prev = pe;
+
+    return pe->pid;
+}
+static void proc_table_init(void) {
+    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
+        pid_table[i].pid = i;
+        if (i == MAX_PROCESS_NUM-1) pid_table[i].next = NULL; 
+        else pid_table[i].next = &pid_table[i+1];
+        if (i == 1) pid_table[i].prev = NULL;
+        else pid_table[i].prev = &pid_table[i-1];
     }
-    return next_pid;
+    free_proc_head = &pid_table[1];
+    running_proc_head = NULL;
 }
 /**
  * Create a new process
@@ -152,13 +171,15 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     dprintf(3, "process_create\n");
     sos_proc_t* proc;
     if (!current_process()) {
+        proc_table_init();
         proc = malloc(sizeof(sos_proc_t));
         if (!proc) {
             return NULL;
         }
         memset((void*)proc, 0, sizeof(sos_proc_t));
         proc->pid = get_next_pid();
-        assert(proc->pid >= 1);
+        
+        proc->start_time = time_stamp();
         proc_table[proc->pid] = proc;
         proc->cont.spawning_process = (void*)-1;
         set_current_process(proc->pid);
@@ -169,7 +190,7 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
         }
         memset((void*)proc, 0, sizeof(sos_proc_t));
         proc->pid = get_next_pid();
-        assert(proc->pid >= 1);
+        if(proc->pid < 1) return NULL;
         proc_table[proc->pid] = proc;
         current_process()->cont.spawning_process = proc;
         proc->cont.parent_pid = current_process()->pid;
@@ -231,6 +252,22 @@ void process_delete(sos_proc_t* proc) {
     process_free_pid_queue(proc);
     cspace_destroy(proc->cspace);
     proc_table[proc->pid] = NULL;
+
+    {
+        pid_entry_t* p = &pid_table[proc->pid];
+        pid_entry_t* prev = p->prev, *next = p->next;
+
+        p->next = free_proc_head;
+        if (p->next) p->next->prev = p;
+
+        if (prev) prev->next = next;
+        else running_proc_head = next;
+
+        if (next) next->prev = prev;
+        if (p == last_evicted_proc)
+            last_evicted_proc = next;
+    }
+
     if(proc->frames_available != 0) {
         dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frames_available);
     }

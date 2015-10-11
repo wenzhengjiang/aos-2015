@@ -39,6 +39,8 @@ static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
     sos_proc_t *proc = effective_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
@@ -63,6 +65,9 @@ static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
+
     printf("Entering nfs_open callback: %d\n", (int)token);
     sos_proc_t *proc = effective_process();
     assert(proc);
@@ -126,6 +131,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
         pid = proc->pid;
     }
     dprintf(2, "sos_nfs_open %s %d\n", filename, proc->cont.fd);
+    current_process()->cont.callback_start_time = time_stamp();
     return nfs_lookup(&mnt_point, filename, sos_nfs_open_callback,
                       (unsigned)pid);
 }
@@ -138,6 +144,9 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     printf("Read callback: %d\n", count);
     (void)fattr;
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
+
     sos_proc_t *proc;
     int fd;
     proc = effective_process();
@@ -215,6 +224,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
     printf("READING USING PID %d\n", pid);
 
+    current_process()->cont.callback_start_time = time_stamp();
     return nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz, sos_nfs_read_callback, (unsigned)pid);
 }
 
@@ -224,6 +234,9 @@ static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
 
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
+
     sos_proc_t *proc = proc = effective_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
@@ -265,6 +278,7 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     sos_vaddr src = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
     assert(src);
     dprintf(2, "Writing to offset: %u %d (%d)bytes\n", of->offset, count, iov->sz);
+    current_process()->cont.callback_start_time = time_stamp();
     int err = nfs_write(of->fhandle, of->offset, iov->sz,
                         (const void*)src, nfs_write_callback,
                         (unsigned)pid);
@@ -286,6 +300,9 @@ static void prstat(sos_stat_t sbuf) {
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
+
     sos_proc_t* proc = current_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
@@ -323,6 +340,7 @@ int sos_nfs_getattr(void) {
     pid_t pid = proc->pid;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
+    current_process()->cont.callback_start_time = time_stamp();
     int err = nfs_lookup(&mnt_point, effective_process()->cont.path, sos_nfs_lookup_for_attr,
                        (unsigned)pid);
     if (err) {
@@ -337,6 +355,9 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     set_current_process(token);
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
+        return ;
+
     sos_proc_t *proc = current_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
@@ -372,6 +393,7 @@ int sos_nfs_readdir(void) {
     if (current_process()->cont.length_arg == 0) {
         return 1;
     }
+    current_process()->cont.callback_start_time = time_stamp();
     int err = nfs_readdir(&mnt_point, current_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
     if (err < 0) {
         return -err;
