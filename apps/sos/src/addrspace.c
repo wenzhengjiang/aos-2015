@@ -179,9 +179,14 @@ void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr) {
 static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
+    if (as->repllist_head == NULL) {
+        ERR("No pages mapped\n");
+        return;
+    }
     as->repllist_tail->next = NULL;
     pte_t *head = as->repllist_head;
     int head_cnt = 0;
+
     for (pt = as->repllist_head; as->repllist_head != NULL; pt = pt->next) {
         if (head == as->repllist_head) head_cnt++; 
         assert(head_cnt <= 1);
@@ -228,7 +233,10 @@ static void as_free_pd(sos_addrspace_t *as) {
 
 void as_free(sos_addrspace_t *as) {
     dprintf(3, "[AS] Freeing address space\n");
-    assert(as);
+    if (!as) {
+        ERR("No address space.\n");
+        return;
+    }
     as_free_region(as);
     as_free_kpts(as);
     as_free_ptes(as);

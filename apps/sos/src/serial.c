@@ -30,8 +30,8 @@ io_device_t serial_io = {
 #define PREV_BID(i) ((i+1)%2)
 
 static struct serial* serial;
-static char line_buf[2][SERIAL_BUF_SIZE];
-static size_t line_buflen[2];
+static char line_buf[SERIAL_BUF_SIZE];
+static size_t line_buflen;
 static int bid = 0; // current line buffer
 
 static int reader_pid;
@@ -41,14 +41,14 @@ static inline unsigned CONST min(unsigned a, unsigned b)
     return (a < b) ? a : b;
 }
 
-static inline void try_send_buffer(int i) {
+static inline void try_send_buffer() {
     dprintf(3, "[SERIAL] Attempting 'try_send_buffer'\n");
     if (reader_pid == 0) {
         return;
     }
     sos_proc_t *proc = process_lookup(reader_pid);
     assert(proc);
-    if (line_buflen[i] == 0 || proc->cont.reply_cap == seL4_CapNull)
+    if (line_buflen == 0 || proc->cont.reply_cap == seL4_CapNull)
         return ;
     if (proc->cont.syscall_number != SOS_SYSCALL_READ )
         return;
@@ -56,8 +56,8 @@ static inline void try_send_buffer(int i) {
         printf("process %d was broken\b", reader_pid);
         assert(proc->cont.iov);
     }
-    char *buf = line_buf[i];
-    int buflen = line_buflen[i];
+    char *buf = line_buf;
+    int buflen = line_buflen;
     int pos = 0;
     dprintf(4, "[SERIAL] Checking iovs\n");
     for (iovec_t *v = proc->cont.iov; v && pos < buflen; v = v->next) {
@@ -82,19 +82,16 @@ static inline void try_send_buffer(int i) {
     if (pos < buflen) {
         memmove(buf, buf + pos, buflen - pos);
     }
-    line_buflen[i] -= pos;
+    line_buflen -= pos;
 }
 
 static void serial_handler(struct serial *serial, char c) {
     assert(serial);
-    line_buf[bid][line_buflen[bid]++] = c;
+    line_buf[line_buflen++] = c;
 
-    if (c == '\n' || line_buflen[bid] == SERIAL_BUF_SIZE) {  // switch to next line buffer
-        bid = NEXT_BID(bid);
-        line_buflen[bid] = 0;
+    if (c == '\n' || line_buflen == SERIAL_BUF_SIZE) {
+        try_send_buffer();
     }
-    // try to send latest line buffer which is ready to be sent
-    try_send_buffer(PREV_BID(bid));
 }
 
 
@@ -170,6 +167,11 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
         }
         pte_t* pt = as_lookup_pte(current_process()->vspace, vec->vstart);
         pt->pinned = true;
+    }
+
+    // try to send latest line buffer which is ready to be sent
+    if (line_buflen > 0) {
+        try_send_buffer();
     }
     return 0;
 }
