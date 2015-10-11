@@ -98,11 +98,10 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc->fd_table, fd);
-        if (!proc->cont.binary_nfs_open) {
-            syscall_end_continuation(proc, SOS_NFS_ERR, false);
-        } else {
+        if (proc->cont.binary_nfs_read) {
             process_delete(proc);
         }
+        syscall_end_continuation(current_process(), SOS_NFS_ERR, false);
         return;
     }
     printf("File already existsh on FS.\n");
@@ -163,11 +162,10 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     }
 
     if (status != NFS_OK) {
-        if (!proc->cont.binary_nfs_read) {
-            syscall_end_continuation(proc, SOS_NFS_ERR, false);
-        } else {
+        if (proc->cont.binary_nfs_read) {
             process_delete(proc);
         }
+        syscall_end_continuation(current_process(), SOS_NFS_ERR, false);
         return;
     }
     proc->cont.counter += count;
