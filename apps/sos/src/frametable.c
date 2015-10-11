@@ -225,13 +225,13 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             proc->cont.parent_pid = 0;
             assert(proc->cont.page_eviction_process);
             ((sos_proc_t*)proc->cont.page_eviction_process)->frames_available--;
-            proc->frames_available++;
+            effective_process()->frames_available++;
             proc->cont.page_eviction_process = NULL;
             return *vaddr;
         }
     }
     printf("Getting frame\n");
-    proc->frames_available++;
+    effective_process()->frames_available++;
     process_frames++;
 
     frame_entry_t* new_frame = free_list;
