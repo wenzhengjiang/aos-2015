@@ -39,7 +39,7 @@ static void
 sos_nfs_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
     sos_proc_t *proc = effective_process();
     int fd = proc->cont.fd;
@@ -65,7 +65,7 @@ static void
 sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
                       fhandle_t* fh, fattr_t* fattr) {
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     printf("Entering nfs_open callback: %d\n", (int)token);
@@ -144,7 +144,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     printf("Read callback: %d\n", count);
     (void)fattr;
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t *proc;
@@ -234,7 +234,7 @@ static void
 nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
 
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t *proc = proc = effective_process();
@@ -300,7 +300,7 @@ static void prstat(sos_stat_t sbuf) {
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t* proc = current_process();
@@ -355,7 +355,7 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t *proc = current_process();

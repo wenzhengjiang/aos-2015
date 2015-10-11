@@ -3,6 +3,7 @@
 #ifndef _PROCESS_H_
 #define _PROCESS_H_
 
+#include <clock/clock.h>
 #include <nfs/nfs.h>
 #include <cspace/cspace.h>
 #include <stdbool.h>
@@ -58,12 +59,12 @@ typedef struct continuation {
     void* spawning_process;
     void* page_eviction_process;
     seL4_Word alloc_page_frame;
-    time_stamp_t callback_start_time;
+    timestamp_t callback_start_time;
 } cont_t;
 
 typedef struct pid_entry {
     pid_t pid;
-    struct pid_entry* next;
+    struct pid_entry *next, *prev;
 } pid_entry_t;
 
 typedef struct process {
@@ -80,9 +81,10 @@ typedef struct process {
     pid_entry_t* pid_queue; // processes waiting for me
 
     sos_process_t status;
-    time_stamp_t start_time;
+    timestamp_t start_time;
 
     int frames_available;
+
 } sos_proc_t;
 
 

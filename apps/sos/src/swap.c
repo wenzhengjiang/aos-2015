@@ -50,7 +50,7 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
                         fattr_t *fattr) {
     dprintf(4, "[SWAP] Invoking nfs_create callback\n");
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t *proc = current_process();
@@ -92,7 +92,7 @@ static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     dprintf(4, "[SWAP] Write callback\n");
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     sos_proc_t *proc = current_process();
@@ -162,7 +162,7 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     dprintf(4, "[SWAP] Read callback\n");
     printf("token: %d\n", token);
     set_current_process(token);
-    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+    if (current_process()->start_time < current_process()->cont.callback_start_time)
         return ;
 
     if (count == 0) return;
