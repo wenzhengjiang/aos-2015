@@ -42,6 +42,8 @@ extern jmp_buf ipc_event_env;
 extern size_t process_frames;
 static size_t running_processes = 0;
 
+extern size_t addrspace_pages;
+
 static void init_cspace(sos_proc_t *proc) {
     /* Create a simple 1 level CSpace */
     proc->cspace = cspace_create(1);
@@ -49,7 +51,7 @@ static void init_cspace(sos_proc_t *proc) {
 }
 
 static size_t page_threshold() {
-    return (process_frames / running_processes);
+    return (addrspace_pages / running_processes);
 }
 
 sos_proc_t *select_eviction_process(void) {
@@ -59,11 +61,12 @@ sos_proc_t *select_eviction_process(void) {
             continue;
         }
         printf("page_threshold: %u\n", page_threshold());
-        if (proc_table[i]->frame_cnt - proc_table[i]->frame_cnt2 > page_threshold()) {
+        printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
+        if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
             return proc_table[i];
         }
     }
-    return NULL;
+    return current_process();
 }
 
 static void init_tcb(sos_proc_t *proc) {
@@ -182,7 +185,7 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
     if (!proc->fd_table) {
         int err = init_fd_table(proc);
         proc->status.pid = proc->pid;
-        proc->status.size = 0;
+        proc->status.size = proc->frames_available * PAGE_SIZE;
         proc->status.stime = time_stamp() / 1000;
         strncpy(proc->status.command, name, N_NAME); 
         assert(!err);
@@ -224,8 +227,8 @@ void process_delete(sos_proc_t* proc) {
     process_free_pid_queue(proc);
     cspace_destroy(proc->cspace);
     proc_table[proc->pid] = NULL;
-    if(proc->frame_cnt - proc->frame_cnt2 != 0) {
-        dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frame_cnt, proc->frame_cnt2);
+    if(proc->frames_available != 0) {
+        dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frames_available);
     }
     free(proc);
     running_processes--;
@@ -304,7 +307,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
-    running_processes++;
 
     if (!proc) return -1;
 
@@ -314,6 +316,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         proc->cont.file_mode = FM_READ;
         strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
         proc->cont.binary_nfs_open = true;
+        running_processes++;
         assert(proc->fd_table);
         assert(proc->fd_table[proc->cont.fd]);
         assert(proc->fd_table[proc->cont.fd]->io);

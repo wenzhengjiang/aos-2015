@@ -60,7 +60,11 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
     if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
         if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
-            swap_replace_page(proc, faultaddr);
+            if (!current_process()->cont.page_eviction_process) {
+                current_process()->cont.page_eviction_process = select_eviction_process();
+            }
+            swap_replace_page(current_process()->cont.page_eviction_process, faultaddr);
+            current_process()->cont.page_eviction_process = NULL;
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
             // correct permissions), yet it faulted?!

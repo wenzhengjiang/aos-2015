@@ -223,25 +223,20 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             *vaddr = proc->cont.original_page_addr;
             proc->cont.original_page_addr = 0;
             proc->cont.parent_pid = 0;
-            if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
-                proc->frame_cnt2++;
-                ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
-            }
+            assert(proc->cont.page_eviction_process);
+            ((sos_proc_t*)proc->cont.page_eviction_process)->frames_available--;
+            proc->frames_available++;
+            proc->cont.page_eviction_process = NULL;
             return *vaddr;
         }
     }
     printf("Getting frame\n");
-    if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
-        ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;
-    } else {
-        proc->frame_cnt++;
-    }
+    proc->frames_available++;
     process_frames++;
 
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
     unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t);
-    //unsigned idx = new_frame - frame_table;
     int err = frame_map_page(idx);
     if (err) {
         ERR("[frametable] Failed to map page: err %d\n", err);
@@ -283,13 +278,9 @@ int frame_free(seL4_Word vaddr) {
     free_list = cur_frame;
     assert(free_list != NULL);
     dprintf(2, "[FRAME] Unmap complete\n");
-    
+
     sos_proc_t* proc = current_process();
-    if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
-        ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt2++;
-    } else {
-        proc->frame_cnt2++;
-    }
+    proc->frames_available--;
     process_frames--;
 
     return 0;

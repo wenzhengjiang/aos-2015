@@ -188,6 +188,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
     iovec_t *iov = proc->cont.iov;
     if (proc->cont.iov->sz == (size_t)count) {
         proc->cont.iov = iov->next;
+        as_unpin_page(proc->vspace, iov->vstart);
         free(iov);
         iov = proc->cont.iov;
     } else {
@@ -223,6 +224,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     assert(proc->cont.iov);
     if (!proc->cont.binary_nfs_read) {
         iov_ensure_loaded(proc->cont.iov);
+        as_pin_page(proc->vspace, proc->cont.iov->vstart);
     }
 
     dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
@@ -251,6 +253,7 @@ nfs_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int co
     iovec_t *iov = proc->cont.iov;
     if (proc->cont.iov->sz == (size_t)count) {
         proc->cont.iov = iov->next;
+        as_unpin_page(proc->vspace, iov->vstart);
         free(iov);
         iov = proc->cont.iov;
     } else {
@@ -272,6 +275,7 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
 
     assert(proc->cont.iov);
     iov_ensure_loaded(proc->cont.iov);
+    as_pin_page(proc->vspace, proc->cont.iov->vstart);
 
     sos_vaddr src = as_lookup_sos_vaddr(proc->vspace, iov->vstart);
     assert(src);
@@ -297,7 +301,7 @@ static void prstat(sos_stat_t sbuf) {
 static void
 sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) {
     set_current_process(token);
-    sos_proc_t* proc = effective_process();
+    sos_proc_t* proc = current_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         ERR("NFS failed\n");
@@ -318,7 +322,7 @@ sos_nfs_getattr_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr) 
 static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
                                     fhandle_t* fh, fattr_t* fattr) {
     set_current_process(token);
-    sos_proc_t* proc = effective_process();
+    sos_proc_t* proc = current_process();
     pid_t pid = proc->pid;
 
     if (status != NFS_OK) {
@@ -330,7 +334,7 @@ static void sos_nfs_lookup_for_attr(uintptr_t token, enum nfs_stat status,
 }
 
 int sos_nfs_getattr(void) {
-    sos_proc_t *proc = effective_process();
+    sos_proc_t *proc = current_process();
     pid_t pid = proc->pid;
     // TODO: Handle cases where this returns non-zero in syscall.c. i.e.,
     // reply to the client with failure.
@@ -348,7 +352,7 @@ static void
 nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
                      char* file_names[], nfscookie_t nfscookie) {
     set_current_process(token);
-    sos_proc_t *proc = effective_process();
+    sos_proc_t *proc = current_process();
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);
         return;
@@ -379,11 +383,11 @@ nfs_readdir_callback(uintptr_t token, enum nfs_stat status, int num_files,
 }
 
 int sos_nfs_readdir(void) {
-    pid_t pid = effective_process()->pid;
-    if (effective_process()->cont.length_arg == 0) {
+    pid_t pid = current_process()->pid;
+    if (current_process()->cont.length_arg == 0) {
         return 1;
     }
-    int err = nfs_readdir(&mnt_point, effective_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
+    int err = nfs_readdir(&mnt_point, current_process()->cont.cookie, nfs_readdir_callback, (unsigned)pid);
     if (err < 0) {
         return -err;
     }
