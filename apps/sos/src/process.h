@@ -58,6 +58,7 @@ typedef struct continuation {
     void* spawning_process;
     void* page_eviction_process;
     seL4_Word alloc_page_frame;
+    time_stamp_t callback_start_time;
 } cont_t;
 
 typedef struct pid_entry {
@@ -79,6 +80,7 @@ typedef struct process {
     pid_entry_t* pid_queue; // processes waiting for me
 
     sos_process_t status;
+    time_stamp_t start_time;
 
     int frames_available;
 } sos_proc_t;

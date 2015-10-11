@@ -158,6 +158,7 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
         }
         memset((void*)proc, 0, sizeof(sos_proc_t));
         proc->pid = get_next_pid();
+        proc->start_time = time_stamp();
         assert(proc->pid >= 1);
         proc_table[proc->pid] = proc;
         proc->cont.spawning_process = (void*)-1;

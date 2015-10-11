@@ -50,6 +50,9 @@ sos_nfs_swap_create_callback(uintptr_t token, enum nfs_stat status, fhandle_t *f
                         fattr_t *fattr) {
     dprintf(4, "[SWAP] Invoking nfs_create callback\n");
     set_current_process(token);
+    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+        return ;
+
     sos_proc_t *proc = current_process();
     if (status != NFS_OK) {
         ERR("[SWAP] Failed to create swap file\n");
@@ -76,6 +79,7 @@ static void sos_swap_open(void) {
     proc->cont.swap_status = SWAP_RUNNING;
     pid_t pid = proc->pid;
     dprintf(2, "[SWAP] Calling nfs_create\n");
+    current_process()->cont.callback_start_time = time_stamp();
     if(nfs_create(&mnt_point, SWAP_FILE, &default_attr, sos_nfs_swap_create_callback,
                   pid)) {
         ERR("[SWAP] nfs_create failed\n");
@@ -88,6 +92,9 @@ static void
 swap_write_callback(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     dprintf(4, "[SWAP] Write callback\n");
     set_current_process(token);
+    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+        return ;
+
     sos_proc_t *proc = current_process();
 
     if (status != NFS_OK) {
@@ -139,6 +146,7 @@ swap_addr sos_swap_write(sos_vaddr page) {
     if (proc->cont.swap_file_offset < 0) return proc->cont.swap_file_offset;
     assert(proc->cont.swap_cnt == 0);
     printf("Asking to write PAGE_SIZE - cnt (%u) bytes\n", PAGE_SIZE);
+    current_process()->cont.callback_start_time = time_stamp();
     if (nfs_write(&swap_handle, proc->cont.swap_file_offset, PAGE_SIZE,
                   (const void*)proc->cont.swap_page, swap_write_callback, pid) != RPC_OK) {
         proc->cont.swap_status = SWAP_FAILED;
@@ -154,6 +162,9 @@ swap_read_callback(uintptr_t token, enum nfs_stat status,
     dprintf(4, "[SWAP] Read callback\n");
     printf("token: %d\n", token);
     set_current_process(token);
+    if (current_process()->start_time < current_procees()->cont.callback_start_time)
+        return ;
+
     if (count == 0) return;
     (void)fattr;
     sos_proc_t *proc = current_process();
@@ -188,6 +199,7 @@ void sos_swap_read(sos_vaddr page, swap_addr pos) {
     dprintf(4, "[SWAP] swap_read addr=%x,pos=%x\n", page, pos);
     dprintf(4, "[SWAP] pid=%d\n", proc->pid);
     pid_t pid = proc->pid;
+    current_process()->cont.callback_start_time = time_stamp();
     if(nfs_read(&swap_handle, pos, PAGE_SIZE, swap_read_callback, pid)) {
         ERR("[SWAP] Read failed\n");
         proc->cont.swap_status = SWAP_FAILED;
