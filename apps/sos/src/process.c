@@ -376,6 +376,8 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
     if (pe == NULL) return ENOMEM;
     pe->pid = pid;
     pe->next = proc->pid_queue;
+    proc->pid_queue->prev = pe;
+    pe->prev = NULL;
     proc->pid_queue = pe;
     return 0;
 }
