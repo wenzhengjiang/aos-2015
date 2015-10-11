@@ -210,6 +210,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
                 }
             }
             evict_proc = proc->cont.page_eviction_process;
+            assert(proc != evict_proc);
             printf("Evicting from PID: %d\n", evict_proc->pid);
             swap_evict_page(evict_proc);
         }
@@ -223,6 +224,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             *vaddr = proc->cont.original_page_addr;
             proc->cont.original_page_addr = 0;
             proc->cont.parent_pid = 0;
+
             if(proc->cont.spawning_process && proc->cont.spawning_process != (void*)-1) {
                 proc->frame_cnt2++;
                 ((sos_proc_t*)(proc->cont.spawning_process))->frame_cnt++;

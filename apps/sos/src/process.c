@@ -304,7 +304,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
-    running_processes++;
 
     if (!proc) return -1;
 
@@ -314,6 +313,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         proc->cont.file_mode = FM_READ;
         strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
         proc->cont.binary_nfs_open = true;
+        running_processes++;
         assert(proc->fd_table);
         assert(proc->fd_table[proc->cont.fd]);
         assert(proc->fd_table[proc->cont.fd]->io);

@@ -35,6 +35,7 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
                 dprintf(1, "No pages left for eviction. Invoking 'OOM killer'\n");
                 if (current_process()->cont.spawning_process != -1 &&
                     current_process()->cont.spawning_process != 0) {
+                    assert(effective_process() != current_process());
                     process_delete(effective_process());
                     syscall_end_continuation(current_process(), -1, false);
                 } else {
@@ -103,8 +104,11 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         return 0;
     } else if (proc->cont.swap_status == SWAP_FAILED) {
         ERR("[PR] Deleting process due to swap failure\n");
+        if (effective_process() != current_process()) {
+            syscall_end_continuation(current_process(), -1, false);
+        } 
         process_delete(effective_process());
-        return EIO;
+        longjmp(ipc_event_env, -1);
     } else {
         printf("Jumping back\n");
         // Wait on network irq

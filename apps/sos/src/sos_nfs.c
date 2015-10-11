@@ -101,6 +101,7 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
         if (!proc->cont.binary_nfs_open) {
             syscall_end_continuation(proc, SOS_NFS_ERR, false);
         } else {
+            assert(proc != current_process());
             process_delete(proc);
         }
         return;
@@ -113,11 +114,8 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     if (!proc->cont.binary_nfs_open) {
         syscall_end_continuation(proc, fd, true);
     } else {
-        if (proc->cont.parent_pid) {
-            add_waiting_proc(proc->cont.parent_pid);
-        } else {
-            add_waiting_proc(proc->pid);
-        }
+        assert(proc != current_process());
+        add_waiting_proc(token);
     }
     printf("Finishing nfs_open callback\n");
 }
@@ -153,11 +151,8 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
             syscall_end_continuation(proc, proc->cont.counter, true);
             return;
         } else {
-            if (proc->cont.parent_pid) {
-                add_waiting_proc(proc->cont.parent_pid);
-            } else {
-                add_waiting_proc(proc->pid);
-            }
+            assert(proc != current_process());
+            add_waiting_proc(token);
             return;
         }
     }
@@ -166,6 +161,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
         if (!proc->cont.binary_nfs_read) {
             syscall_end_continuation(proc, SOS_NFS_ERR, false);
         } else {
+            assert(proc != current_process());
             process_delete(proc);
         }
         return;
@@ -201,12 +197,7 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
             return;
         }
     }
-
-    if (proc->cont.parent_pid) {
-        add_waiting_proc(proc->cont.parent_pid);
-    } else {
-        add_waiting_proc(proc->pid);
-    }
+    add_waiting_proc(token);
 }
 
 // TODO: Tidy up these params
