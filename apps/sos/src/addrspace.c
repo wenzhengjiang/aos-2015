@@ -328,7 +328,6 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     as->pages_mapped++;
     pt->page_cap = seL4_CapNull;
     pt->refd = false;
-    pt->pinned = false;
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
     
