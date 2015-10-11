@@ -112,7 +112,6 @@ sos_nfs_open_callback(uintptr_t token, enum nfs_stat status,
     if (!proc->cont.binary_nfs_open) {
         syscall_end_continuation(proc, fd, true);
     } else {
-        assert(proc != current_process());
         add_waiting_proc(token);
     }
     printf("Finishing nfs_open callback\n");
@@ -149,7 +148,6 @@ sos_nfs_read_callback(uintptr_t token, enum nfs_stat status,
             syscall_end_continuation(proc, proc->cont.counter, true);
             return;
         } else {
-            assert(proc != current_process());
             add_waiting_proc(token);
             return;
         }

@@ -92,6 +92,8 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         swap_addr saddr = sos_swap_write(proc->cont.original_page_addr);
         // Continuation
         proc->cont.page_replacement_victim->addr = SAVE_PAGE(saddr);
+        addrspace_pages--;
+        evict_proc->vspace->pages_mapped--;
         proc->cont.page_replacement_victim->pinned = true;
         // Wait on network irq
         longjmp(ipc_event_env, -1);
@@ -146,8 +148,6 @@ int swap_replace_page(sos_proc_t* evict_proc, client_vaddr readin) {
 
     dprintf(3, "[PR] replacement request %x\n", proc->cont.page_replacement_request);
     if (proc->cont.page_replacement_request == 0) {
-        addrspace_pages--;
-        as->pages_mapped--;
         proc->cont.page_replacement_request = readin;
         pte_t *to_load = as_lookup_pte(as, proc->cont.page_replacement_request);
         assert(to_load);

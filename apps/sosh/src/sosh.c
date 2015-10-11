@@ -404,6 +404,23 @@ void two_coye(void) {
     exit(0);
 }
 
+void build_tree(void) {
+    int j = get_pid(0, NULL);
+    printf("\n[==== proc %d starting ...=====]\n", j);
+
+    if (j < 50) {
+        char* args[3];
+        args[0] = "exec";
+        args[1] = "sosh";
+        args[2] = "&";
+        exec(3, args);
+        exec(3, args);
+    }
+
+    printf("\n[==== proc %d exiting ...=====]\n", j);
+    exit(0);
+}
+
 void multi_create_kill_test(void) {
         
     pid_t cur_pid = sos_my_id();
@@ -431,6 +448,7 @@ int main(void) {
 
     //large_num_proc_test(10);
     //two_coye();
+    build_tree();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;

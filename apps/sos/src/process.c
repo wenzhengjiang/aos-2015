@@ -41,7 +41,6 @@ extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
 extern size_t process_frames;
 static size_t running_processes = 0;
-
 extern size_t addrspace_pages;
 
 static void init_cspace(sos_proc_t *proc) {
@@ -51,12 +50,17 @@ static void init_cspace(sos_proc_t *proc) {
 }
 
 static size_t page_threshold() {
-    return (addrspace_pages / running_processes);
+    return (addrspace_pages / running_processes) + 1;
 }
 
 sos_proc_t *select_eviction_process(void) {
-    int i = 0;
-    for (i = 0; i < MAX_PROCESS_NUM; i++) {
+    static int i = 0;
+    int starting_idx = i;
+    while (i < MAX_PROCESS_NUM) {
+        i = (i+1) % MAX_PROCESS_NUM;
+        if (i == starting_idx) {
+            break;
+        }
         if (proc_table[i] == NULL) {
             continue;
         }

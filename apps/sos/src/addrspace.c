@@ -298,8 +298,6 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
     assert(!err);
-    addrspace_pages++;
-    as->pages_mapped++;
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
     as->pd[pd_idx][pt_idx]->pinned = false;
@@ -326,6 +324,8 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
         return ENOMEM;
     }
     assert(sos_vaddr != 0);
+    addrspace_pages++;
+    as->pages_mapped++;
     pt->page_cap = seL4_CapNull;
     pt->refd = false;
     pt->pinned = false;
