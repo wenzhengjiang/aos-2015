@@ -16,6 +16,8 @@
 #include <log/debug.h>
 #include <log/panic.h>
 
+extern size_t addrspace_pages;
+
 /**
  * Second chance page replacement algorithm.  Maintains a ref bit in the PTE,
  * which tracks whether the page has been referenced since the last time the
@@ -98,6 +100,8 @@ int swap_evict_page(sos_proc_t *evict_proc) {
     // Continuation
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         dprintf(4, "[PR] EVICTED. Tidying up.\n");
+        printf("victim: %x\n", proc->cont.page_replacement_victim);
+        assert(proc->cont.page_replacement_victim);
         assert(!proc->cont.page_replacement_victim->refd);
         proc->cont.page_replacement_victim->swapd = true;
         proc->cont.page_replacement_victim->pinned = false;
@@ -127,18 +131,23 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
     return pt->swapd;
 }
 
-int swap_replace_page(sos_proc_t* proc, client_vaddr readin) {
+int swap_replace_page(sos_proc_t* evict_proc, client_vaddr readin) {
     dprintf(3, "[PR] STARTING PAGE REPLACEMENT\n");
+    sos_proc_t* proc = current_process();
     sos_addrspace_t *as = proc->vspace;
 
     if (!proc->cont.page_replacement_victim || !proc->cont.page_replacement_victim->swapd) {
         assert(as->repllist_head && as->repllist_tail);
-        swap_evict_page(proc);
+        swap_evict_page(evict_proc);
+        printf("Finished eviction\n");
+        printf("proc %x, victim: %x\n", proc, proc->cont.page_replacement_victim);
         assert(proc->cont.page_replacement_victim->swapd);
     }
 
     dprintf(3, "[PR] replacement request %x\n", proc->cont.page_replacement_request);
     if (proc->cont.page_replacement_request == 0) {
+        addrspace_pages--;
+        as->pages_mapped--;
         proc->cont.page_replacement_request = readin;
         pte_t *to_load = as_lookup_pte(as, proc->cont.page_replacement_request);
         assert(to_load);
@@ -162,6 +171,8 @@ int swap_replace_page(sos_proc_t* proc, client_vaddr readin) {
         dprintf(3, "[PR] REPLACEMENT COMPLETE\n");
         to_load->addr = SAVE_PAGE(proc->cont.original_page_addr);
         assert(to_load->pinned == false);
+        addrspace_pages++;
+        as->pages_mapped++;
         to_load->swapd = false;
         printf("OPR: %x\n", proc->cont.original_page_addr);
         seL4_CPtr fc = frame_cap(proc->cont.original_page_addr);

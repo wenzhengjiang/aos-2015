@@ -30,6 +30,8 @@
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
 
+int addrspace_pages = 0;
+
 static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;
 }
@@ -158,6 +160,22 @@ static void as_free_kpts(sos_addrspace_t *as) {
     dprintf(4, "[AS] KPTs free'd\n");
 }
 
+void as_unpin_page(sos_addrspace_t *as, client_vaddr vaddr) {
+    pte_t *pt = as_lookup_pte(as, vaddr);
+    if (!pt) {
+        return;
+    }
+    pt->pinned = false;
+}
+
+void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr) {
+    pte_t *pt = as_lookup_pte(as, vaddr);
+    if (!pt) {
+        return;
+    }
+    pt->pinned = true;
+}
+
 static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
@@ -169,7 +187,8 @@ static void as_free_ptes(sos_addrspace_t *as) {
         assert(head_cnt <= 1);
         pt = as->repllist_head->next;
         if (as->repllist_head->swapd) {
-            // TODO: Make sure that the page cap is dealt with in this scenario
+            // TODO: Make sure that the page cap is dealt with in this
+            // scenario.  (I think it is.)
             dprintf(4, "[AS] freeing swap\n");
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
@@ -185,6 +204,8 @@ static void as_free_ptes(sos_addrspace_t *as) {
             }
             assert(sos_unmap_frame(LOAD_PAGE((seL4_Word)as->repllist_head->addr)) == 0);
             as->repllist_head->addr = 0;
+            addrspace_pages--;
+            as->pages_mapped--;
             as->repllist_head->page_cap = seL4_CapNull;
         }
         free(as->repllist_head);
@@ -269,6 +290,8 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
         conditional_panic(err, "2nd attempt to map page failed Failed to map page");
     }
     assert(!err);
+    addrspace_pages++;
+    as->pages_mapped++;
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
     as->pd[pd_idx][pt_idx]->pinned = false;
@@ -295,6 +318,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
         return ENOMEM;
     }
     assert(sos_vaddr != 0);
+    pt->page_cap = seL4_CapNull;
     pt->refd = false;
     pt->pinned = false;
     pt->swapd = false;

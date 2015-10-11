@@ -50,6 +50,7 @@ typedef struct address_space {
     sos_vaddr sos_pd_addr;
     sos_vaddr sos_ipc_buf_addr;
     kpt_t *kpts;
+    size_t pages_mapped;
 
     pte_t* repllist_head;
     pte_t* repllist_tail;
@@ -78,5 +79,7 @@ pte_t* as_lookup_pte(sos_addrspace_t *as, client_vaddr vaddr);
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr);
 void as_free(sos_addrspace_t *as);
 void unpin_iov(sos_addrspace_t *as, iovec_t *iov);
+void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr);
+void as_unpin_page(sos_addrspace_t *as, client_vaddr vaddr);
 
 #endif

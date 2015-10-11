@@ -80,8 +80,7 @@ typedef struct process {
 
     sos_process_t status;
 
-    int frame_cnt;
-    int frame_cnt2;
+    int frames_available;
 } sos_proc_t;
 
 

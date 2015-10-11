@@ -156,7 +156,11 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
         if (as_page_exists(current_process()->vspace, vec->vstart)) {
             dprintf(4, "page exists\n");
             if (swap_is_page_swapped(current_process()->vspace, vec->vstart)) { // page is in disk
-                swap_replace_page(current_process(), vec->vstart);
+                if (!current_process()->cont.page_eviction_process) {
+                    current_process()->cont.page_eviction_process = select_eviction_process();
+                }
+                swap_replace_page(current_process()->cont.page_eviction_process, vec->vstart);
+                current_process()->cont.page_eviction_process = NULL;
             } else if (!is_referenced(current_process()->vspace, vec->vstart)) {
                 as_reference_page(current_process()->vspace, vec->vstart, reg->rights);
             }
