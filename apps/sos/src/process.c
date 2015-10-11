@@ -191,6 +191,7 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
         memset((void*)proc, 0, sizeof(sos_proc_t));
         proc->pid = get_next_pid();
         if(proc->pid < 1) return NULL;
+        proc->start_time = time_stamp();
         proc_table[proc->pid] = proc;
         current_process()->cont.spawning_process = proc;
         proc->cont.parent_pid = current_process()->pid;
@@ -296,7 +297,8 @@ sos_proc_t *effective_process(void) {
     if (!curproc) {
         return NULL;
     }
-    if (curproc->cont.spawning_process != 0 && curproc->cont.spawning_process != -1) {
+    if (curproc->cont.spawning_process != 0 &&
+        (unsigned)curproc->cont.spawning_process != (unsigned)-1) {
         return curproc->cont.spawning_process;
     }
     return curproc;

@@ -188,6 +188,19 @@ void ipc_read(int start, char *buf) {
     }
 }
 
+bool callback_valid(callback_info_t *cb) {
+    assert(cb);
+    sos_proc_t *proc = process_lookup(cb->pid);
+    printf("got cb with pid, %d and time %llu, process start: %llu \n", cb->pid, cb->start_time, proc->start_time);
+    if (proc == NULL) {
+        return false;
+    }
+    if (cb->start_time < proc->start_time) {
+        return false;
+    }
+    return true;
+}
+
 void iov_ensure_loaded(iovec_t* iov) {
     sos_addrspace_t *as = effective_process()->vspace;
     sos_region_t *reg = as_vaddr_region(as, iov->vstart);

@@ -44,6 +44,10 @@ void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
 
 void iov_free(iovec_t *iov);
 
+typedef struct callback_info {
+    int pid;
+    timestamp_t start_time;
+} callback_info_t;
 
 void add_waiting_proc(pid_t pid) ;
 pid_t next_waiting_proc(void) ;
@@ -53,6 +57,7 @@ iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir);
 void ipc_write(int start, char* msgdata, size_t length);
 io_device_t* device_handler_str(const char* filename);
 iovec_t* iov_create(seL4_Word vstart, size_t sz, iovec_t *iohead, iovec_t *iotail, bool sos_iov_flag);
+bool callback_valid(callback_info_t *cb);
 
 extern int pkg_size;
 extern int pkg_num;
