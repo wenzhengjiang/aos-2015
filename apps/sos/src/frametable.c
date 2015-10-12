@@ -199,7 +199,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         sos_addrspace_t *as = proc->vspace;
         // There's a bug here where frames may become available while a
         // process is evicting things when there are multiple processes swapping.
-        if (!frame_available_frames()) {
+        if (proc->cont.swap_status || !frame_available_frames()) {
             dprintf(3, "[FRAME] no available frame\n");
             if (!proc->cont.page_eviction_process) {
                 proc->cont.page_eviction_process = select_eviction_process();

@@ -119,6 +119,7 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         proc->cont.page_replacement_victim->swapd = true;
         proc->cont.page_replacement_victim->pinned = false;
         proc->cont.swap_write_fired = false;
+        proc->cont.swap_status = 0;
         return 0;
     } else if (proc->cont.swap_status == SWAP_FAILED) {
         ERR("[PR] Deleting process due to swap failure\n");
