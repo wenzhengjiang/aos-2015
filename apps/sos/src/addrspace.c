@@ -165,6 +165,8 @@ void as_unpin_page(sos_addrspace_t *as, client_vaddr vaddr) {
     if (!pt) {
         return;
     }
+    as->pages_mapped++;
+    addrspace_pages++;
     pt->pinned = false;
 }
 
@@ -173,6 +175,8 @@ void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr) {
     if (!pt) {
         return;
     }
+    as->pages_mapped--;
+    addrspace_pages--;
     pt->pinned = true;
 }
 
@@ -477,6 +481,8 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
 void as_activate(sos_addrspace_t* as) {
     int err;
     as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
+    as->pages_mapped--;
+    addrspace_pages--;
     pte_t* pte = as_lookup_pte(as, PROCESS_IPC_BUFFER);
     pte->pinned = true;
     err = create_non_segment_regions(as);
