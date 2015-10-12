@@ -440,7 +440,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         }
         proc->cont.as_activated = true;
     }
-    sos_unmap_frame(proc->cont.elf_load_addr);
     as_activate(as);
 
     {
@@ -458,7 +457,9 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     context.sp = PROCESS_STACK_TOP;
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
+    sos_unmap_frame(proc->cont.elf_load_addr);
     memset(&proc->cont, 0, sizeof(cont_t));
+
     return proc->pid;
 }
 
