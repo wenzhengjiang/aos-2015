@@ -178,6 +178,7 @@ swap_addr sos_swap_write(sos_vaddr page) {
         free((callback_info_t*)cb);
         longjmp(ipc_event_env, swap_generic_error);
     }
+    proc->cont.swap_write_fired = true;
     return proc->cont.swap_file_offset;
 }
 

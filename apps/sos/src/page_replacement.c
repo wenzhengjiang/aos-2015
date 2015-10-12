@@ -87,7 +87,7 @@ int swap_evict_page(sos_proc_t *evict_proc) {
     }
 
     // Continuation
-    if (!proc->cont.page_replacement_victim->pinned) {
+    if (!proc->cont.swap_write_fired) {
         addrspace_pages--;
         evict_proc->vspace->pages_mapped--;
         proc->cont.page_replacement_victim->pinned = true;
@@ -102,11 +102,12 @@ int swap_evict_page(sos_proc_t *evict_proc) {
     // Continuation
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         dprintf(4, "[PR] EVICTED. Tidying up.\n");
-        printf("victim: %x\n", proc->cont.page_replacement_victim);
+        dprintf(4, "victim: %p\n", proc->cont.page_replacement_victim);
         assert(proc->cont.page_replacement_victim);
         assert(!proc->cont.page_replacement_victim->refd);
         proc->cont.page_replacement_victim->swapd = true;
         proc->cont.page_replacement_victim->pinned = false;
+        proc->cont.swap_write_fired = false;
         return 0;
     } else if (proc->cont.swap_status == SWAP_FAILED) {
         ERR("[PR] Deleting process due to swap failure\n");
@@ -142,7 +143,7 @@ int swap_replace_page(sos_proc_t* evict_proc, client_vaddr readin) {
         assert(as->repllist_head && as->repllist_tail);
         swap_evict_page(evict_proc);
         printf("Finished eviction\n");
-        printf("proc %x, victim: %x\n", proc, proc->cont.page_replacement_victim);
+        printf("proc %p, victim: %p\n", proc, proc->cont.page_replacement_victim);
         assert(proc->cont.page_replacement_victim->swapd);
     }
 

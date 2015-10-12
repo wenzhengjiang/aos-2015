@@ -13,7 +13,7 @@
 #include "process.h"
 #include <assert.h>
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 

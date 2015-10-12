@@ -16,7 +16,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 0
+#define verbose 5
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -228,10 +228,11 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             return *vaddr;
         }
     }
-    printf("Getting frame\n");
+    dprintf(1, "Getting frame\n");
     effective_process()->frames_available++;
     process_frames++;
 
+    assert(free_list);
     frame_entry_t* new_frame = free_list;
     free_list = free_list->next_free;
     unsigned idx = ((unsigned)new_frame-(unsigned)frame_table) / sizeof(frame_entry_t);
@@ -243,6 +244,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     }
     new_frame->next_free = NULL;
     *vaddr = FADDR_TO_VADDR(idx*PAGE_SIZE);
+    dprintf(1, "Got frame\n");
     return *vaddr;
 }
 

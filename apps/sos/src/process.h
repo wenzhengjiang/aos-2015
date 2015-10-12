@@ -60,6 +60,7 @@ typedef struct continuation {
     void* page_eviction_process;
     seL4_Word alloc_page_frame;
     timestamp_t callback_start_time;
+    bool swap_write_fired;
 } cont_t;
 
 typedef struct pid_entry {
