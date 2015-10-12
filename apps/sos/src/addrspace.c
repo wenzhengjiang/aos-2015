@@ -300,10 +300,10 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
 
     if (err == seL4_FailedLookup) {
         err = _proc_map_pagetable(as, pd_idx, vaddr);
-        conditional_panic(err, "Failed to map page table into PD");
+        if (err) return ENOMEM;
         err = seL4_ARM_Page_Map(proc_fc, as->sos_pd_cap, PAGE_ALIGN(vaddr), rights,
                                 seL4_ARM_Default_VMAttributes);
-        conditional_panic(err, "2nd attempt to map page failed Failed to map page");
+        if (err) return EINVAL;
     }
     assert(!err);
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
@@ -321,6 +321,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     if (as->pd[pd_idx] == NULL) {
         err = (int)frame_alloc((seL4_Word*)&as->pd[pd_idx]);
         if (err == 0) {
+            sos_unmap_frame(sos_vaddr);
             return ENOMEM;
         }
     }
@@ -328,6 +329,8 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
     if (pt == NULL) {
+        sos_unmap_frame(as->pd[pd_idx]);
+        sos_unmap_frame(sos_vaddr);
         return ENOMEM;
     }
     assert(sos_vaddr != 0);
