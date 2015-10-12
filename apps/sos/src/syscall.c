@@ -333,14 +333,18 @@ int sos__sys_read(void){
 int sos__sys_write(void) {
     int file = current_process()->cont.fd;
     size_t nbyte = current_process()->cont.length_arg;
+    dprintf(4, "sos__sys_write %d, %d\n", nbyte, file);
     of_entry_t *of = fd_lookup(current_process(), file);
     if (of == NULL) {
+        dprintf(4, "sos__sys_write of is NULL\n");
         return 1;
     }
     if (!(of->mode & FM_WRITE)) {
+        dprintf(4, "sos__sys_write mode is not FM_WRITE\n");
         return EPERM;
     }
     if (nbyte == 0) {
+        dprintf(4, "sos__sys_write 0 nbyte \n");
         syscall_end_continuation(current_process(), 0, true);
         return 0;
     }

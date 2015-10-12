@@ -100,12 +100,12 @@ int sos_serial_close(int fd) {
     // TODO: Commented things should probably be in a destroy()-like function
     //serial_register_handler(serial, NULL);
     //serial = NULL;
-    if (current_process()->fd_table[fd] == NULL) { return ENOENT; }
-    if (current_process()->fd_table[fd]->mode & FM_READ) {
+    if (effective_process()->fd_table[fd] == NULL) { return ENOENT; }
+    if (effective_process()->fd_table[fd]->mode & FM_READ) {
         reader_pid = 0;
     }
     //line_buflen[0] = line_buflen[1] = 0;
-    fd_free(current_process()->fd_table, fd);
+    fd_free(effective_process()->fd_table, fd);
     return 0;
 }
 
@@ -177,7 +177,7 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
 }
 
 int sos_serial_write(iovec_t* vec, int fd, int count) {
-    dprintf(3, "[SERIAL] Starting serial_write\n");
+    dprintf(3, "[SERIAL] Starting serial_write %d, %d, %d\n", current_process()->pid, fd, count);
     (void)fd;
     (void)count;
     int sent = 0;

@@ -414,6 +414,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         /* load the elf image */
         err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
         if (err) {
+            assert(effective_process() != current_process());
             process_delete(effective_process());
             return -1;
         }
