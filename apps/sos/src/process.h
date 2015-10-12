@@ -65,6 +65,7 @@ typedef struct continuation {
 
 typedef struct pid_entry {
     pid_t pid;
+    bool running;
     struct pid_entry *next, *prev;
 } pid_entry_t;
 

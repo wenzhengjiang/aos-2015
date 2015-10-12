@@ -66,6 +66,7 @@ int fd_free(fd_table_t fd_table, int fd) {
 }
 
 int free_fd_table(fd_table_t fdt) {
+    if (fdt == NULL) return 0;
     for (int i = 0; i < FD_TABLE_SIZE; i++) {
         if (fdt[i] != NULL)  {
             if (fdt[i]->io && fdt[i]->io->close) {

@@ -63,10 +63,11 @@ sos_proc_t *select_eviction_process(void) {
 
     pid_entry_t *cur_proc= last_evicted_proc->next;
     int cnt = 0;
-
+    assert(proc_table[last_evicted_proc->pid]);
     while(last_evicted_proc != cur_proc) {
         if (++cnt > running_processes) break;
         if (cur_proc == NULL) cur_proc = running_proc_head;
+        assert(cur_proc->running);
 
         int i = cur_proc->pid;
         // Random starvation intervention
@@ -79,7 +80,7 @@ sos_proc_t *select_eviction_process(void) {
             continue;
         }
 
-        printf("page_threshold: %u\n", page_threshold());
+        printf("page_threshold: %u, %d, %d\n", page_threshold(), i, cur_proc->running);
         assert(proc_table[i]);
         assert(proc_table[i]->vspace);
         printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
@@ -106,6 +107,7 @@ static void init_tcb(sos_proc_t *proc) {
             seL4_TCBBits,
             cur_cspace,
             &proc->tcb_cap);
+
     conditional_panic(err, "Failed to create TCB");
 
     /* Configure the TCB */
@@ -155,15 +157,17 @@ static int init_fd_table(sos_proc_t *proc) {
 static int get_next_pid() {
     if (free_proc_head == NULL) return -1;
     pid_entry_t * pe = free_proc_head;
+    assert(free_proc_head != free_proc_head->next);
     free_proc_head = free_proc_head->next;
     free_proc_head->prev = NULL;
-
+    if (pe) assert(!pe->running);
     
     return pe->pid;
 }
 static void proc_table_init(void) {
     for (int i = 1; i < MAX_PROCESS_NUM; i++) {
         pid_table[i].pid = i;
+        pid_table[i].running = false;
         if (i == MAX_PROCESS_NUM-1) pid_table[i].next = NULL; 
         else pid_table[i].next = &pid_table[i+1];
         if (i == 1) pid_table[i].prev = NULL;
@@ -245,15 +249,42 @@ static void process_free_pid_queue(sos_proc_t *proc) {
 }
 
 void process_delete(sos_proc_t* proc) {
+    printf("process delete\n");
     assert(proc);
 
-    cspace_revoke_cap(cur_cspace, proc->tcb_cap);
-    cspace_err_t err = cspace_delete_cap(cur_cspace, proc->tcb_cap);
-    if (err != CSPACE_NOERROR) {
-        ERR("[PROC]: failed to delete tcb cap\n");
+    {
+        pid_entry_t* p = &pid_table[proc->pid];
+        if(p->running) {
+            p->running = false;
+            pid_entry_t* prev = p->prev, *next = p->next;
+            assert(prev != p && next != p);
+            p->next = free_proc_head;
+            p->prev = NULL;
+            free_proc_head = p;
+            if (p->next) p->next->prev = p;
+
+            if (prev) prev->next = next, assert(prev->running);
+            else running_proc_head = next;
+
+            if (next) next->prev = prev, assert(next->running);;
+            if (p == last_evicted_proc)
+                last_evicted_proc = next;
+        }
     }
-    ut_free(proc->tcb_addr, seL4_TCBBits);
-    as_free(proc->vspace);
+    if(proc->tcb_cap) {
+        cspace_revoke_cap(cur_cspace, proc->tcb_cap);
+        cspace_err_t err = cspace_delete_cap(cur_cspace, proc->tcb_cap);
+
+        if (err != CSPACE_NOERROR) {
+            ERR("[PROC]: failed to delete tcb cap\n");
+        }
+    }
+    if (proc->tcb_addr)
+        ut_free(proc->tcb_addr, seL4_TCBBits);
+    if (proc->vspace) {
+        dprintf(4, "[AS] freeing vspace\n");
+        as_free(proc->vspace);
+    }
     dprintf(4, "[AS] degregister_wait\n");
     //process_deregister_wait(proc, proc->pid);
     dprintf(4, "[AS] fd_table\n");
@@ -261,32 +292,21 @@ void process_delete(sos_proc_t* proc) {
     iov_free(proc->cont.iov);
     process_wake_waiters(proc);
     process_free_pid_queue(proc);
-    cspace_destroy(proc->cspace);
-    proc_table[proc->pid] = NULL;
-
-    {
-        pid_entry_t* p = &pid_table[proc->pid];
-        pid_entry_t* prev = p->prev, *next = p->next;
-
-        p->next = free_proc_head;
-        if (p->next) p->next->prev = p;
-
-        if (prev) prev->next = next;
-        else running_proc_head = next;
-
-        if (next) next->prev = prev;
-        if (p == last_evicted_proc)
-            last_evicted_proc = next;
+    if (proc->cspace) {
+        dprintf(4, "[AS] destroying cspace\n");
+        cspace_destroy(proc->cspace);
     }
+    proc_table[proc->pid] = NULL;
 
     if(proc->frames_available != 0) {
         dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frames_available);
     }
     free(proc);
     running_processes--;
-    if (running_processes == 0) {
-        longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
-    }
+    //if (running_processes == 0) {
+    //    longjmp(ipc_event_env, SYSCALL_INIT_PROC_TERMINATED);
+    //}
+    printf("process delete\n");
     dprintf(4, "process_delete finished\n");
 }
 
@@ -393,7 +413,10 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     if (!proc->cont.as_activated) {
         /* load the elf image */
         err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
-        conditional_panic(err, "Failed to load elf image");
+        if (err) {
+            process_delete(effective_process());
+            return -1;
+        }
         proc->cont.as_activated = true;
     }
     as_activate(as);
@@ -401,8 +424,10 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     {
     pid_entry_t * pe = &pid_table[proc->pid];
     pe->next = running_proc_head;
+    pe->prev = NULL;
     running_proc_head = pe;
-    if (pe->next) pe->next->prev = pe;
+    if (pe->next) pe->next->prev = pe, assert(pe->next->running);
+    pe->running = true;
     running_processes++;
     }
     /* Start the new process */
