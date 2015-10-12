@@ -80,6 +80,8 @@ sos_proc_t *select_eviction_process(void) {
         }
 
         printf("page_threshold: %u\n", page_threshold());
+        assert(proc_table[i]);
+        assert(proc_table[i]->vspace);
         printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
         if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
             last_evicted_proc = &pid_table[i];
@@ -156,10 +158,7 @@ static int get_next_pid() {
     free_proc_head = free_proc_head->next;
     free_proc_head->prev = NULL;
 
-    pe->next = running_proc_head;
-    running_proc_head = pe;
-    if (pe->next) pe->next->prev = pe;
-
+    
     return pe->pid;
 }
 static void proc_table_init(void) {
@@ -370,7 +369,6 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         proc->cont.file_mode = FM_READ;
         strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
         proc->cont.binary_nfs_open = true;
-        running_processes++;
         assert(proc->fd_table);
         assert(proc->fd_table[proc->cont.fd]);
         assert(proc->fd_table[proc->cont.fd]->io);
@@ -400,6 +398,13 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     }
     as_activate(as);
 
+    {
+    pid_entry_t * pe = &pid_table[proc->pid];
+    pe->next = running_proc_head;
+    running_proc_head = pe;
+    if (pe->next) pe->next->prev = pe;
+    running_processes++;
+    }
     /* Start the new process */
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint((void*)proc->cont.elf_load_addr);

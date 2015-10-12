@@ -147,7 +147,7 @@ long sys_oldfstat(va_list ap)
 }
 long sys_pause(va_list ap)
 {
-    assert(!"sys_pause not implemented");
+    //assert(!"sys_pause not implemented");
     return 0;
 }
 long sys_utime(va_list ap)
@@ -1182,7 +1182,7 @@ long sys_sendfile64(va_list ap)
 }
 long sys_futex(va_list ap)
 {
-    assert(!"sys_futex not implemented");
+//    assert(!"sys_futex not implemented");
     return 0;
 }
 long sys_sched_setaffinity(va_list ap)
@@ -1801,7 +1801,7 @@ long sys_ptrace(va_list ap)
 }
 long sys_pause(va_list ap)
 {
-    assert(!"sys_pause not implemented");
+    //assert(!"sys_pause not implemented");
     return 0;
 }
 /*long sys_access(va_list ap)
@@ -2662,7 +2662,7 @@ long sys_sendfile64(va_list ap)
 }
 long sys_futex(va_list ap)
 {
-    assert(!"sys_futex not implemented");
+    //assert(!"sys_futex not implemented");
     return 0;
 }
 long sys_sched_setaffinity(va_list ap)
