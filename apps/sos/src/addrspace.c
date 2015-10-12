@@ -226,6 +226,10 @@ static void as_free_ptes(sos_addrspace_t *as) {
 static void as_free_pd(sos_addrspace_t *as) {
     int max_pt = (1 << PD_BITS);
     dprintf(3, "[AS] freeing PD\n");
+    if (as->pd == NULL) {
+        sos_unmap_frame((seL4_Word)as->pd);
+        return;
+    }
     for (int i = 0; i < max_pt; i++) {
         if (as->pd[i] != NULL) {
             sos_unmap_frame((seL4_Word)as->pd[i]);
