@@ -35,7 +35,7 @@
 
 static sos_proc_t* proc_table[MAX_PROCESS_NUM] ;
 
-static pid_entry_t * free_proc_head = NULL, *running_proc_head = NULL;
+static pid_entry_t * free_proc_head = NULL ,*free_proc_tail = NULL, *running_proc_head = NULL;
 static pid_entry_t pid_table[MAX_PROCESS_NUM];
 
 static sos_proc_t *curproc = NULL;
@@ -162,7 +162,8 @@ static int get_next_pid() {
     pid_entry_t * pe = free_proc_head;
     assert(free_proc_head != free_proc_head->next);
     free_proc_head = free_proc_head->next;
-    free_proc_head->prev = NULL;
+    if (free_proc_head) free_proc_head->prev = NULL;
+    if (!free_proc_head) free_proc_tail = NULL;
     if (pe) assert(!pe->running);
     return pe->pid;
 }
@@ -260,10 +261,12 @@ void process_delete(sos_proc_t* proc) {
         assert(prev != p && next != p);
 
 
-        p->next = free_proc_head;
-        p->prev = NULL;
-        free_proc_head = p;
-        if (p->next) p->next->prev = p;
+
+        p->prev= free_proc_tail;
+        p->next= NULL;
+        free_proc_tail = p;
+        if (!free_proc_head) free_proc_head = p;
+        if (p->prev) p->prev->next= p;
 
         if(p->running) {
             p->running = false;
