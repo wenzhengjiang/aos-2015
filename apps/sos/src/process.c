@@ -39,7 +39,6 @@ static pid_entry_t * free_proc_head = NULL, *running_proc_head = NULL;
 static pid_entry_t pid_table[MAX_PROCESS_NUM];
 
 static sos_proc_t *curproc = NULL;
-extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
 extern size_t process_frames;
 static size_t running_processes = 0;

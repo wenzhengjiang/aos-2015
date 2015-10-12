@@ -65,7 +65,6 @@
 
 /* The linker will link this symbol to the start address  *
  * of an archive of attached applications.                */
-extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
 jmp_buf ipc_event_env;
@@ -225,27 +224,6 @@ static void print_bootinfo(const seL4_BootInfo* info) {
                 info->untypedPaddrList[i + (info->untyped.end - info->untyped.start)],
                 info->untypedSizeBitsList[i + (info->untyped.end-info->untyped.start)]);
     }
-
-    dprintf(1,"-----------------------------------------\n\n");
-
-    /* Print cpio data */
-    dprintf(1,"Parsing cpio data:\n");
-    dprintf(1,"--------------------------------------------------------\n");
-    dprintf(1,"| index |        name      |  address   | size (bytes) |\n");
-    dprintf(1,"|------------------------------------------------------|\n");
-    for(i = 0;; i++) {
-        unsigned long size;
-        const char *name;
-        void *data;
-
-        data = cpio_get_entry(_cpio_archive, i, &name, &size);
-        if(data != NULL){
-            dprintf(1,"| %3d   | %16s | %p | %12d |\n", i, name, data, size);
-        }else{
-            break;
-        }
-    }
-    dprintf(1,"--------------------------------------------------------\n");
 }
 
 
