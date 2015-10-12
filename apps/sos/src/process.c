@@ -69,14 +69,25 @@ sos_proc_t *select_eviction_process(void) {
         if (cur_proc == NULL) cur_proc = running_proc_head;
 
         int i = cur_proc->pid;
+        // Random starvation intervention
+        if (rand() % 20 == 0) {
+            last_evicted_proc = &pid_table[i];
+            return proc_table[i];
+        }
+        if (cur_proc->pid == current_process()->pid) {
+            cur_proc = cur_proc->next;
+            continue;
+        }
+
         printf("page_threshold: %u\n", page_threshold());
         printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
         if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
+            last_evicted_proc = &pid_table[i];
             return proc_table[i];
         }
         cur_proc = cur_proc->next;
     }
-
+    last_evicted_proc = &pid_table[current_process()->pid];
     return current_process();
 }
 
