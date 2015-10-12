@@ -88,13 +88,13 @@ int swap_evict_page(sos_proc_t *evict_proc) {
 
     // Continuation
     if (!proc->cont.page_replacement_victim->pinned) {
+        addrspace_pages--;
+        evict_proc->vspace->pages_mapped--;
+        proc->cont.page_replacement_victim->pinned = true;
         proc->cont.original_page_addr = LOAD_PAGE((seL4_Word)proc->cont.page_replacement_victim->addr);
         swap_addr saddr = sos_swap_write(proc->cont.original_page_addr);
         // Continuation
         proc->cont.page_replacement_victim->addr = SAVE_PAGE(saddr);
-        addrspace_pages--;
-        evict_proc->vspace->pages_mapped--;
-        proc->cont.page_replacement_victim->pinned = true;
         // Wait on network irq
         longjmp(ipc_event_env, -1);
     }
