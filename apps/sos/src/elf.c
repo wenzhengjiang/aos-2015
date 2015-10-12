@@ -135,7 +135,9 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
     num_headers = elf_getNumProgramHeaders(elf_file);
     sos_addrspace_t *as = proc_as(proc);
-
+    if (num_headers * sizeof(struct Elf32_Phdr) + sizeof(struct Elf32_Header) > PAGESIZE) {
+        ERR("Too many ELF segments in file\n");
+    }
     for (i = 0; i < num_headers; i++) {
         seL4_Word source_addr;
         unsigned long flags, segment_size, vaddr;
