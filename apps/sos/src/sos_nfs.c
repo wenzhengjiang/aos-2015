@@ -113,7 +113,7 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc->fd_table, fd);
-        if (proc->cont.binary_nfs_read) {
+        if (proc->cont.binary_nfs_open) {
             process_delete(proc);
         }
         syscall_end_continuation(current_process(), SOS_NFS_ERR, false);

@@ -157,6 +157,7 @@ int sos_serial_read(iovec_t* vec, int fd, int count) {
                     current_process()->cont.page_eviction_process = select_eviction_process();
                 }
                 swap_replace_page(current_process()->cont.page_eviction_process, vec->vstart);
+                as_reference_page(current_process()->vspace, vec->vstart, reg->rights);
                 current_process()->cont.page_eviction_process = NULL;
             } else if (!is_referenced(current_process()->vspace, vec->vstart)) {
                 as_reference_page(current_process()->vspace, vec->vstart, reg->rights);
