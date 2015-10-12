@@ -103,8 +103,19 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         dprintf(4, "[PR] EVICTED. Tidying up.\n");
         dprintf(4, "victim: %p\n", proc->cont.page_replacement_victim);
         assert(proc->cont.page_replacement_victim);
-        assert(!proc->cont.page_replacement_victim->refd);
-        proc->cont.page_replacement_victim->addr = SAVE_PAGE(proc->cont.swap_page);
+        if (proc->cont.page_replacement_victim->refd) {
+            // Process has accessed in the interim
+            seL4_ARM_Page_Unmap(proc->cont.page_replacement_victim->page_cap);
+            cspace_revoke_cap(cur_cspace, proc->cont.page_replacement_victim->page_cap);
+            int err = cspace_delete_cap(cur_cspace, proc->cont.page_replacement_victim->page_cap);
+            if (err != CSPACE_NOERROR) {
+                ERR("[PR]: failed to delete page cap\n");
+            }
+            proc->cont.page_replacement_victim->page_cap = 0;
+            proc->cont.page_replacement_victim->refd = false;
+        }
+
+        proc->cont.page_replacement_victim->addr = SAVE_PAGE(proc->cont.swap_file_offset);
         proc->cont.page_replacement_victim->swapd = true;
         proc->cont.page_replacement_victim->pinned = false;
         proc->cont.swap_write_fired = false;
@@ -113,7 +124,7 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         ERR("[PR] Deleting process due to swap failure\n");
         if (effective_process() != current_process()) {
             syscall_end_continuation(current_process(), -1, false);
-        } 
+        }
         process_delete(effective_process());
         longjmp(ipc_event_env, -1);
     } else {
