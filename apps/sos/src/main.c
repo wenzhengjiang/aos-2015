@@ -345,8 +345,9 @@ int main(void) {
     /* Wait on synchronous endpoint for IPC */
     dprintf(-1, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
-
-    while(1) { printf("game over\n"); }
+    srand(26706);
+    printf("game over\n");
+    while(1) {  }
 
     /* Not reached */
     return 0;

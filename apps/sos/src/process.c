@@ -298,7 +298,7 @@ void process_delete(sos_proc_t* proc) {
     proc_table[proc->pid] = NULL;
 
     if(proc->frames_available != 0) {
-        dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frames_available);
+        dprintf(1, "%d frames remaining\n", proc->frames_available);
     }
     free(proc);
     running_processes--;
