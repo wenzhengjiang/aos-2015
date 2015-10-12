@@ -47,7 +47,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -139,7 +139,7 @@ void syscall_loop(seL4_CPtr ep) {
                 continue;
             }
         } else if (pid > 0 && !bootstrapped) {
-            printf("pid: %d\n", pid);
+            dprintf(4, "pid: %d\n", pid);
             start_process(TEST_PROCESS_NAME, _sos_ipc_ep_cap);
             memset(&current_process()->cont, 0, sizeof(cont_t));
             bootstrapped = true;

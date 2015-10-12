@@ -16,7 +16,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -76,7 +76,6 @@ seL4_Word frame_paddr(seL4_Word vaddr) {
 int sos_map_frame(seL4_Word vaddr) {
     seL4_CPtr cap = frame_cap(vaddr);
     assert(vaddr < (PROCESS_STACK_BOTTOM - PAGE_SIZE));
-    seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     
     int err = map_page(cap, seL4_CapInitThreadPD, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
@@ -97,7 +96,6 @@ int sos_unmap_frame(seL4_Word vaddr) {
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     printf("vaddr, %x, idx: %d\n", vaddr, idx);
-    frame_entry_t *cur_frame = &frame_table[idx];
     dprintf(2, "[FRAME] Freeing frame\n");
     if (frame_free(vaddr)) {
         ERR("[FRAME] Error during frame_free\n");

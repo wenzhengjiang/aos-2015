@@ -447,8 +447,8 @@ int main(void) {
     char *bp, *p;
 
     //large_num_proc_test(10);
-    //two_coye();
-    build_tree();
+    two_coye();
+    //build_tree();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;

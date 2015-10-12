@@ -13,7 +13,7 @@
 #include "process.h"
 #include <assert.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -300,7 +300,6 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
     assert(!err);
     as->pd[pd_idx][pt_idx]->page_cap = proc_fc;
     as->pd[pd_idx][pt_idx]->refd = true;
-    as->pd[pd_idx][pt_idx]->pinned = false;
     as->pd[pd_idx][pt_idx]->swapd = false;
     return 0;
 }
@@ -327,6 +326,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     addrspace_pages++;
     as->pages_mapped++;
     pt->page_cap = seL4_CapNull;
+    pt->pinned = false;
     pt->refd = false;
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
@@ -476,9 +476,6 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
  */
 void as_activate(sos_addrspace_t* as) {
     int err;
-    as_add_page(as, PROCESS_IPC_BUFFER, as->sos_ipc_buf_addr);
-    pte_t* pte = as_lookup_pte(as, PROCESS_IPC_BUFFER);
-    pte->pinned = true;
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
 }
@@ -517,8 +514,10 @@ void as_create(sos_addrspace_t **pas) {
         printf("allocating page for buf addr\n");
     }
     if (!as->sos_ipc_buf_addr) {
-        as_alloc_page(as, &as->sos_ipc_buf_addr);
-        effective_process()->cont.alloc_page_frame = 0;
+        as_create_page(as, PROCESS_IPC_BUFFER, seL4_AllRights);
+        pte_t* pte = as_lookup_pte(as, PROCESS_IPC_BUFFER);
+        pte->pinned = true;
+        as->sos_ipc_buf_addr = LOAD_PAGE(pte->addr);
     }
     dprintf(3, "[AS] as_create success\n");
 }
