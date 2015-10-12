@@ -408,7 +408,7 @@ void build_tree(void) {
     int j = get_pid(0, NULL);
     printf("\n[==== proc %d starting ...=====]\n", j);
 
-    if (j < 50) {
+    if (j < 40) {
         char* args[3];
         args[0] = "exec";
         args[1] = "sosh";
@@ -448,7 +448,7 @@ int main(void) {
 
     //large_num_proc_test(10);
     // two_coye();
-    //build_tree();
+    build_tree();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;
