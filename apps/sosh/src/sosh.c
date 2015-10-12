@@ -322,6 +322,7 @@ struct command {
     int (*command)(int argc, char **argv);
 };
 
+
 struct command commands[] = { { "dir", dir }, { "bench", benchmark }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
                               {"time", second_time}, {"mtime", micro_time}, {"getpid", get_pid}, {"kill", kill} };
@@ -448,7 +449,7 @@ int main(void) {
 
     //large_num_proc_test(10);
     // two_coye();
-    build_tree();
+    //build_tree();
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;
