@@ -62,6 +62,8 @@ sos_proc_t *select_eviction_process(void) {
 
     pid_entry_t *cur_proc= last_evicted_proc->next;
     int cnt = 0;
+    assert(running_proc_head);
+    assert(last_evicted_proc);
     assert(proc_table[last_evicted_proc->pid]);
     while(last_evicted_proc != cur_proc) {
         if (++cnt > running_processes) break;
@@ -85,11 +87,13 @@ sos_proc_t *select_eviction_process(void) {
         printf("mapped: %u\n", proc_table[i]->vspace->pages_mapped);
         if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
             last_evicted_proc = &pid_table[i];
+                assert(proc_table[last_evicted_proc->pid]);
             return proc_table[i];
         }
         cur_proc = cur_proc->next;
     }
     last_evicted_proc = &pid_table[current_process()->pid];
+    assert(proc_table[last_evicted_proc->pid]);
     return current_process();
 }
 
@@ -160,7 +164,6 @@ static int get_next_pid() {
     free_proc_head = free_proc_head->next;
     free_proc_head->prev = NULL;
     if (pe) assert(!pe->running);
-    
     return pe->pid;
 }
 static void proc_table_init(void) {
@@ -253,7 +256,6 @@ void process_delete(sos_proc_t* proc) {
 
     {
         pid_entry_t* p = &pid_table[proc->pid];
-        p->running = false;
         pid_entry_t* prev = p->prev, *next = p->next;
         assert(prev != p && next != p);
 
@@ -264,11 +266,17 @@ void process_delete(sos_proc_t* proc) {
         if (p->next) p->next->prev = p;
 
         if(p->running) {
+            p->running = false;
+
             if (prev) {
                 prev->next = next;
                 assert(prev->running);
             }
-            else running_proc_head = next;
+            else {
+                if (next != NULL) {
+                    running_proc_head = next;
+                }
+            }
 
             if (next) {
                 next->prev = prev;
