@@ -213,6 +213,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
         }
 
         if (proc->cont.original_page_addr) {
+            assert(proc->cont.page_replacement_victim);
             dprintf(3, "[FRAME] start to unmap frame\n");
             memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
             assert(proc->cont.original_page_addr % PAGE_SIZE == 0);

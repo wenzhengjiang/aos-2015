@@ -61,6 +61,7 @@ typedef struct continuation {
     seL4_Word alloc_page_frame;
     timestamp_t callback_start_time;
     bool swap_write_fired;
+    bool have_new_frame;
 } cont_t;
 
 typedef struct pid_entry {
@@ -84,7 +85,7 @@ typedef struct process {
 
     sos_process_t status;
     timestamp_t start_time;
-
+    
     int frames_available;
 
 } sos_proc_t;

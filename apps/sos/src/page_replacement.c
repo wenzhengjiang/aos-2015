@@ -145,17 +145,19 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
     return pt->swapd;
 }
 
-int swap_replace_page(sos_proc_t* evict_proc, client_vaddr readin) {
+int swap_replace_page(client_vaddr readin) {
     dprintf(3, "[PR] STARTING PAGE REPLACEMENT\n");
     sos_proc_t* proc = current_process();
     sos_addrspace_t *as = proc->vspace;
 
-    if (!proc->cont.page_replacement_victim || !proc->cont.page_replacement_victim->swapd) {
+    if (!proc->cont.have_new_frame) {
         assert(as->repllist_head && as->repllist_tail);
-        swap_evict_page(evict_proc);
+        seL4_Word tmp;
+        frame_alloc(&tmp);
+        proc->cont.have_new_frame = true;
+        proc->cont.original_page_addr = tmp;
         printf("Finished eviction\n");
         printf("proc %p, victim: %p\n", proc, proc->cont.page_replacement_victim);
-        assert(proc->cont.page_replacement_victim->swapd);
     }
 
     dprintf(3, "[PR] replacement request %x\n", proc->cont.page_replacement_request);
@@ -169,7 +171,6 @@ int swap_replace_page(sos_proc_t* evict_proc, client_vaddr readin) {
         assert(proc->cont.original_page_addr);
         memset((void*)proc->cont.original_page_addr, 0, PAGE_SIZE);
         dprintf(4, "[PR] reading in new page %08x from address %u\n", readin, LOAD_PAGE(to_load->addr));
-        assert(proc->cont.page_replacement_victim->swapd);
 
         sos_swap_read(proc->cont.original_page_addr, LOAD_PAGE(to_load->addr));
         longjmp(ipc_event_env, -1);

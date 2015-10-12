@@ -206,7 +206,7 @@ void iov_ensure_loaded(iovec_t* iov) {
     sos_region_t *reg = as_vaddr_region(as, iov->vstart);
     if (as_page_exists(as, iov->vstart)) {
         if (swap_is_page_swapped(as, iov->vstart)) { // page is in disk
-            swap_replace_page(effective_process(), iov->vstart);
+            swap_replace_page(iov->vstart);
             as_reference_page(current_process()->vspace, iov->vstart, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
         } else if (!is_referenced(as, iov->vstart)) {

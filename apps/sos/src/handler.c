@@ -60,10 +60,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
     if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
         if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
-            if (!current_process()->cont.page_eviction_process) {
-                current_process()->cont.page_eviction_process = select_eviction_process();
-            }
-            swap_replace_page(current_process()->cont.page_eviction_process, faultaddr);
+            swap_replace_page(faultaddr);
             as_reference_page(current_process()->vspace, faultaddr, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
         } else if (is_referenced(as, faultaddr)) {
