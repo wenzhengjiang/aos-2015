@@ -195,7 +195,6 @@ swap_read_callback(uintptr_t cb, enum nfs_stat status,
     }
     free((callback_info_t*)cb);
 
-    if (count == 0) return;
     (void)fattr;
     sos_proc_t *proc = current_process();
     assert(proc);
@@ -204,6 +203,11 @@ swap_read_callback(uintptr_t cb, enum nfs_stat status,
         ERR("[SWAP] Failed to read from swap file\n");
         return;
     }
+    if (count == 0) {
+        assert(!"'Correct' zero read.  Should be impossible.\n");
+        return;
+    }
+
     assert(count == PAGE_SIZE);
     assert(proc->cont.swap_status != SWAP_SUCCESS);
     proc->cont.swap_status = SWAP_SUCCESS;

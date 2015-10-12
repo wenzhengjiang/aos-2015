@@ -39,7 +39,6 @@ static pid_entry_t * free_proc_head = NULL, *running_proc_head = NULL;
 static pid_entry_t pid_table[MAX_PROCESS_NUM];
 
 static sos_proc_t *curproc = NULL;
-extern char _cpio_archive[];
 extern jmp_buf ipc_event_env;
 extern size_t process_frames;
 static size_t running_processes = 0;
@@ -254,21 +253,30 @@ void process_delete(sos_proc_t* proc) {
 
     {
         pid_entry_t* p = &pid_table[proc->pid];
-        if(p->running) {
-            p->running = false;
-            pid_entry_t* prev = p->prev, *next = p->next;
-            assert(prev != p && next != p);
-            p->next = free_proc_head;
-            p->prev = NULL;
-            free_proc_head = p;
-            if (p->next) p->next->prev = p;
+        p->running = false;
+        pid_entry_t* prev = p->prev, *next = p->next;
+        assert(prev != p && next != p);
 
-            if (prev) prev->next = next, assert(prev->running);
+
+        p->next = free_proc_head;
+        p->prev = NULL;
+        free_proc_head = p;
+        if (p->next) p->next->prev = p;
+
+        if(p->running) {
+            if (prev) {
+                prev->next = next;
+                assert(prev->running);
+            }
             else running_proc_head = next;
 
-            if (next) next->prev = prev, assert(next->running);;
-            if (p == last_evicted_proc)
+            if (next) {
+                next->prev = prev;
+                assert(next->running);
+            }
+            if (p == last_evicted_proc) {
                 last_evicted_proc = next;
+            }
         }
     }
     if(proc->tcb_cap) {
@@ -299,7 +307,7 @@ void process_delete(sos_proc_t* proc) {
     proc_table[proc->pid] = NULL;
 
     if(proc->frames_available != 0) {
-        dprintf(1, "Alloced %d frames, freed %d frames \n", proc->frames_available);
+        dprintf(1, "%d frames remaining\n", proc->frames_available);
     }
     free(proc);
     running_processes--;

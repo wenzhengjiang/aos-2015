@@ -64,6 +64,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
                 current_process()->cont.page_eviction_process = select_eviction_process();
             }
             swap_replace_page(current_process()->cont.page_eviction_process, faultaddr);
+            as_reference_page(current_process()->vspace, faultaddr, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
         } else if (is_referenced(as, faultaddr)) {
             // Page exists, referenced bit is set (so it must be mapped w/
