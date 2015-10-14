@@ -15,7 +15,6 @@
 typedef struct region {
     client_vaddr start;
     client_vaddr end;
-    seL4_Word file_offset;
     seL4_CapRights rights;
     struct region* next;
     seL4_Word elf_addr;
