@@ -44,9 +44,8 @@ static const unsigned GPT_PRESCALER = (66 - 1);
 
 static bool handling_interrupt = false;
 gpt_register_t *gpt_reg;
-static uint32_t high_count = 0;
+static uint32_t high_count = 0; // higher bits of timer counter
 static seL4_CPtr _timer_cap = seL4_CapNull;
-void* gpt_clock_addr = NULL;
 
 struct callback {
     bool valid;
@@ -59,12 +58,13 @@ struct callback {
 
 typedef struct callback callback_t;
 
-static tick_callback_t tick_callbacks[MAX_CALLBACK_ID+1];
-static callback_t callback_arr[MAX_CALLBACK_ID+1];
-static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1];
+static tick_callback_t tick_callbacks[MAX_CALLBACK_ID+1]; /* callbacks get called every tick */
+static callback_t callback_arr[MAX_CALLBACK_ID+1];       /* callback_arr contains all the callback functions */
+static callback_t* ordered_callbacks[MAX_CALLBACK_ID+1]; /* ordered index on top of callbacks (increasing by timeouts) */
 
-static timestamp_t g_cur_time, next_timeout;
-static int next_cb = 0;
+static timestamp_t g_cur_time; /* global reference to current time, so it can be accessed by cmp function */
+static timestamp_t next_timeout; /* timeout of next callback */
+static int next_cb = 0; /*idex of next callback */ 
 
 static seL4_CPtr
 enable_irq(int irq, seL4_CPtr aep) {
@@ -82,6 +82,11 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+/**
+ * @brief Setup outcmp2, so we can have interrupt at given time
+ *
+ * @param t 
+ */
 static void update_outcmp2(timestamp_t t) {
     next_timeout = t;
     gpt_reg->ocr2 = (uint32_t)t;
@@ -91,6 +96,9 @@ static void update_outcmp2(timestamp_t t) {
     }
 }
 
+/**
+ * @brief Turn off cmp2
+ */
 static void disable_outcmp2(void) {
     gpt_reg->ir &= ~GPT_IR_OF2IE;
     gpt_reg->cr &= ~GPT_CR_OM2;
@@ -111,7 +119,11 @@ int callback_cmp(const void *a, const void *b) {
     return 0;
 }
 
-static void update_timeout() {
+
+/**
+ * @brief Get ordered_callbacks and setup outcmp2  
+ */
+static void update_timeout(void) {
     timestamp_t cur_time = time_stamp();
     timestamp_t closest_timeout = cur_time - 1;
     callback_t *cb;
@@ -123,20 +135,26 @@ static void update_timeout() {
             updated = true;
         }
     }
+    /*if callback_arr is not empty, we setup the next cmp2 interrupt*/
     if (updated) {
         g_cur_time = cur_time;
         qsort(ordered_callbacks, MAX_CALLBACK_ID, sizeof(callback_t*), callback_cmp);
         next_cb = 0;
         update_outcmp2(closest_timeout);
         assert(closest_timeout == ordered_callbacks[0]->next_timeout);
-    }
+    } /*otherwise turn off cmp2*/
     else {
         disable_outcmp2();
     }
 
 }
 
+/**
+ * @brief Set up interrupt and configure GPT register
+ *
+ */
 int start_timer(seL4_CPtr interrupt_ep) {
+    static gpt_register_t* gpt_clock_addr = NULL;
     if (gpt_clock_addr == NULL) {
         gpt_clock_addr = map_device((void*)CLOCK_GPT_PADDR, sizeof(gpt_register_t));
         _timer_cap = enable_irq(GPT_IRQ, interrupt_ep);
@@ -156,6 +174,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     return 0;
 }
 
+/**
+ * @brief Insert a tick_callback in tick_callback array, takes O(n) time
+ *
+ * @param callback_fun
+ *
+ * @return error code
+ */
 uint32_t register_tick_event(tick_callback_t callback_fun) {
     int i;
     for (i = 0; i < MAX_CALLBACK_ID + 1; i++) {
@@ -171,6 +196,15 @@ uint32_t register_tick_event(tick_callback_t callback_fun) {
     return 0;
 }
 
+/**
+ * @brief add timer to callback array, takes O(n) time
+ *
+ * @param delay
+ * @param callback_fun
+ * @param data
+ *
+ * @return index of callback in callback array, or 0 if fail to add it
+ */
 uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *data) {
     if (callback_fun == NULL) {
         dprintf(1, "invalid callback_fun\n");
@@ -200,6 +234,13 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback_fun, void *dat
     else return 0;
 }
 
+/**
+ * @brief remove a timer, takes O(1) time
+ *
+ * @param id index of timer needs to be removed
+ *
+ * @return 
+ */
 int remove_timer(uint32_t id) {
     if (id == 0 && id > MAX_CALLBACK_ID)
         return CLOCK_R_FAIL;
@@ -222,6 +263,7 @@ int timer_interrupt(void) {
     int err;
     int i;
     handling_interrupt = true;
+    /* handler tick interrupt */
     if (gpt_reg->sr & GPT_SR_OF1) {
         gpt_reg->ocr1 = time_stamp() + CLOCK_SUBTICK_CAP;
         gpt_reg->sr &= GPT_SR_OF1;
@@ -232,17 +274,19 @@ int timer_interrupt(void) {
             tick_callbacks[i]();
         }
     }
+    /* handler timer interrupt */
     if (gpt_reg->sr & GPT_SR_OF2) {
         assert(ordered_callbacks[next_cb]->next_timeout == next_timeout);
         for (i = 0; i < 5; i++) {
         }
-        while (next_cb < MAX_CALLBACK_ID) {
+        while (next_cb < MAX_CALLBACK_ID) { /* trigger all timers meet timeout */
             callback_t *c = ordered_callbacks[next_cb];
             if (c->next_timeout != next_timeout) break;
             c->fun(c->id, c->data);
             c->valid = false;
             next_cb++;
         }
+        /*set cmp2 to trigger next timer in ordered_calbacks, which should has the closet timeout, as it's ordered*/
         if(next_cb < MAX_CALLBACK_ID) {
             update_outcmp2(ordered_callbacks[next_cb]->next_timeout);
         }
@@ -251,13 +295,15 @@ int timer_interrupt(void) {
 
         gpt_reg->sr &= GPT_SR_OF2;
     }
+    /*update high bits of counter if it's a overflow interrupt*/
     if (gpt_reg->sr & GPT_SR_ROV) {
         high_count++;
         gpt_reg->sr &= GPT_SR_ROV;
     }
 
     err = seL4_IRQHandler_Ack(_timer_cap);
-    assert(!err);
+    if (err) return err;
+    /*if driver was turned off by callbacks, clear everything else*/
     if (!(gpt_reg->cr & GPT_CR_EN)) {
         err = seL4_IRQHandler_Clear(_timer_cap);
         assert(!err);

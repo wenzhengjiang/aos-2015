@@ -177,9 +177,14 @@ static int read_setup (void) {
 
 static int write_setup (void) {
     dprintf(4, "SYS WRITE\n");
+    int fd = (int)seL4_GetMR(1);
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t)seL4_GetMR(3);
-    current_process()->cont.fd = (int)seL4_GetMR(1);
+    if (fd < 0 || buf == 0) {
+        return EINVAL;
+    }
+
+    current_process()->cont.fd = fd;
     current_process()->cont.client_addr = buf;
     current_process()->cont.length_arg = nbyte;
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, READ);
@@ -192,10 +197,8 @@ static int write_setup (void) {
 
 static int getdirent_setup (void) {
     dprintf(4, "SYS GETDIRENT\n");
-    client_vaddr name = (client_vaddr)seL4_GetMR(2);
-    size_t nbyte = (size_t)seL4_GetMR(3);
+    size_t nbyte = (size_t)seL4_GetMR(2);
     current_process()->cont.position_arg = (int)seL4_GetMR(1) + 1;
-    current_process()->cont.client_addr = name;
     current_process()->cont.length_arg = nbyte;
     return 0;
 }
@@ -318,21 +321,21 @@ void handle_syscall(seL4_Word syscall_number) {
     if (handlers[syscall_number][HANDLER_SETUP] != NULL &&
         !current_process()->cont.handler_initiated) {
         ret = handlers[syscall_number][HANDLER_SETUP]();
-        assert(ret >= 0);
         current_process()->cont.handler_initiated = true;
         if (ret > 0) {
             reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)ret);
-            send_back(reply);
+            syscall_end_continuation(current_process(), 0, false);
+            return ;
         }
     }
     if (handlers[syscall_number][HANDLER_EXEC]) {
         ret = handlers[syscall_number][HANDLER_EXEC]();
-        assert(ret >= 0);
         if (ret > 0) {
             reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)ret);
             send_back(reply);
+            return ;
         }
     } else {
         printf("Unknown syscall %d\n", syscall_number);
