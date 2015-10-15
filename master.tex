@@ -48,7 +48,7 @@
 \newpage
 \section{Overview}
 The Simple Operating System, or SOS, performs resource management for
-applications running on top of the seL4 Microkernel on ARM.  This document
+applications running on top of the seL4 Microkernel on ARMv7.  This document
 describes the design of SOS as implemented by AOS Group 3.  For each key
 design choice in the project, it also discusses benefits and trade-offs of the
 decision, and possible alternative approaches.
@@ -68,61 +68,133 @@ execution state.
 \subsubsection{Design}
 Pertinent files: /apps/sos/src/main.c
 
-Continuations track the current state of execution and allow event handlers to
-be re-entrant.
+TODO: Talk about threads and event-based models, introduce continuations.
+
+A continuation is specific to a process, and is used to track the current
+state of execution and allow event handlers to be re-entrant and are thus used
+to control side-effects of the execution of fuctions.
+
+A continuation in SOS is a struct which describes the current execution
+context.  The struct has many fields, including:
+
+\begin{itemize}
+\item the original syscall number
+\item the number of re-entries into the syscall handler
+\item the number of bytes read or written
+\end{itemize}
 
 \subsubsection{Discussion}
-Other design alternatives include: coroutines, threads, etc. (discuss)
+TODO: Talk about threads and event-based models
 
-Continuations are superior for this project because simple, and allows code to
-be easily reasoned about.
+The design of continuation is conceptually simple, and allows for
+type-checking at compile-time, which affords some correctness guarantees.
+However, this struct becomes exceedingly large as more behaviours are added to
+SOS, each of which may depend on and need to extend upon the state already
+stored in the continuation.  As this is a per-process structure, it thus
+requires an additional frame to be allocated for every process running on the
+system, and should more functionality be added to SOS, may require multiple
+frames to be allocated causing concerns over contiguous allocation of the
+memory backing the structure.
 
-Furthermore a multi-threaded kernel does not offer significant advantages on
-current ARM hardware:
+A more scalable approach would be to implement the continuation as an array or
+hash table, whereby 32-bit values could be accessed given a key.  The
+implication of this is that compile-time type-checking is lost, and that
+accesses will often need to be cast.
+
+This may seem a preferable for the reason of scalability, however static
+analysis becomes increasingly valuable for offering correctness guarantees as
+an Operating System grows.  For this reason it was deemed an inferior approach
+to the single, large continuation structure given the scope of the project.
+
+Yet more sophisticated data structures could also be used, which are amenable
+to both static analysis, and better scalability, though the added complexity
+of managing these data structures exceeded the benefits for the current
+incarnation of SOS.
 
 \subsection{Timer Interrupts}
 Pertinent files: /libs/libclock/src/clock.c
 
 \subsubsection{Design}
-Implemented using the Sabre GPT timer
-  - Simple timer to use
-  - How callbacks work and how a callback function is defined
+The timer interrupt was implemented using the GPT timer on the Sabre.
 
-- Periodic 100ms kernel tick
-- Scheduled callbacks (used for sleep, etc.)
+The GPT timer allows multiple Output Compare Registers to be set
+simultaneously, and thus affords the ability to support two different modes of
+behaviour.
+
+\begin{enumerate}
+\item Regular 100ms kernel tick
+\item Timed callback events
+\end{enumerate}
+
+Both timed callbacks and kernel tick callbacks are exposed via an interface
+for registering callback functions when these events occur.
+
+All kernel tick callbacks are called with each kernel tick.  Thus the
+developer needs to be aware of the execution time required for a kernel tick
+callback, and should ensure that this execution time is minimised.
+
+Timed callbacks are called after a timeout expires.  This is implemented by
+ensuring that all registrations are ordered at registration-time, and setting
+the corresponding Output Compare Register to the next event in the queue.
+TODO: How overflow is accounted for.
+
+Timed callbacks are removed after being fired, and thus are excellent
+candidates for use in functions such as sleep.  For this reason kernel tick
+events is distingiushed from timed callback events.
 
 \subsubsection{Discussion}
-Alternative was the EPIT timer.  Both timers have a very similar interface.
-GPT is simpler and fulfils all requirements.
-
-Dedicated tick interrupt registration.
+Alternatively the EPIT timer could have been used to implement this
+functionality.  Both EPIT and GPT timers on the Sabre have a very similar
+interface, and both could equally have been used.  However it was elected that
+the GPT is slightly simpler and fulfills all requirements.
 
 \subsection{Syscall Handling}
 Pertinent files: /apps/sos/src/handler.c, /apps/sos/src/syscall.c
 
 \subsubsection{Design}
-As this is a continuation-based model, each syscall is implemented in two parts:
- - setup
- - exec handler
+As this is a continuation-based model, each syscall is implemented in two
+parts: a setup handler, and an execution handler.
 
-An array is used where indexes map to the syscall number.
+The setup handler is called once, at the beginning of a syscall and before the
+execution handler is invoked.  This allows a single, consistent means of
+storing any arguments provided via IPC within the continuation, so that they
+may be available to the execution handler.
 
-Syscall numbers are exposed to clients using the SOS library.
+The syscall dispatch is respresented as a matrix, whereby the number of
+implemented syscalls form the `rows', and function pointers to the setup and
+execution handlers form the `columns'.  This gives simple and constant-time
+access to the syscalls implemented within SOS: the syscall lookup is an index
+into the array based on the syscall number, and the handler to be executed is
+also an index.
+
+The dispatch is performed via a single function, which executes the setup
+handler should for the desired syscall (should one be defined), storing the
+fact that this has been executed in the continuation.  The dispatcher will
+then invoke the execution handler for that syscall.
+
+Should the execution of a syscall handler result in an operation which would
+otherwise be blocking, execution will return to the syscall loop until an
+interrupt occurs based on the completion of the event.
+
+TODO: Discuss callback mechanisms (here or elsewhere)
 
 \subsubsection{Discussion}
+TODO: Work out what the scope of this section is/should be and then discuss.
 
 \section{Memory}
 \subsection{Page Faults}
 Pertinent files: /apps/sos/src/handler.c
 
 \subsubsection{Design}
-Page faults may occur in a number of circumstances.
+Page faults within SOS occur in a number of circumstances:
+\begin{itemize}
+\item When the process attempts to read data, which has been paged to disk, back into memory
+\item For lazy-loading data in from an ELF binary
+\item Faulting-in new pages within the heap or stack
+\item As a means of setting the frame referenced bit for second chance replacement\
+\end{itemize}
 
-- As a means of tracking frame reference counts for second chance replacement (swapping)
-- For lazy-loading data in from an ELF binary
-- As data has been paged to disk
-- Faulting new pages within the heap or stack
-- Needs to be fast
+TODO: Discuss the different events that can occur, and how those are implemented.
 \subsubsection{Discussion}
 
 
