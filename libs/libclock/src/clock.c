@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -190,7 +191,7 @@ uint32_t register_tick_event(tick_callback_t callback_fun) {
     }
     if (i == MAX_CALLBACK_ID + 1) {
         ERR("Not registering new tick callback. Limit exceeded.");
-        return 1;
+        return ENOMEM;
     }
     tick_callbacks[i] = callback_fun;
     return 0;

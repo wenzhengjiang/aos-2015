@@ -152,7 +152,7 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
         /* Copy it across into the vspace. */
-        dprintf(-1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
+        dprintf(-1, " * Loading segment %08x-->%08x %x\n", (int)vaddr, (int)(vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights));
         printf("source addr: %x", source_addr);
         sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
         // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,

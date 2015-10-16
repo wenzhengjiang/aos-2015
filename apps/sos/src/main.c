@@ -100,17 +100,17 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_Word label;
         seL4_MessageInfo_t message;
 /***** Prepare events and set up current process *****/
-        if (has_waiting_proc()) { 
+        if (has_ready_proc()) { 
             /*1. Pick one resumed execution and continue it*/
             dprintf(4, "[MAIN] Applying continuation\n");
-            pid = next_waiting_proc();
+            pid = next_ready_proc();
             set_current_process(pid);
             proc = process_lookup(pid);
 
             label = proc->cont.ipc_label;
         } else if (pid < -1) { 
             /*sos got fatal error event, we quit*/
-            dprintf(0, "Fatal error happened in sos (error code : %d)!\n", pid);
+            ERR("Fatal error happened in sos (error code : %d)!\n", pid);
             break;
         } else {
             /*Wait event sent via endpoint (could be IPC, network or clock ...)*/

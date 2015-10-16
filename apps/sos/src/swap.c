@@ -65,7 +65,7 @@ sos_nfs_swap_create_callback(uintptr_t cb, enum nfs_stat status, fhandle_t *fh,
     }
     swap_handle = *fh;
     inited = true;
-    add_waiting_proc(proc->pid);
+    add_ready_proc(proc->pid);
     return;
 }
 
@@ -127,7 +127,7 @@ swap_write_callback(uintptr_t cb, enum nfs_stat status, fattr_t *fattr, int coun
         proc->cont.swap_status = SWAP_SUCCESS;
         proc->cont.swap_cnt = 0;
         free((callback_info_t*)cb);
-        add_waiting_proc(proc->pid);
+        add_ready_proc(proc->pid);
         return;
     }
     int cnt = proc->cont.swap_cnt;
@@ -211,7 +211,7 @@ swap_read_callback(uintptr_t cb, enum nfs_stat status,
     assert(count == PAGE_SIZE);
     assert(proc->cont.swap_status != SWAP_SUCCESS);
     proc->cont.swap_status = SWAP_SUCCESS;
-    add_waiting_proc(proc->pid);
+    add_ready_proc(proc->pid);
     memcpy((char*)proc->cont.swap_page, (char*)data, count);
     int code = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {
