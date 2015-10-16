@@ -1,3 +1,8 @@
+/**
+ * @file frametable.c
+ * @brief implementation of frametable
+ */
+
 #include <sel4/sel4.h>
 #include <device/mapping.h>
 #include <device/vmem_layout.h>
@@ -27,6 +32,7 @@
 /* Minimum of two values. */
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
+/* current used frames in sos */
 size_t process_frames = 0;
 
 static unsigned nframes;
@@ -39,7 +45,9 @@ struct frame_entry {
 
 typedef struct frame_entry frame_entry_t;
 
+/*free frame list */
 static frame_entry_t * free_list;
+/*frame table */
 static frame_entry_t * frame_table;
 
 static void set_num_frames(void) {
@@ -49,7 +57,7 @@ static void set_num_frames(void) {
 }
 
 /**
- * Retrieve the cap corresponding to a frame
+ * @brief get cap of a frame
  */
 seL4_CPtr frame_cap(seL4_Word vaddr) {
     dprintf(3, "%x\n", vaddr);
@@ -60,6 +68,10 @@ seL4_CPtr frame_cap(seL4_Word vaddr) {
     return cur_frame->cap;
 }
 
+/**
+ * @brief get "physical" addr of a frame
+ *
+ */
 seL4_Word frame_paddr(seL4_Word vaddr) {
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
     assert(frame_table);
@@ -103,11 +115,18 @@ int sos_unmap_frame(seL4_Word vaddr) {
     return 0;
 }
 
+/**
+ * @brief map a frame to frame table
+ *
+ * @param idx index of a frame
+ *
+ * @return 
+ */
 static int frame_map_page(unsigned idx) {
     assert(frame_table);
     assert(idx >= 0 && idx < nframes);
 
-    // alloc a physical page
+    // allocate a physical page
     seL4_Word paddr = ut_alloc(seL4_PageBits);
     if (paddr == 0) {
         ERR("[frametable] Out of memory\n");
@@ -146,7 +165,7 @@ bool frame_available_frames(void) {
 }
 
 /**
- * Initialise the frame table
+ * Initialize the frame table and swap table
  */
 void frame_init(void) {
     set_num_frames();
@@ -181,6 +200,8 @@ void frame_init(void) {
 
 /**
  * Allocate a new frame
+ * If there is no available frame, force a process to swap out one of it's page
+ *
  * @param vaddr Pointer to the location the pointer will be provided
  * @return index of the frame in the table (faddr); 0 if failed to allocate
  */
@@ -196,11 +217,9 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
     assert(proc);
 
     if (proc) {
-        sos_addrspace_t *as = proc->vspace;
-        // There's a bug here where frames may become available while a
-        // process is evicting things when there are multiple processes swapping.
         if (proc->cont.swap_status || !frame_available_frames()) {
             dprintf(3, "[FRAME] no available frame\n");
+            // evict a process
             if (!proc->cont.page_eviction_process) {
                 proc->cont.page_eviction_process = select_eviction_process();
                 if (!proc->cont.page_eviction_process) {
@@ -209,9 +228,11 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
             }
             evict_proc = proc->cont.page_eviction_process;
             printf("Evicting from PID: %d\n", evict_proc->pid);
+            // swap out it's page
             swap_evict_page(evict_proc);
         }
 
+        // If we had a page swapping out, reuse the frame of that swapped page
         if (proc->cont.original_page_addr) {
             assert(proc->cont.page_replacement_victim);
             dprintf(3, "[FRAME] start to unmap frame\n");
