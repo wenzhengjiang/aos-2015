@@ -62,6 +62,8 @@ typedef struct continuation {
     timestamp_t callback_start_time;
     bool swap_write_fired;
     bool have_new_frame;
+    int brk;
+    uint64_t delay;
 } cont_t;
 
 typedef struct pid_entry {

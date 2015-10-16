@@ -1,3 +1,8 @@
+/**
+ * @file handler.c
+ * @brief Transfer IPC syscall request to sos internal syscall
+ */
+
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
@@ -27,14 +32,16 @@
 
 typedef int (*syscall_handler)(void);
 
+/*Handler functions to setup and execute syscalls */
 static syscall_handler handlers[MAX_SYSCALL_NO][HANDLER_TYPES];
-
-static cont_t empty_cont;
 
 static bool is_read_fault(seL4_Word faulttype) {
     return (faulttype & (1 << 11)) == 0;
 }
 
+/**
+ * @brief VM fault handler function
+ */
 int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     sos_proc_t *proc = current_process();
     sos_addrspace_t *as = proc_as(proc);
@@ -58,104 +65,69 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
     }
 
     dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
+    /* Fault on an existing page and 
+     * we're not re-entering this handler in the middle of loading page from elf file*/
     if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
-        if (swap_is_page_swapped(as, faultaddr)) { // page is in disk
-            swap_replace_page(faultaddr);
+        if (swap_is_page_swapped(as, faultaddr)) { // fault on a page in disk 
+            swap_replace_page(faultaddr); 
             as_reference_page(current_process()->vspace, faultaddr, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
-        } else if (is_referenced(as, faultaddr)) {
-            // Page exists, referenced bit is set (so it must be mapped w/
-            // correct permissions), yet it faulted?!
-            assert(!"This shouldn't happen");
-        } else {
+        } else if (!is_referenced(as, faultaddr)) { // fault on a page whose reference bit is 0
             as_reference_page(as, faultaddr, reg->rights);
+        } else {
+            assert(!"This shouldn't happen");
         }
-    } else {
+    } else { /* Fault on an new page */
         if (!proc->cont.create_page_done) {
             process_create_page(faultaddr, reg->rights);
             proc->cont.create_page_done = true;
         }
-        printf("page doesn't exist\n");
+        dprintf(4, "[VMF] page doesn't exist\n");
         pte_t *pt = as_lookup_pte(as, faultaddr);
-        assert(pt);
+        if (pt == NULL) {
+            return EFAULT;
+        }
         seL4_Word aligned_addr = PAGE_ALIGN(faultaddr);
-        printf("reg->elf:%x\n", reg->elf_addr);
-        if (reg->elf_addr != -1) {
+        dprintf(4, "[VMF] reg->elf:%x\n", reg->elf_addr);
+        if (reg->elf_addr != -1) { // If the new page is code segment, it needs to be loaded into vspace 
+            dprintf(4, "[VMF] %08x -- %08x, %x", reg->start, reg->end, reg->rights);
             proc->cont.fd = BINARY_READ_FD;
-            printf("LOADING INTO VSPACE\n");
+            dprintf(4, "[VMF] LOADING INTO VSPACE\n");
             if (aligned_addr < reg->start) {
                 aligned_addr = reg->start;
             }
             load_page_into_vspace(proc,
-                                  proc->vspace->sos_pd_cap,
                                   (aligned_addr - reg->start) + reg->elf_addr,
-                                  aligned_addr,
-                                  reg->rights);
+                                  aligned_addr);
         }
     }
     return 0;
 }
 
-inline static void send_back(seL4_MessageInfo_t reply) {
-    dprintf(2, "Replying via send_back()\n");
-    seL4_CPtr reply_cap = current_process()->cont.reply_cap;
-    assert(reply_cap != seL4_CapNull);
-    seL4_SetTag(reply);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
-    // TODO: This does not free iov
-    current_process()->cont = empty_cont;
-}
-
-static void sys_notify_client(uint32_t id, void *data) {
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault,0,0,0);
-    send_back(reply);
-}
-
-static int brk_handler (void) {
+static int brk_setup(void) {
     dprintf(4, "SYS BRK\n");
-    sos_addrspace_t* as = proc_as(current_process());
-    assert(as);
-    client_vaddr brk = sos_brk(as, seL4_GetMR(1));
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
-    seL4_SetMR(0, brk);
-    send_back(reply);
-
+    current_process()->cont.brk = seL4_GetMR(1);
     return 0;
 }
 
-static int usleep_handler (void) {
+static int usleep_setup(void) {
     dprintf(4, "SYS SLEEP\n");
-    uint64_t delay = 1000ULL * seL4_GetMR(1);
-    if(!register_timer(delay, sys_notify_client, (int*)current_process()->cont.reply_cap)) {
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_UserException,0,0,0);
-        send_back(reply);
-        return 1;
-    }
-    return 0;
-}
-
-static int timestamp_handler (void) {
-    dprintf(4, "SYS TIME\n");
-    uint64_t tick = time_stamp();
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
-    seL4_SetMR(0, tick & 0xffffffff);
-    seL4_SetMR(1, tick>>32);
-    send_back(reply);
+    current_process()->cont.delay = 1000ULL * seL4_GetMR(1);
     return 0;
 }
 
 static int open_setup (void) {
     current_process()->cont.file_mode = (fmode_t)seL4_GetMR(1);
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
-    ipc_read(OPEN_MESSAGE_START, current_process()->cont.path);
+    ipc_read_str(OPEN_MESSAGE_START, current_process()->cont.path);
     
     dprintf(4, "SYS OPEN %s\n", current_process()->cont.path);
     dprintf(4, "ipc %x %x %x %x\n", seL4_GetMR(2), seL4_GetMR(3), seL4_GetMR(4));
     io_device_t *dev = device_handler_str(current_process()->cont.path);
     int fd = fd_create(current_process()->fd_table, NULL, dev,
                        current_process()->cont.file_mode);
-    assert(fd >= 0 && fd <= MAX_FD);
+    if (fd < 0) 
+        return ENOMEM;
     current_process()->cont.fd = fd;
     return 0;
 }
@@ -164,13 +136,15 @@ static int read_setup (void) {
     dprintf(4, "SYS READ\n");
     client_vaddr buf = seL4_GetMR(2);
     size_t nbyte = (size_t)seL4_GetMR(3);
+    if (buf == 0) {
+        return EINVAL;
+    }
     current_process()->cont.fd = (int)seL4_GetMR(1);
     current_process()->cont.client_addr = buf;
     current_process()->cont.length_arg = nbyte;
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, WRITE);
     if (current_process()->cont.iov == NULL) {
-        process_delete(current_process());
-        return EINVAL;
+        return ENOMEM;
     }
     return 0;
 }
@@ -189,7 +163,6 @@ static int write_setup (void) {
     current_process()->cont.length_arg = nbyte;
     current_process()->cont.iov = cbuf_to_iov(buf, nbyte, READ);
     if (current_process()->cont.iov == NULL) {
-        process_delete(current_process());
         return EINVAL;
     }
     return 0;
@@ -198,7 +171,9 @@ static int write_setup (void) {
 static int getdirent_setup (void) {
     dprintf(4, "SYS GETDIRENT\n");
     size_t nbyte = (size_t)seL4_GetMR(2);
-    current_process()->cont.position_arg = (int)seL4_GetMR(1) + 1;
+    unsigned int pos = (int)seL4_GetMR(1);
+    if (nbyte == 0 || pos == 0) return EINVAL;
+    current_process()->cont.position_arg = pos;
     current_process()->cont.length_arg = nbyte;
     return 0;
 }
@@ -206,6 +181,7 @@ static int getdirent_setup (void) {
 static int waitpid_setup(void) {
     dprintf(4, "SYS WAITPID\n");
     pid_t pid = (int)seL4_GetMR(1);
+    if (pid <= 0) return EINVAL;
     current_process()->cont.pid = pid;
     return 0;
 }
@@ -213,6 +189,7 @@ static int waitpid_setup(void) {
 static int proc_delete_setup(void) {
     dprintf(4, "SYS PROC DELETE\n");
     pid_t pid = seL4_GetMR(1);
+    if (pid <= 0) return EINVAL;
     current_process()->cont.pid = pid;
     return 0;
 }
@@ -223,7 +200,7 @@ static int proc_status_setup(void) {
     size_t maxn = (size_t)seL4_GetMR(2);
 
     char *stat_buf = malloc(maxn * sizeof(sos_process_t));
-    if (!stat_buf) return ENOMEM;
+    if (stat_buf == NULL || buf == 0) return ENOMEM;
     int bytes = get_all_proc_stat(stat_buf, maxn);
     assert(bytes <= maxn * sizeof(sos_process_t));
 
@@ -231,6 +208,7 @@ static int proc_status_setup(void) {
     current_process()->cont.proc_stat_n = bytes / sizeof(sos_process_t);
     current_process()->cont.iov = cbuf_to_iov(buf, bytes, WRITE);
     if (current_process()->cont.iov == NULL) {
+        free(stat_buf);
         return EINVAL;
     }
     return 0;
@@ -240,43 +218,33 @@ static int stat_setup (void) {
     current_process()->cont.client_addr = (client_vaddr)seL4_GetMR(1);
     dprintf(4, "SYS STAT\n");
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
-    ipc_read(STAT_MESSAGE_START, current_process()->cont.path);
+    ipc_read_str(STAT_MESSAGE_START, current_process()->cont.path);
     return 0;
 }
 
-static int close_handler (void) {
+static int close_setup(void) {
     dprintf(4, "SYS CLOSE\n");
-    int res;
-    seL4_MessageInfo_t reply;
-    current_process()->cont.fd = (int)seL4_GetMR(1);
-    res = sos__sys_close();
-    if (res != 0) {
-        reply = seL4_MessageInfo_new(seL4_UserException,0,0,1);
-    } else {
-        reply = seL4_MessageInfo_new(seL4_NoFault,0,0,1);
-    }
-    dprintf(4, "[CLOSE] Replying with res: %d\n", res);
-    seL4_SetMR(0, (seL4_Word)res);
-    send_back(reply);
+    int fd = (int)seL4_GetMR(1);
+    current_process()->cont.fd = fd ;
     return 0;
 }
 
 static int proc_create_setup(void) {
     dprintf(4, "SYS PROC_CREATE\n");
     memset(current_process()->cont.path, 0, MAX_FILE_PATH_LENGTH);
-    ipc_read(PROC_CREATE_MESSAGE_START, current_process()->cont.path);
+    ipc_read_str(PROC_CREATE_MESSAGE_START, current_process()->cont.path);
     return 0;
 }
 
 void register_handlers(void) {
-    handlers[SOS_SYSCALL_BRK][HANDLER_SETUP] = NULL;
-    handlers[SOS_SYSCALL_BRK][HANDLER_EXEC] = brk_handler;
+    handlers[SOS_SYSCALL_BRK][HANDLER_SETUP] = brk_setup;
+    handlers[SOS_SYSCALL_BRK][HANDLER_EXEC] = sos__sys_brk;
 
-    handlers[SOS_SYSCALL_USLEEP][HANDLER_SETUP] = NULL;
-    handlers[SOS_SYSCALL_USLEEP][HANDLER_EXEC] = usleep_handler;
+    handlers[SOS_SYSCALL_USLEEP][HANDLER_SETUP] = usleep_setup;
+    handlers[SOS_SYSCALL_USLEEP][HANDLER_EXEC] = sos__sys_usleep;
 
     handlers[SOS_SYSCALL_TIMESTAMP][HANDLER_SETUP] = NULL;
-    handlers[SOS_SYSCALL_TIMESTAMP][HANDLER_EXEC] = timestamp_handler;
+    handlers[SOS_SYSCALL_TIMESTAMP][HANDLER_EXEC] = sos__sys_timestamp;
 
     handlers[SOS_SYSCALL_OPEN][HANDLER_SETUP] = open_setup;
     handlers[SOS_SYSCALL_OPEN][HANDLER_EXEC] = sos__sys_open;
@@ -293,8 +261,8 @@ void register_handlers(void) {
     handlers[SOS_SYSCALL_STAT][HANDLER_SETUP] = stat_setup;
     handlers[SOS_SYSCALL_STAT][HANDLER_EXEC] = sos__sys_stat;
 
-    handlers[SOS_SYSCALL_CLOSE][HANDLER_SETUP] = NULL;
-    handlers[SOS_SYSCALL_CLOSE][HANDLER_EXEC] = close_handler;
+    handlers[SOS_SYSCALL_CLOSE][HANDLER_SETUP] = close_setup;
+    handlers[SOS_SYSCALL_CLOSE][HANDLER_EXEC] = sos__sys_close;
 
     handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_SETUP] = proc_create_setup;
     handlers[SOS_SYSCALL_PROC_CREATE][HANDLER_EXEC] =  sos__sys_proc_create;
@@ -314,27 +282,22 @@ void register_handlers(void) {
 
 void handle_syscall(seL4_Word syscall_number) {
     /* Save the caller */
-    seL4_MessageInfo_t reply;
-    int ret;
+    int err;
     dprintf(4, "Handling syscall number %d\n", syscall_number);
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
     if (handlers[syscall_number][HANDLER_SETUP] != NULL &&
         !current_process()->cont.handler_initiated) {
-        ret = handlers[syscall_number][HANDLER_SETUP]();
+        err = handlers[syscall_number][HANDLER_SETUP]();
         current_process()->cont.handler_initiated = true;
-        if (ret > 0) {
-            reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
-            seL4_SetMR(0, (seL4_Word)ret);
+        if (err > 0) {
             syscall_end_continuation(current_process(), 0, false);
             return ;
         }
     }
     if (handlers[syscall_number][HANDLER_EXEC]) {
-        ret = handlers[syscall_number][HANDLER_EXEC]();
-        if (ret > 0) {
-            reply = seL4_MessageInfo_new(seL4_UserException, 0, 0, 1);
-            seL4_SetMR(0, (seL4_Word)ret);
-            send_back(reply);
+        err = handlers[syscall_number][HANDLER_EXEC]();
+        if (err > 0) {
+            syscall_end_continuation(current_process(), 0, false);
             return ;
         }
     } else {

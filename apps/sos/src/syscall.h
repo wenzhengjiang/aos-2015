@@ -36,11 +36,18 @@ int sos__sys_proc_delete(void);
 
 int sos__sys_proc_status(void);
 
-void ipc_read(int start, char *buf);
+int sos__sys_usleep(void);
 
-void iov_ensure_loaded(iovec_t* iov);
+int sos__sys_timestamp(void);
+
+int sos__sys_brk(void);
+
+void ipc_read_str(int start, char *buf);
+
+void iov_ensure_loaded(iovec_t iov);
 
 void syscall_end_continuation(sos_proc_t *proc, int retval, bool success);
+void syscall_end_continuation64(sos_proc_t *proc, uint64_t retval, bool success);
 
 void iov_free(iovec_t *iov);
 
@@ -49,12 +56,12 @@ typedef struct callback_info {
     timestamp_t start_time;
 } callback_info_t;
 
-void add_waiting_proc(pid_t pid) ;
-pid_t next_waiting_proc(void) ;
-bool has_waiting_proc(void) ;
+void add_ready_proc(pid_t pid) ;
+pid_t next_ready_proc(void) ;
+bool has_ready_proc(void) ;
 
 iovec_t *cbuf_to_iov(client_vaddr buf, size_t nbyte, iop_direction_t dir);
-void ipc_write(int start, char* msgdata, size_t length);
+void ipc_write_bin(int start, char* msgdata, size_t length);
 io_device_t* device_handler_str(const char* filename);
 iovec_t* iov_create(seL4_Word vstart, size_t sz, iovec_t *iohead, iovec_t *iotail, bool sos_iov_flag);
 bool callback_valid(callback_info_t *cb);

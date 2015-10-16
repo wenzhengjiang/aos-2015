@@ -260,8 +260,6 @@ void process_delete(sos_proc_t* proc) {
         pid_entry_t* prev = p->prev, *next = p->next;
         assert(prev != p && next != p);
 
-
-
         p->prev= free_proc_tail;
         p->next= NULL;
         free_proc_tail = p;
@@ -431,7 +429,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
 
     if (!proc->cont.as_activated) {
         /* load the elf image */
-        err = elf_load(proc, proc->vspace->sos_pd_cap, (char*)proc->cont.elf_load_addr);
+        err = elf_load(proc, (char*)proc->cont.elf_load_addr);
         if (err) {
             assert(effective_process() != current_process());
             sos_unmap_frame(proc->cont.elf_load_addr);
@@ -463,16 +461,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     return proc->pid;
 }
 
-int register_to_all_proc(pid_t pid) {
-    int err = 0;
-    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
-        if(proc_table[i] != NULL) {
-            if((err = register_to_proc(proc_table[i], pid)))
-                return err;
-        }
-    }
-    return err;
-}
+
 int register_to_proc(sos_proc_t* proc, pid_t pid) {
     assert(proc);
     pid_entry_t * pe = malloc(sizeof(pid_entry_t));
@@ -485,6 +474,20 @@ int register_to_proc(sos_proc_t* proc, pid_t pid) {
     return 0;
 }
 
+int register_to_all_proc(pid_t pid) {
+    int err = 0;
+    for (int i = 1; i < MAX_PROCESS_NUM; i++) {
+        if(proc_table[i] != NULL && pid != i) {
+            if((err = register_to_proc(proc_table[i], pid))) {
+                for (int j = 0; j < i; j++) if (proc_table[i] != NULL && pid != i) {
+                    //TODO unregister 
+                }
+                return err;
+            }
+        }
+    }
+    return err;
+}
 int get_all_proc_stat(char *buf, size_t maxn) {
     assert(buf);
     int offset = 0;

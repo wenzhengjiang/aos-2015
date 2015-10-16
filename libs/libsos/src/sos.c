@@ -180,7 +180,7 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_GETDIRENT); 
-    seL4_SetMR(1, pos); 
+    seL4_SetMR(1, pos + 1); // in sos, index starts from 1 
     seL4_SetMR(2, nbyte - 1); 
     seL4_MessageInfo_t reply = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
     if(seL4_MessageInfo_get_label(reply) == seL4_NoFault) {

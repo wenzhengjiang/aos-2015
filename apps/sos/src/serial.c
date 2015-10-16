@@ -183,7 +183,7 @@ int sos_serial_write(iovec_t* vec, int fd, int count) {
     assert(vec);
 
     for (iovec_t *v = vec; v ; v = v->next) {
-        iov_ensure_loaded(v);
+        iov_ensure_loaded(*v);
         if (v->sz == 0) return 0;
         sos_vaddr src = as_lookup_sos_vaddr(current_process()->vspace, v->vstart);
         assert(src);
