@@ -72,7 +72,7 @@ sos_proc_t *select_eviction_process(void) {
 
         int i = cur_proc->pid;
         // Random starvation intervention
-        if (rand() % 20 == 0) {
+        if (rand() % (running_processes * 10) == 0) {
             last_evicted_proc = &pid_table[i];
             return proc_table[i];
         }
