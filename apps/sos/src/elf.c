@@ -39,7 +39,6 @@
 #define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
 
-extern seL4_ARM_PageDirectory dest_as;
 extern jmp_buf ipc_event_env;
 
 /*
@@ -58,44 +57,25 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
     return result;
 }
 
-/*
- * Inject data into the given vspace.
+/**
+ * @brief load a page from elf file
+ *
+ * @param proc the client which is loading page
+ * @param src offset of elf file of the loading page
+ * @param dst destination base virtual address of the page being loaded
+ *
+ * @return 
  */
 int load_page_into_vspace(sos_proc_t* proc,
-                          seL4_ARM_PageDirectory dest_as,
                           uint32_t src,
-                          unsigned long dst,
-                          unsigned long permissions) {
-
-    /* Overview of ELF segment loading
-
-       dst: destination base virtual address of the segment being loaded
-       segment_size: obvious
-       
-       So the segment range to "load" is [dst, dst + segment_size).
-
-       The content to load is either zeros or the content of the ELF
-       file itself, or both.
-
-       The split between file content and zeros is a follows.
-
-       File content: [dst, dst + file_size)
-       Zeros:        [dst + file_size, dst + segment_size)
-
-       Note: if file_size == segment_size, there is no zero-filled region.
-       Note: if file_size == 0, the whole segment is just zero filled.
-
-       The code below relies on seL4's frame allocator already
-       zero-filling a newly allocated frame.
-
-    */
+                          unsigned long dst) {
 
     sos_addrspace_t *as = proc_as(proc);
 
     /* We work a page at a time in the destination vspace. */
     assert(as);
     //assert(dst == PAGE_ALIGN(dst));
-    dprintf(-1, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
+    dprintf(3, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
 
     unsigned long kdst = as_lookup_sos_vaddr(as, dst);
     seL4_CPtr sos_cap = frame_cap(kdst);
@@ -117,28 +97,24 @@ int load_page_into_vspace(sos_proc_t* proc,
     /* Not observable to I-cache yet so flush the frame */
     seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
-    dprintf(-1, "load_page_into_vspace: finished\n");
+    dprintf(3, "load_page_into_vspace: finished\n");
     return 0;
 }
 
-int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
-
-    int num_headers;
-    int err;
-    int i;
+int elf_load(sos_proc_t* proc, char *elf_file) {
 
     /* Ensure that the ELF file looks sane. */
     if (elf_checkFile(elf_file)){
-        printf("Invalid elf file\n");
+        ERR("Invalid elf file\n");
         return seL4_InvalidArgument;
     }
 
-    num_headers = elf_getNumProgramHeaders(elf_file);
+    int num_headers = elf_getNumProgramHeaders(elf_file);
     sos_addrspace_t *as = proc_as(proc);
     if (num_headers * sizeof(struct Elf32_Phdr) + sizeof(struct Elf32_Header) > PAGESIZE) {
         ERR("Too many ELF segments in file\n");
     }
-    for (i = 0; i < num_headers; i++) {
+    for (int i = 0; i < num_headers; i++) {
         seL4_Word source_addr;
         unsigned long flags, segment_size, vaddr;
 
@@ -153,11 +129,10 @@ int elf_load(sos_proc_t* proc, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         flags = elf_getProgramHeaderFlags(elf_file, i);
         /* Copy it across into the vspace. */
         dprintf(-1, " * Loading segment %08x-->%08x %x\n", (int)vaddr, (int)(vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights));
-        printf("source addr: %x", source_addr);
         sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
         // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
         if (reg == NULL) {
-            printf("no reg\n");
+            ERR("no reg\n");
             return ENOMEM;
         }
     }

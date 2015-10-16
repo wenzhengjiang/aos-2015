@@ -47,9 +47,9 @@ static void
   */
 sos_nfs_create_callback(uintptr_t cb, enum nfs_stat status, fhandle_t *fh,
                         fattr_t *fattr) {
-    cur_pid_t cur_pid = ((callback_info_t*)cb)->cur_pid;
-    dprintf(3, "Entering nfs_create_callback: %d\n", (int)cur_pid);
-    set_current_process(cur_pid);
+    pid_t pid = ((callback_info_t*)cb)->pid;
+    dprintf(3, "Entering nfs_create_callback: %d\n", (int)pid);
+    set_current_process(pid);
     if (!callback_valid((callback_info_t*)cb)) {
         free((callback_info_t*)cb);
         return;
@@ -365,17 +365,6 @@ int sos_nfs_write(iovec_t* iov, int fd, int count) {
     return err;
 }
 
-/* GET FILE ATTRIBUTES */
-
-static void prstat(sos_stat_t sbuf) {
-    /* print out stat buf */
-    dprintf(2, "%c%c%c%c 0x%06x 0x%lx 0x%06lx\n",
-           sbuf.st_type == ST_SPECIAL ? 's' : '-',
-           sbuf.st_fmode & FM_READ ? 'r' : '-',
-           sbuf.st_fmode & FM_WRITE ? 'w' : '-',
-           sbuf.st_fmode & FM_EXEC ? 'x' : '-', sbuf.st_size, sbuf.st_ctime,
-           sbuf.st_atime);
-}
 /**
  * @brief Put status info in IPC buffer and reply it to client
  *

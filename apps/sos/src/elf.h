@@ -14,11 +14,9 @@
 #include <sel4/sel4.h>
 #include "process.h"
 
-int elf_load(sos_proc_t * proc, seL4_ARM_PageDirectory dest_pd, char* elf_file);
+int elf_load(sos_proc_t * proc, char* elf_file);
 int load_page_into_vspace(sos_proc_t* proc,
-                          seL4_ARM_PageDirectory dest_as,
                           uint32_t src,
-                          unsigned long dst,
-                          unsigned long permissions);
+                          unsigned long dst);
 
 #endif

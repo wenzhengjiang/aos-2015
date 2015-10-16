@@ -35,8 +35,6 @@ typedef int (*syscall_handler)(void);
 /*Handler functions to setup and execute syscalls */
 static syscall_handler handlers[MAX_SYSCALL_NO][HANDLER_TYPES];
 
-static cont_t empty_cont;
-
 static bool is_read_fault(seL4_Word faulttype) {
     return (faulttype & (1 << 11)) == 0;
 }
@@ -99,10 +97,8 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
                 aligned_addr = reg->start;
             }
             load_page_into_vspace(proc,
-                                  proc->vspace->sos_pd_cap,
                                   (aligned_addr - reg->start) + reg->elf_addr,
-                                  aligned_addr,
-                                  reg->rights);
+                                  aligned_addr);
         }
     }
     return 0;
@@ -286,7 +282,6 @@ void register_handlers(void) {
 
 void handle_syscall(seL4_Word syscall_number) {
     /* Save the caller */
-    seL4_MessageInfo_t reply;
     int err;
     dprintf(4, "Handling syscall number %d\n", syscall_number);
     assert(syscall_number > 0 && syscall_number < MAX_SYSCALL_NO);
