@@ -65,8 +65,8 @@ typedef struct iovec {
 
 sos_region_t* as_region_create(sos_addrspace_t *as, client_vaddr start, client_vaddr end, int rights, seL4_Word elf_addr);
 sos_region_t* as_vaddr_region(sos_addrspace_t *as, client_vaddr vaddr);
-int as_create_page(sos_addrspace_t *as, client_vaddr vaddr, seL4_CapRights rights);
-void as_create(sos_addrspace_t **);
+int as_create(sos_addrspace_t **);
+int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) ;
 sos_vaddr as_lookup_sos_vaddr(sos_addrspace_t *as, client_vaddr vaddr);
 void as_activate(sos_addrspace_t* as);
 client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk);

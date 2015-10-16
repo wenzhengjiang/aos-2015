@@ -83,7 +83,7 @@ typedef struct process {
     cont_t cont;
 
     pid_t waiting_pid; // pid of process I'm waiting. -1: any, 0: none
-    pid_entry_t* pid_queue; // processes waiting for me
+    pid_entry_t* waiter_queue; // processes waiting for me
 
     sos_process_t status;
     timestamp_t start_time;
@@ -101,7 +101,7 @@ sos_proc_t *current_process(void);
 sos_proc_t *effective_process(void);
 sos_proc_t *process_lookup(pid_t pid);
 of_entry_t *fd_lookup(sos_proc_t *proc, int fd);
-void process_create_page(seL4_Word vaddr, seL4_CapRights rights);
+int process_create_page(seL4_Word vaddr, seL4_CapRights rights);
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) ;
 void set_current_process(pid_t pid);
 int get_all_proc_stat(char *buf, size_t n);

@@ -79,7 +79,8 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         }
     } else { /* Fault on an new page */
         if (!proc->cont.create_page_done) {
-            process_create_page(faultaddr, reg->rights);
+            if (process_create_page(faultaddr, reg->rights)) 
+                return ENOMEM;
             proc->cont.create_page_done = true;
         }
         dprintf(4, "[VMF] page doesn't exist\n");

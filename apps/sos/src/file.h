@@ -6,7 +6,7 @@
 #include "addrspace.h"
 
 #define MAX_FD (1023)
-#define BINARY_READ_FD (3)
+#define BINARY_READ_FD (3) // fd of the elf file of the process
 
 typedef struct io_device {
     int (*open)(const char*, fmode_t);

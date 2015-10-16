@@ -497,7 +497,8 @@ void as_activate(sos_addrspace_t* as) {
  * Should be called prior to the initialisation of a new process' TCB
  * @return pointer to the newly created address space (vspace)
  */
-void as_create(sos_addrspace_t **pas) {
+// TODO return error
+int as_create(sos_addrspace_t **pas) {
     int err;
     dprintf(3, "[AS] as_create\n");
     sos_addrspace_t *as = NULL;
