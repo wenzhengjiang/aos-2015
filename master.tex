@@ -38,44 +38,51 @@
 \setlength{\parskip}{\baselineskip}%
 \setlength{\parindent}{0pt}%
 \pagenumbering{arabic}
-  \begin{center}
-    \vspace*{60mm}
-    {\Large \bfseries{AOS Group 3 - SOS Design Documentation}}\\[8mm]
-    19$^{th}$ October, 2015\\[20mm]
-  \end{center}
+\begin{center}
+  \vspace*{60mm}
+  {\Large \bfseries{AOS Group 3 - SOS Design Documentation}}\\[8mm]
+  19$^{th}$ October, 2015\\[20mm]
+\end{center}
 \newpage
 \tableofcontents
 \newpage
 \section{Overview}
 The Simple Operating System, or SOS, performs resource management for
-applications running on top of the seL4 Microkernel on ARMv7.  This document
-describes the design of SOS as implemented by AOS Group 3.  For each key
-design choice in the project, it also discusses benefits and trade-offs of the
-decision, and possible alternative approaches.
+applications running on top of the seL4 Microkernel on ARMv7, specifically the
+SABRE Lite i.MX6.  This document describes the design of SOS as implemented by
+AOS Group 3.  For each key design choice in the project, it also discusses
+benefits and trade-offs of the decision, and possible alternative approaches.
+Refer to Doxygen documentation for implementation-specific details and
+conventions.
 
 There are 4 distinct problem-areas that have been explored in SOS: Interrupts
-and IPC, Memory, I/O and Process Management.  Interrupts and IPC requests are
-essential for all interaction with SOS, and thus offer a solid starting point
-for introducing the system architecture from a higher level perspective.
+and Syscalls, Memory, I/O and Process Management.  Interrupts and Syscalls
+requests are essential for all interaction with SOS, and thus offer a solid
+starting point for introducing the system architecture from a higher level
+perspective.
 
-\section{Interrupts and IPC}
-\subsection{Concurrency Model}
+\section{Interrupts and System Calls}
+\subsection{Execution Model}
+\subsubsection{Design}
+Implemented in: \texttt{/apps/sos/src/main.c}
+
 At its core, SOS uses an event-based model implemented using
 \emph{continuations}.  A continuation allows for non-blocking behaviour during
-otherwise blocking requests (for example I/O) by providing a way to preserve
-execution state.
+otherwise by blocking in a single-threaded implementation (for example I/O) by
+providing a way to preserve execution state.  This allows for a
+single-threaded implementation, while preserving many of the performance
+characteristics of a multi-threaded implementation.
 
-\subsubsection{Design}
-Pertinent files: /apps/sos/src/main.c
-
-TODO: Talk about threads and event-based models, introduce continuations.
-
-A continuation is specific to a process, and is used to track the current
-state of execution and allow event handlers to be re-entrant and are thus used
-to control side-effects of the execution of fuctions.
+A continuation is specific to a process and is used to track the current state
+of execution.  For each syscall, the requesting process is identified by an
+IPC badged with its Process ID (see `Process Management' for details) thus
+allowing association between the process and the syscall.  Similarly,
+interrupt handlers also are provided with the Process ID should it be
+utilising a continuation.  By allowing execution state to be isolated on a
+per-process basis, and thus allow execution t restored to preserve
 
 A continuation in SOS is a struct which describes the current execution
-context.  The struct has many fields, including:
+context.  The struct has many fields, which include:
 
 \begin{itemize}
 \item the original syscall number
@@ -83,7 +90,18 @@ context.  The struct has many fields, including:
 \item the number of bytes read or written
 \end{itemize}
 
-\subsubsection{Discussion}
+There are two further mechanisms for controlling the flow of execution, which
+effectively implement a blocked and ready queue:
+\begin{description}
+\item[longjmp()] provides a mechanism whereby jumping to the `ipc\_event\_buf'
+  can halt execution of the process, where it can later be resumed by a
+  callback handler;
+\item[add\_ready\_proc()] provides a `ready queue', where a process can be
+  flagged as ready by a callback handler, by this function to add the process
+  to the queue
+\end{description}
+
+\subsubsection{TODO Discussion}
 TODO: Talk about threads and event-based models
 
 The design of continuation is conceptually simple, and allows for
@@ -111,45 +129,8 @@ to both static analysis, and better scalability, though the added complexity
 of managing these data structures exceeded the benefits for the current
 incarnation of SOS.
 
-\subsection{Timer Interrupts}
-Pertinent files: /libs/libclock/src/clock.c
-
-\subsubsection{Design}
-The timer interrupt was implemented using the GPT timer on the Sabre.
-
-The GPT timer allows multiple Output Compare Registers to be set
-simultaneously, and thus affords the ability to support two different modes of
-behaviour.
-
-\begin{enumerate}
-\item Regular 100ms kernel tick
-\item Timed callback events
-\end{enumerate}
-
-Both timed callbacks and kernel tick callbacks are exposed via an interface
-for registering callback functions when these events occur.
-
-All kernel tick callbacks are called with each kernel tick.  Thus the
-developer needs to be aware of the execution time required for a kernel tick
-callback, and should ensure that this execution time is minimised.
-
-Timed callbacks are called after a timeout expires.  This is implemented by
-ensuring that all registrations are ordered at registration-time, and setting
-the corresponding Output Compare Register to the next event in the queue.
-TODO: How overflow is accounted for.
-
-Timed callbacks are removed after being fired, and thus are excellent
-candidates for use in functions such as sleep.  For this reason kernel tick
-events is distingiushed from timed callback events.
-
-\subsubsection{Discussion}
-Alternatively the EPIT timer could have been used to implement this
-functionality.  Both EPIT and GPT timers on the Sabre have a very similar
-interface, and both could equally have been used.  However it was elected that
-the GPT is slightly simpler and fulfills all requirements.
-
-\subsection{Syscall Handling}
-Pertinent files: /apps/sos/src/handler.c, /apps/sos/src/syscall.c
+\subsection{System Calls}
+Implemented in: \texttt{/apps/sos/src/handler.c}, \texttt{/apps/sos/src/syscall.c}
 
 \subsubsection{Design}
 As this is a continuation-based model, each syscall is implemented in two
@@ -167,164 +148,224 @@ access to the syscalls implemented within SOS: the syscall lookup is an index
 into the array based on the syscall number, and the handler to be executed is
 also an index.
 
-The dispatch is performed via a single function, which executes the setup
-handler should for the desired syscall (should one be defined), storing the
-fact that this has been executed in the continuation.  The dispatcher will
-then invoke the execution handler for that syscall.
+A dispatching funcnion, \texttt{handle\_syscall()} executes the setup handler
+should for the desired syscall (should one be defined), storing the fact that
+this has been executed in the continuation.  The dispatcher will then invoke
+the execution handler for that syscall.
 
 Should the execution of a syscall handler result in an operation which would
 otherwise be blocking, execution will return to the syscall loop until an
-interrupt occurs based on the completion of the event.
+interrupt occurs based on the completion of the event.  Refer to the previous
+section for details.
 
-TODO: Discuss callback mechanisms (here or elsewhere)
+During the execution of a system call, three functions are used to capture and
+access state:
+\begin{description}
+\item[current\_process] The process which invoked the current system call.
+\item[set\_current\_process] Set the current process based on a Process ID (see
+  `Process Management' for details)
+\item[effective\_process] The process which SOS is acting on behalf of.  This
+  is usually identical to current\_process(), with the exception being spawning
+  a child process.  It is defined in terms of the current process.
+\end{description}
+At the completion of a syscall, the state of the process' continuation is
+reset.
 
-\subsubsection{Discussion}
+\subsubsection{TODO Discussion}
 TODO: Work out what the scope of this section is/should be and then discuss.
 
-\section{Memory}
-\subsection{Page Faults}
-Pertinent files: /apps/sos/src/handler.c
+\subsection{Timer Interrupts}
+Implemented in: \texttt{/libs/libclock/src/clock.c}
 
 \subsubsection{Design}
-Page faults within SOS occur in a number of circumstances:
-\begin{itemize}
-\item When the process attempts to read data, which has been paged to disk, back into memory
-\item For lazy-loading data in from an ELF binary
-\item Faulting-in new pages within the heap or stack
-\item As a means of setting the frame referenced bit for second chance replacement\
-\end{itemize}
+The timer interrupt was implemented using the GPT timer on the SABRE.
 
-TODO: Discuss the different events that can occur, and how those are implemented.
-\subsubsection{Discussion}
+The GPT timer allows multiple Output Compare Registers to be set
+simultaneously, and thus affords the ability to support two different types of
+interrupts.
 
+\begin{enumerate}
+\item Regular 100ms kernel tick
+\item Timed callback events
+\end{enumerate}
 
+Both timed callbacks and kernel tick callbacks are exposed via an interface
+for registering callback functions when these events occur.
+
+All kernel tick callbacks are called with each kernel tick.  Thus a developer
+needs to be aware of the performance characteristics of the tick handler being
+registered, and should ensure that the worst-case execution time is minimised.
+
+Timed callbacks are called after a timeout expires.  This is implemented by
+ensuring that all registrations are ordered at registration-time, and setting
+the corresponding Output Compare Register to the next event in the queue.  The
+next event in the queue is determined through a search, where overflow is
+accounted for by searching for the event such that the difference between the
+current time, and the event time is minimal.
+
+Timed callbacks are removed after being fired and are used to implement the
+\texttt{sleep} syscall.  As kernel tick events satisfy different semantics to
+timed callback events in the implementation, they are distinguished in the
+interface.
+
+\subsubsection{TODO Discussion}
+Alternatively the EPIT timer could have been used to implement this
+functionality.  Both EPIT and GPT timers on the Sabre have a very similar
+interface, and both could equally have been used.  However it was elected that
+the GPT is slightly simpler and fulfills all requirements.
+
+TODO: Discuss perf characteristics. Linear registration, linear search.  We
+could do better.  Tick registration is linear: again, could do better.
+
+\section{System Memory}
 \subsection{Frame Table}
-Pertinent files: /apps/sos/src/frametable.c
-
+Implemented in: \texttt{/apps/sos/src/frametable.c}
+\subsubsection{Design}
 The frame table is the representation of physical memory. This memory is
 mapped by applications and also used by SOSH.  Only frames are represented by
 the frametable, with other datatypes residing elsewhere in the system.
-\subsubsection{Design}
-(todo)Linked array data structure allocated at boot-time.
 
-\subsubsection{Discussion}
+The frame table is an array of structs, where each struct contains the details
+specific to the frame (namely, its address and CPtr), as well as a pointer to
+the next element.  When SOS bootstraps, all elements of the array are
+allocated, and the free pointer chains each node to its successor.
+
+This structure serves as a list of free frames: as frames are allocated, they
+are taken from the head of the list, and as they are freed, they are returned
+to the head of the list.  Thus giving a O(1) performance for allocation and
+deallocation of frames.  Similarly, as the structure is an array, it also
+offers O(1) lookup as the address can be transformed in to an index into the
+array trivially.
+
+\subsubsection{TODO Discussion}
 We could also have represented other datatypes within the `frame table' and
 provided a mapping back to them, though the vast majority of typed memory in
 the system is typed as frames, and so the added complexity of managing other
 datatypes in the frame table outweighs the minimal benefit it offers.  Instead
-memory of types other than smallpageobject(todo:check name) is stored
+memory of types other than \texttt{seL4\_ARM\_SmallPageObject} is stored
 explictly in other data structures.
 
-\subsection{Page Replacement}
-Pertinent files: /apps/sos/src/page\_replacement.c, /apps/sos/src/swap.c
+TODO: Comment on impact at bootstrap time and memory consumption due to
+up-front allocation.
 
-When the frame table is fully allocated, and further attempts to allocate
-frames are made, the system begins swapping pages to disk.
-
-\subsubsection{Design}
-Swapping occurs in a few stages.
-- select the process
-- select the page (second chance)
-- evict
-- read in page on disk (if needed)
-
-\subsubsection{Discussion}
-
-\subsection{Swap File Management}
-\subsubsection{Design}
-Specialised functions are used for handling the write and read from disk.  We
-write to a constant filename `.sos\_swap' over NFS.  swap.c contains functions
-dedicated for the management of this file and performing the swapping actions,
-while page\_replacement.c controls the process for selecting, evicting and
-reading pages and ensuring all internal state remains consistent.
-
-The swap table provides a representation of the state of the swap file.  It is
-implemented using an linked array data structure similar to the frame table.
-The frame table is used to store the frames required for the swap table.
-
-We do simple checksumming to protect against modification.
-\subsection{Discussion}
-
-
-\section{I/O}
-Pertinent files: /apps/sos/src/file.c
-
-\subsection{IO Vectors}
-Pertinent files: /apps/sos/src/file.c
-
-A representation of client application or SOS-internal memory regions,
-allowing memory to be mapped for I/O on an as-needed basis.
+\subsection{Swap File}
+Implemented in: \texttt{/apps/sos/src/frametable.c}
 
 \subsubsection{Design}
-An IO Vector provides the following datastructure:
+When the system encounters contention for the available physical memory
+resources, some memory may be swapped to disk.  The data structure which
+underpins the swap file is similar to that which underpins the frame table: an
+array whose free nodes form a linked list, and as such offers the same
+performance characteristics as the frame table.
 
-%\begin{table}
-%  \begin{tabular}[l|l]
-%  \end{tabular}
-%\end{table}
+When reading data from the swap file, or otherwise freeing it, the swap file
+is not altered.
 
-\subsubsection{Discussion}
-The IO Vector is not a strictly required datastructure: it is an abstraction
-over the current state of an I/O operation.  This is an abstraction
-particularly useful for our design as NFS driver, which provides for a
-significant portion of the total I/O ops of the system, implements callback
-semantics.
+The swap structure also features a checksum field to protect against altered
+or corrupted data from being read-in from disk.
 
-\subsection{Serial Device}
-Pertinent files: /apps/sos/src/serial.c
-
-Single-reader / multiple-writer serial device implementation.
-
-\subsubsection{Design}
-reader\_pid
-storage and use of reader buffer
-
-\subsubsection{Discussion}
-
-
-\subsection{NFS}
-Pertinent files: /apps/sos/src/sos\_nfs.c
-
-\subsubsection{Design}
-
-\subsubsection{Discussion}
-
-\subsection{IO Device}
-\subsubsection{Design}
-An IO device is an abstraction over both block and character devices.  In the
-case of SOS, this abstracts both Serial and NFS to create a uniform IO
-interface through mapping function pointers to their respective
-implementations.
-
-\subsubsection{Discussion}
-The IO Device is a light-weight mechanism to abstract access to IO-related
-drivers.  An alternative to this would be the implementation of a VFS-like
-abstraction.  However, given that the goals of the project were to support a
-single, flat filesystem, and a serial device, this was deemed an overly
-extravagant abstraction.
+\subsubsection{TODO Discussion}
+The current checksum implementation is a summation of the character values of
+the file, and so does not protect against transposition or malicious
+alteration.  This could be addressed using a more sophisticated checksumming
+algorithm.
 
 \section{Process Management}
-Pertinent files: /apps/sos/src/process.c, /apps/sos/src/elf.c
-
 \subsection{Page Table}
-Pertinent files: /apps/sos/src/addrspace.c
+Implemented in: \texttt{/apps/sos/src/addrspace.c}
 
 \subsubsection{Design}
-2-level page table: 10 bits, 10 bits, 12 bits.
-PTEs contain cap, frame addr
-lower bits of frame addr used for frame state flags: swapd, refd, pinned.
+SOS implements a two-level page table within a process' address space.  The
+page table divides the virtual address as follows:
 
-PTs / PDs mapped in to seL4
-\subsubsection{Discussion}
+TODO: INSERT DIAGRAM
+
+This scheme allows each the Page Directory and the second level of the Page
+Table to address 1024 4-byte entries within one 4096-byte frame: each 4-byte
+entry is a pointer to a Page Table Entry.
+
+A Page Table Entry (PTE) stores the frame address and page cap corresponding
+to the virtual address.  As only 20 bits of the frame address are actually
+used, the lower 12 bits in the PTE are available to be reused for other
+purposes.  Currently, 3 of these lower-most bits are used to provide flags
+indicating: whether the page data is stored on-disk, whether the page is
+pinned, and whether it has been referenced.  (See `Page Replacement' for
+details.)
+
+This structure allows for efficient lookup: the upper 10 most bits index into
+the Page Directory, the next upper 10-most bits index in to the second level
+of the Page Table.
+
+For processes running upon the seL4 Microkernel efficiently, seL4 exposes its
+own Page Table implementation.  To manage this, the capability for the seL4
+Page Directory is stored in the process' Address Space, and the capability to
+each Page Table stored in a Linked List.
+
+The linked list is used as the size of a seL4 Page Directory and seL4 Page
+Table are 12 and 8 bits respectively, and thus do not map cleanly in to the
+SOS Page Table design.  However the data stored in the linked list never need
+be accessed explicitly, and exists only for the purpose of releasing the
+resource.  A linked list provides constant-time insertion while providing a
+simple design at the time of releasing the resources.
+
+\subsubsection{TODO Discussion}
 Varying from seL4 implementation: 8/12
 Why we did it
 How we accounted for implications of that.
 
-\subsection{Regions}
+\subsection{Page Replacement}
 \subsubsection{Design}
+SOS implements a second-chance local page replacement algorithm, which takes
+place over a number of steps, and occurs in the event that there are isn't any
+frames available in the frame table to allocate to a process.
+
+\begin{enumerate}
+\item Select the process from which to evict a page.
+\item Select a page from that process using a second chance eviction model.
+\item Write the page to the swap file.
+\end{enumerate}
+
+Selecting the process to evict from is based on a threshold applied across all
+process: whether the process exceeds the average number of `evictable' pages
+across all processes.  The first process identified which satisfies this
+requirement is selected for eviction, or if there isn't any process satisfying
+this requirement, the page is evicted from the process which SOS is acting on
+behalf of.
+
+In order to guarantee fairness of the system, the process for which eviction
+takes place is tracked, and subsequent selection takes place from the
+following process.  Similarly, in order to prevent starvation as a result of
+two or more processes competing indefinitely for frames, so that they are able
+to make progress while the system is under very high resource constraints, the
+algorithm may randomly select the current process for eviction.
+
+The page replacement algorithm uses a circular linked list of pages.  For each
+page, if the referenced bit for that page table entry is found to be zero, the
+page is selected, otherwise the referenced bit is set to zero and the
+algorithm proceeds to the next allocated page.
+
+Pages which are pinned, or already swapped to disk are not considered valid
+for selection.  Thus there is the potential that there are no pages in the
+process which are valid selection.  In this event, (i.e., the event we iterate
+through the loop more than twice), the process which SOS is acting on behalf
+of is killed in order to relieve the memory contention.
+
+Once a page has been selected, the contents of the frame are written to the
+next available location in the swap file.  During the copy, the PTE is marked
+as `pinned', and so is not valid for subsequent selection.  Finally once the
+write is complete the page is marked as `swapd', indicating that subsequent
+accesses to this page must be read from disk, and use of the corresponding
+frame is made available to the process requiring it.
+
+\subsubsection{TODO Discussion}
+
+\subsection{Regions}
+Implemented in: \texttt{/apps/sos/src/addrspace.c}, \texttt{/apps/sos/src/handler.c}
+
+\subsubsection{TODO Design}
 Regions are implemented as a linked list.  Each region contains start, end,
 rights, and an addr into the elf file.
-\subsubsection{Discussion}
+\subsubsection{TODO Discussion}
 There is no optimisation on the lookup cost of a region.  This data structure
 is searched in a number of cases, but most importantly, in the event of a VM
 Fault.  A binary may have as few as 4 segments mapped in to the address space,
@@ -334,22 +375,99 @@ significant degradation.
 
 A better approach may be... TODO
 
-\subsection{PID Management}
-Pertinent files: /apps/sos/src/process.c
+\subsection{Page Faults}
+Implemented in: \texttt{/apps/sos/src/handler.c}
 
-\subsubsection{Design}
+\subsubsection{TODO Design}
+Page faults within SOS occur in a number of circumstances:
+
+\begin{itemize}
+\item for lazy-loading data in from an ELF binary;
+\item faulting-in new pages within the heap or stack, and
+\item when the process attempts to read data, which has been paged to disk, back into memory;
+\item as a means of setting the frame referenced bit for second chance replacement
+\end{itemize}
+
+SOS implements lazy loading of binaries.  
+\subsubsection{TODO Discussion}
+
+\subsection{Processes}
+Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
+
+\subsubsection{TODO Design}
+The design for Process IDs allows for constant-time creation, lookup and
+removal, and reuses process IDs minimally.  This is achieved via an array of
+PID entries, where a PID entry is a double-linked node containing a process ID
+and a flag to indicate whether it corresponds to a running process.
+
+
 Doubly-linked list over an array.
 Minimised PID reuse.
 Mechanisms for accounting for race condition when PID is reused
 
-\subsubsection{Discussion}
-SOS provides a high-performance PID implementation, where PID lookup,
-creation, and removal are all constant time operations.
+\subsubsection{TODO Discussion}
+Neither the PID nor the running flag are strictly required.  A PID could
+equally have been derivedb via pointer arithmetic between the beginning of,
+and the current index of the table.  Similarly the running flag could be
+derived via a lookup into the process table.  However this does afford the
+opportunity to verify the correctness of data structure manipulation, and
+clarifies the implementation.
 
 SOS also accounts for a race condition where the association between a
 callback may become associated with the incorrect process should the system
 have a high utilisation of the available PIDs allowed for the system.
 
+\section{I/O}
+\subsection{IO Vectors}
+Implemented in: \texttt{/apps/sos/src/file.c}
+
+A representation of client application or SOS-internal memory regions,
+allowing memory to be mapped for I/O on an as-needed basis.
+
+\subsubsection{TODO Design}
+An IO Vector provides the following datastructure:
+
+TODO
+
+\subsubsection{TODO Discussion}
+The IO Vector is not a strictly required datastructure: it is an abstraction
+over the current state of an I/O operation.  This is an abstraction
+particularly useful for our design as NFS driver, which provides for a
+significant portion of the total I/O ops of the system, implements callback
+semantics.
+
+\subsection{Serial Device}
+Implemented in: \texttt{/apps/sos/src/serial.c}
+
+Single-reader / multiple-writer serial device implementation.
+
+\subsubsection{TODO Design}
+reader\_pid
+storage and use of reader buffer
+
+\subsubsection{TODO Discussion}
+
+
+\subsection{NFS}
+Implemented in: \texttt{/apps/sos/src/sos\_nfs.c}
+
+\subsubsection{TODO Design}
+
+\subsubsection{TODO Discussion}
+
+\subsection{IO Device}
+\subsubsection{TODO Design}
+An IO device is an abstraction over both block and character devices.  In the
+case of SOS, this abstracts both Serial and NFS to create a uniform IO
+interface through mapping function pointers to their respective
+implementations.
+
+\subsubsection{TODO Discussion}
+The IO Device is a light-weight mechanism to abstract access to IO-related
+drivers.  An alternative to this would be the implementation of a VFS-like
+abstraction.  However, given that the goals of the project were to support a
+single, flat filesystem, and a serial device, this was deemed an overly
+extravagant abstraction.
 
 \end{document}
 %%% Local Variables:
