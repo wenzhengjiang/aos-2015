@@ -156,14 +156,14 @@ execution handler is invoked.  This allows a single, consistent means of
 storing any arguments provided via IPC within the continuation, so that they
 may be available to the execution handler.
 
-The syscall dispatch is respresented as a matrix, whereby the number of
+The syscall dispatch is represented as a matrix, whereby the number of
 implemented syscalls form the `rows', and function pointers to the setup and
 execution handlers form the `columns'.  This gives simple and constant-time
 access to the syscalls implemented within SOS: the syscall lookup is an index
 into the array based on the syscall number, and the handler to be executed is
 also an index.
 
-A dispatching funcnion, \texttt{handle\_syscall()} executes the setup handler
+A dispatching function, \texttt{handle\_syscall()} executes the setup handler
 should for the desired syscall (should one be defined), storing the fact that
 this has been executed in the continuation.  The dispatcher will then invoke
 the execution handler for that syscall.
@@ -188,15 +188,15 @@ reset.
 
 \subsubsection{Discussion}
 The approach to splitting the setup and execution handler for the syscalls
-proved largely successful and simplified the implementation notedly.  However,
+proved largely successful and simplified the implementation substantially.  However,
 within the execution handler, the approach to continuations whereby numerous
-restartable codeblocks may be contained in a single function, could prove
+restartable code-blocks may be contained in a single function, could prove
 challenging to debug.
 
-Extending this concept across the entirety of the contination, whereby a
+Extending this concept across the entirety of the continuation, whereby a
 continuation would contain a list of outstanding execution events which may
 (or may not) be required to satisfy each syscall could be a viable approach
-and simplify both the syscall implementation, nad the continuation structure.
+and simplify both the syscall implementation, and the continuation structure.
 Currently many fields in the continuation denote execution state, and this
 approach would allow that state of execution to be separated from other state
 and represented consistently.
@@ -251,7 +251,7 @@ minimal performance degradation on SOS: registration is used infrequently and
 the search occurs only when a callback timeout occurs.
 
 While the performance impact is minor in typical applications, it does permit
-a malicious actor to affect the availablity of SOS, and thus would need to be
+a malicious actor to affect the availability of SOS, and thus would need to be
 improved.
 
 \section{System Memory}
@@ -270,7 +270,7 @@ allocated, and the free pointer chains each node to its successor.
 This structure serves as a list of free frames: as frames are allocated, they
 are taken from the head of the list, and as they are freed, they are returned
 to the head of the list.  Thus giving a O(1) performance for allocation and
-deallocation of frames.  Similarly, as the structure is an array, it also
+de-allocation of frames.  Similarly, as the structure is an array, it also
 offers O(1) lookup as the address can be transformed in to an index into the
 array trivially.
 
@@ -280,15 +280,15 @@ provided a mapping back to them, though the vast majority of typed memory in
 the system is typed as frames, and so the added complexity of managing other
 datatypes in the frame table outweighs the minimal benefit it offers.  Instead
 memory of types other than \texttt{seL4\_ARM\_SmallPageObject} is stored
-explictly in other data structures.
+explictily in other data structures.
 
 During booting, the frame table is allocated in full, with typed frames for
 the frame table being allocated `within' the frame table during allocation.
-As the datastructure is 12 bytes in size under the target architecture, this
+As the data-structure is 12 bytes in size under the target architecture, this
 results in approximately 768 frames of memory being consumed per GiB of
 physical memory, delaying boot time.
 
-Furthermore, as the datastructure for a frame doubles to provide pointers to
+Furthermore, as the data-structure for a frame doubles to provide pointers to
 the next free element, under high memory contention situations approximately
 1/3 of the frame table size will be used to store NULL pointers.  Improving
 the representation of the frame table would allow for another 256 frames to be
@@ -307,7 +307,7 @@ performance characteristics as the frame table.
 When reading data from the swap file, or otherwise freeing it, the swap file
 is not altered.
 
-The swap structure also features a checksum field to protect against altered
+The swap structure also features a check-sum field to protect against altered
 or corrupted data from being read-in from disk.
 
 \subsubsection{Discussion}
@@ -319,7 +319,7 @@ While pre-allocing the frame table could be argued for: the memory it consumes
 would be consumed anyway, and it trades off boot time performance for run-time
 performance, this argument cannot be made with the swap file.  Indeed, the
 system may be forced to perform swapping due to the frames occupied by the
-datastructure representing the swap file.
+data-structure representing the swap file.
 
 A preferable solution would be the use of a data structure which allocated
 memory in frames on demand, which could be represented as a two-level `page
@@ -547,7 +547,7 @@ An IO Vector provides the following fields:
 \end{description}
 
 The benefit of the IO Vector is that it allows for otherwise non-contiguous
-pages to be treated as though contigous.  It also provides a means for
+pages to be treated as though contiguous.  It also provides a means for
 representing the progress of an IO operations, where the IO Vector need simply
 be updated to reflect the current progress of an operation.
 
@@ -638,11 +638,6 @@ single, flat filesystem, and a serial device, this was deemed an overly
 extravagant abstraction.
 
 \end{document}
-%%% Local Variables:
-%%% mode: latex
-%%% TeX-master: t
-%%% End:
-
 %%% Local Variables:
 %%% mode: latex
 %%% TeX-master: t
