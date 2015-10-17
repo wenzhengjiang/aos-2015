@@ -17,7 +17,7 @@ typedef struct region {
     client_vaddr end;
     seL4_CapRights rights;
     struct region* next;
-    seL4_Word elf_addr;
+    seL4_Word elf_addr; // position of this segment in elf file
 } sos_region_t;
 
 typedef struct kernel_page_table {
@@ -29,10 +29,10 @@ typedef struct kernel_page_table {
 typedef struct page_table_entry {
     seL4_CPtr page_cap;
     struct page_table_entry *next;
-    sos_vaddr addr : 24;
-    bool refd : 1;
-    bool pinned : 1;
-    bool swapd  : 1;
+    sos_vaddr addr : 24; // swap_addr when swapd bit is on; frame_addr when swapd bit is off
+    bool refd : 1;      // reference bit
+    bool pinned : 1;    // page is pinned, so it can't be swaped
+    bool swapd  : 1;    // page is swaped to disk
 } pte_t;
 
 typedef pte_t **pt_t;
@@ -50,7 +50,7 @@ typedef struct address_space {
     sos_vaddr sos_ipc_buf_addr;
     kpt_t *kpts;
     size_t pages_mapped;
-
+    // page list used in swaping algorithm
     pte_t* repllist_head;
     pte_t* repllist_tail;
 } sos_addrspace_t;
