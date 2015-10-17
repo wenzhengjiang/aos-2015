@@ -101,6 +101,12 @@ effectively implement a blocked and ready queue:
   to the queue
 \end{description}
 
+At the completion of a syscall, the function
+\texttt{syscall\_end\_continuation()} is used to reply to the client in a
+consistent manner, ensuring that all execution state is released and reset
+appropriately.  The caller to syscall\_end\_continuation indicates the process
+to reply to, the return code, and whether or not the syscall was successful.
+
 \subsubsection{TODO Discussion}
 TODO: Talk about threads and event-based models
 
@@ -362,9 +368,11 @@ frame is made available to the process requiring it.
 \subsection{Regions}
 Implemented in: \texttt{/apps/sos/src/addrspace.c}, \texttt{/apps/sos/src/handler.c}
 
-\subsubsection{TODO Design}
-Regions are implemented as a linked list.  Each region contains start, end,
-rights, and an addr into the elf file.
+\subsubsection{Design}
+Regions are implemented as a singly-linked list.  Each region contains start,
+end, rights, and an offset for the starting location of that region in the elf
+file.
+
 \subsubsection{TODO Discussion}
 There is no optimisation on the lookup cost of a region.  This data structure
 is searched in a number of cases, but most importantly, in the event of a VM
@@ -378,7 +386,7 @@ A better approach may be... TODO
 \subsection{Page Faults}
 Implemented in: \texttt{/apps/sos/src/handler.c}
 
-\subsubsection{TODO Design}
+\subsubsection{Design}
 Page faults within SOS occur in a number of circumstances:
 
 \begin{itemize}
@@ -388,22 +396,49 @@ Page faults within SOS occur in a number of circumstances:
 \item as a means of setting the frame referenced bit for second chance replacement
 \end{itemize}
 
-SOS implements lazy loading of binaries.  
+In the event a page corresponding to a virtual address has not been created
+within a processes address space when it faults, a new page will be created
+dynamically.  When this occurs the corresponding region is used to determine
+whether any data should subsequently be loaded in to that page.  This is
+indicated by an elf file offset being defined for the corresponding region.
+Therefore in this event content for code and data segments will be loaded from
+the ELF binary, while zeroed pages will be allocated for the stack and heap as
+the process faults within those regions.
+
+Data paged to disk will be indicated by the `swapd' bit in the corresponding
+PTE.  In the event a fault occurs on a page with this bit set, the address
+(which corresponds to an offset within the swap file) will be used to read in
+the page.  During the read, another page may or may not be evicted depending
+on whether physical memory is available to facilitate the replacement.
+
+The final scenario in which page faults will occur is in order to set the
+`referenced' bit (`refd') of the page to facilitate second-chance page
+replacement.  During the replacement algorithm, pages where the referenced bit
+is unset will also be unmapped from the process' address space.  Thus when a
+fault occurs on a page where the referenced bit is not set, though it is still
+in memory, the referenced bit will be set and the page mapped back in to the
+process' address space.
+
 \subsubsection{TODO Discussion}
 
 \subsection{Processes}
 Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
 
-\subsubsection{TODO Design}
+\subsubsection{Design}
 The design for Process IDs allows for constant-time creation, lookup and
-removal, and reuses process IDs minimally.  This is achieved via an array of
-PID entries, where a PID entry is a double-linked node containing a process ID
-and a flag to indicate whether it corresponds to a running process.
+removal, and will reuse process IDs minimally.  This is achieved via an array
+of `PID entries', where a PID entry is a double-linked node containing a
+process ID and a flag to indicate whether it corresponds to a running process.
 
-
-Doubly-linked list over an array.
-Minimised PID reuse.
-Mechanisms for accounting for race condition when PID is reused
+Closely related to the use of process IDs is the means by which a process is
+identified during a callback.  SOS accounts for potential race conditions by
+using a reference to a `callback' structure, which contains the creation time
+of the callback, and the PID corresponding to the process which the callback
+was created on behalf of.  Given that the creation time of the process is
+known, it can be determined whether the process now owning the PID for the
+callback is the currently running process; a process starting after the
+creation time of the callback cannot own the callback, and thus the callback
+is discarded.
 
 \subsubsection{TODO Discussion}
 Neither the PID nor the running flag are strictly required.  A PID could
@@ -413,54 +448,106 @@ derived via a lookup into the process table.  However this does afford the
 opportunity to verify the correctness of data structure manipulation, and
 clarifies the implementation.
 
-SOS also accounts for a race condition where the association between a
-callback may become associated with the incorrect process should the system
-have a high utilisation of the available PIDs allowed for the system.
-
 \section{I/O}
 \subsection{IO Vectors}
 Implemented in: \texttt{/apps/sos/src/file.c}
 
-A representation of client application or SOS-internal memory regions,
-allowing memory to be mapped for I/O on an as-needed basis.
+\subsubsection{Design}
+An IO Vector is a representation of client or SOS-internal pages, allowing
+memory to be mapped for I/O on-demand.
 
-\subsubsection{TODO Design}
-An IO Vector provides the following datastructure:
+An IO Vector provides the following fields:
+\begin{description}
+\item[vstart] The starting address of the frame or virtual address (conditional)
+\item[sz] The length of the operation to occur.  sz will be set such that the
+  operation does not exceed the page given the starting address `vstart'.
+\item[next] The following IO Vector node.
+\item[sos\_iov\_flag] Flag indicating whether the IO Vector node corresponds to
+  a SOS frame, or process virtual address (thereby indicating whether
+  address translation is required)
+\end{description}
 
-TODO
+The benefit of the IO Vector is that it allows for otherwise non-contiguous
+pages to be treated as though contigous.  It also provides a means for
+restarting IO operations, and the IO Vectors needs simply be updated to
+reflect the current progress of an operation.
+
+IO Vectors are used to represent most I/O operations in SOS.
 
 \subsubsection{TODO Discussion}
-The IO Vector is not a strictly required datastructure: it is an abstraction
-over the current state of an I/O operation.  This is an abstraction
-particularly useful for our design as NFS driver, which provides for a
-significant portion of the total I/O ops of the system, implements callback
-semantics.
+- Current usage means that we may do short IO ops (e.g. 10 bytes to finish
+reading a page), even though we could do a large IO op (4k) and write across
+IO Vectors simultaneously.
 
 \subsection{Serial Device}
 Implemented in: \texttt{/apps/sos/src/serial.c}
 
-Single-reader / multiple-writer serial device implementation.
+\subsubsection{Design}
+The serial device implementation satisfies single-reader / multiple-writer
+semantics, where the process is only permitted to read should no other process
+have the serial device open for reading.  This uses global state (named
+`reader\_pid`) within the serial driver, which allows the owning process to be
+identified in constant time.
 
-\subsubsection{TODO Design}
-reader\_pid
-storage and use of reader buffer
+Reads in SOS are buffered, though only the most recent line is preserved; any
+subsequent line is discarded.  This provides bounds over the size of the
+buffer, while allowing non-blocking behaviour should have already been
+provided from the user.
+
+When the read() is invoked by the client, the pages corresponding to that read
+are pinned, and subsequently unpinned when the read operation returns to the
+caller.  As the buffer is at most 1024 bytes, up to two pages can be pinned
+because of this.
+
+The serial driver is initialised at boot-time.
 
 \subsubsection{TODO Discussion}
+Storage and use of reader buffer
 
+Discuss the reason for pinning.
 
 \subsection{NFS}
 Implemented in: \texttt{/apps/sos/src/sos\_nfs.c}
 
-\subsubsection{TODO Design}
+\subsubsection{Design}
+The NFS implementation in SOS relies heavily on callbacks and continuations,
+which have been discussed previously.  Prior to spawning a request for which a
+subsequent callback is expected, a `callback info' struct will be allocated,
+which contains the time the callback was initiated and the process initiating
+the callback.  The address of this is used as the token, and uniquely
+identifies the context for the callback once the callback is realised.
+
+The PID from the callback is used to set the context for the subsequent
+execution, in the same was as the badge for a process' IPC is used to set the
+context for a syscall.
+
+Detection of completion of the syscall is handled individually in each
+callback.  In the event of error, or completion, the callback is responsible
+for triggering an appropriate reply to the client over IPC.
 
 \subsubsection{TODO Discussion}
 
 \subsection{IO Device}
-\subsubsection{TODO Design}
+\subsubsection{Design}
 An IO device is an abstraction over both block and character devices.  In the
 case of SOS, this abstracts both Serial and NFS to create a uniform IO
 interface through mapping function pointers to their respective
 implementations.
+
+Thus an IO Device provides an interface for all available IO operations over
+any driver.  Thus it currently exposes:
+
+\begin{itemize}
+\item open
+\item close
+\item read
+\item write
+\item getdirent
+\item stat
+\end{itemize}
+
+For both the serial and NFS drivers.  As the serial driver does not support
+some of these operations, those operations are undefined (NULL).
 
 \subsubsection{TODO Discussion}
 The IO Device is a light-weight mechanism to abstract access to IO-related
