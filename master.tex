@@ -107,11 +107,23 @@ consistent manner, ensuring that all execution state is released and reset
 appropriately.  The caller to syscall\_end\_continuation indicates the process
 to reply to, the return code, and whether or not the syscall was successful.
 
-\subsubsection{TODO Discussion}
-TODO: Talk about threads and event-based models
+\subsubsection{Discussion}
+While a multi-threaded kernel does offer performance advantages through the
+virtue of being able to serve multiple processes simultaneously, the benefits
+of multi-threading in a kernel are somewhat diminished.  There are two reasons
+for this: the first of which is locks, which limit scalability, the second of
+which is that time spent in the kernel should be designed such that it is
+minimised.  Thus this is primarily a concern for high performance
+applications.  SOS, while designed for efficiency, is not intended for high
+performance applications.
 
-The design of continuation is conceptually simple, and allows for
-type-checking at compile-time, which affords some correctness guarantees.
+The benefit the event-based system provides is removing much of the complexity
+which makes reasoning about a multi-threaded system difficult, while allowing
+for performant, non-blocking implementation.  For this reason a model based on
+continuations was elected for SOS.
+
+The implementation of continuations in SOS is conceptually simple, and allows
+for type-checking at compile-time, which affords some correctness guarantees.
 However, this struct becomes exceedingly large as more behaviours are added to
 SOS, each of which may depend on and need to extend upon the state already
 stored in the continuation.  As this is a per-process structure, it thus
@@ -121,14 +133,11 @@ frames to be allocated causing concerns over contiguous allocation of the
 memory backing the structure.
 
 A more scalable approach would be to implement the continuation as an array or
-hash table, whereby 32-bit values could be accessed given a key.  The
-implication of this is that compile-time type-checking is lost, and that
-accesses will often need to be cast.
-
-This may seem a preferable for the reason of scalability, however static
-analysis becomes increasingly valuable for offering correctness guarantees as
-an Operating System grows.  For this reason it was deemed an inferior approach
-to the single, large continuation structure given the scope of the project.
+hash table, whereby 32-bit values could be accessed given a key.  This may
+seem a preferable for the reason of scalability, however static checks become
+increasingly valuable for offering correctness guarantees as an Operating
+System grows.  For this reason it was deemed an inferior approach to the
+single, large continuation structure given the scope of the project.
 
 Yet more sophisticated data structures could also be used, which are amenable
 to both static analysis, and better scalability, though the added complexity
@@ -177,8 +186,23 @@ access state:
 At the completion of a syscall, the state of the process' continuation is
 reset.
 
-\subsubsection{TODO Discussion}
-TODO: Work out what the scope of this section is/should be and then discuss.
+\subsubsection{Discussion}
+The approach to splitting the setup and execution handler for the syscalls
+proved largely successful and simplified the implementation notedly.  However,
+within the execution handler, the approach to continuations whereby numerous
+restartable codeblocks may be contained in a single function, could prove
+challenging to debug.
+
+Extending this concept across the entirety of the contination, whereby a
+continuation would contain a list of outstanding execution events which may
+(or may not) be required to satisfy each syscall could be a viable approach
+and simplify both the syscall implementation, nad the continuation structure.
+Currently many fields in the continuation denote execution state, and this
+approach would allow that state of execution to be separated from other state
+and represented consistently.
+
+The downside of this approach would be that the linked list largely becomes a
+complex representation of a function call.
 
 \subsection{Timer Interrupts}
 Implemented in: \texttt{/libs/libclock/src/clock.c}
@@ -214,14 +238,21 @@ Timed callbacks are removed after being fired and are used to implement the
 timed callback events in the implementation, they are distinguished in the
 interface.
 
-\subsubsection{TODO Discussion}
+\subsubsection{Discussion}
 Alternatively the EPIT timer could have been used to implement this
 functionality.  Both EPIT and GPT timers on the Sabre have a very similar
 interface, and both could equally have been used.  However it was elected that
 the GPT is slightly simpler and fulfills all requirements.
 
-TODO: Discuss perf characteristics. Linear registration, linear search.  We
-could do better.  Tick registration is linear: again, could do better.
+The implementation of the timer registration does not offer particularly
+strong performance characteristics, with both registration and search (for the
+next OCR time) being linear.  While this could be greatly improved, it imposes
+minimal performance degradation on SOS: registration is used infrequently and
+the search occurs only when a callback timeout occurs.
+
+While the performance impact is minor in typical applications, it does permit
+a malicious actor to affect the availablity of SOS, and thus would need to be
+improved.
 
 \section{System Memory}
 \subsection{Frame Table}
@@ -243,7 +274,7 @@ deallocation of frames.  Similarly, as the structure is an array, it also
 offers O(1) lookup as the address can be transformed in to an index into the
 array trivially.
 
-\subsubsection{TODO Discussion}
+\subsubsection{Discussion}
 We could also have represented other datatypes within the `frame table' and
 provided a mapping back to them, though the vast majority of typed memory in
 the system is typed as frames, and so the added complexity of managing other
@@ -251,8 +282,17 @@ datatypes in the frame table outweighs the minimal benefit it offers.  Instead
 memory of types other than \texttt{seL4\_ARM\_SmallPageObject} is stored
 explictly in other data structures.
 
-TODO: Comment on impact at bootstrap time and memory consumption due to
-up-front allocation.
+During booting, the frame table is allocated in full, with typed frames for
+the frame table being allocated `within' the frame table during allocation.
+As the datastructure is 12 bytes in size under the target architecture, this
+results in approximately 768 frames of memory being consumed per GiB of
+physical memory, delaying boot time.
+
+Furthermore, as the datastructure for a frame doubles to provide pointers to
+the next free element, under high memory contention situations approximately
+1/3 of the frame table size will be used to store NULL pointers.  Improving
+the representation of the frame table would allow for another 256 frames to be
+made available for use per GiB of memory.
 
 \subsection{Swap File}
 Implemented in: \texttt{/apps/sos/src/frametable.c}
@@ -270,11 +310,22 @@ is not altered.
 The swap structure also features a checksum field to protect against altered
 or corrupted data from being read-in from disk.
 
-\subsubsection{TODO Discussion}
-The current checksum implementation is a summation of the character values of
-the file, and so does not protect against transposition or malicious
-alteration.  This could be addressed using a more sophisticated checksumming
-algorithm.
+\subsubsection{Discussion}
+As the swap file is very similar in design to the frame table, it has many of
+the same drawbacks.  The structure representing a swap file uses 8 byte nodes,
+yielding 512 frames consumed per GB of swap.
+
+While pre-allocing the frame table could be argued for: the memory it consumes
+would be consumed anyway, and it trades off boot time performance for run-time
+performance, this argument cannot be made with the swap file.  Indeed, the
+system may be forced to perform swapping due to the frames occupied by the
+datastructure representing the swap file.
+
+A preferable solution would be the use of a data structure which allocated
+memory in frames on demand, which could be represented as a two-level `page
+table'.  However, such an approach would fix the size of the swap file which
+may be a yet more significant issue on systems with restricted disk space or
+where the size of the swap file should otherwise be restricted.
 
 \section{Process Management}
 \subsection{Page Table}
@@ -292,11 +343,10 @@ entry is a pointer to a Page Table Entry.
 
 A Page Table Entry (PTE) stores the frame address and page cap corresponding
 to the virtual address.  As only 20 bits of the frame address are actually
-used, the lower 12 bits in the PTE are available to be reused for other
-purposes.  Currently, 3 of these lower-most bits are used to provide flags
-indicating: whether the page data is stored on-disk, whether the page is
-pinned, and whether it has been referenced.  (See `Page Replacement' for
-details.)
+used, the lower 12 bits in the PTE are available for other purposes.
+Currently, 3 of these lower-most bits are used to provide flags indicating:
+whether the page data is stored on-disk, whether the page is pinned, and
+whether it has been referenced.  (See `Page Replacement' for details.)
 
 This structure allows for efficient lookup: the upper 10 most bits index into
 the Page Directory, the next upper 10-most bits index in to the second level
@@ -314,10 +364,10 @@ be accessed explicitly, and exists only for the purpose of releasing the
 resource.  A linked list provides constant-time insertion while providing a
 simple design at the time of releasing the resources.
 
-\subsubsection{TODO Discussion}
-Varying from seL4 implementation: 8/12
-Why we did it
-How we accounted for implications of that.
+%\subsubsection{TODO Discussion}
+%Varying from seL4 implementation: 8/12
+%Why we did it
+%How we accounted for implications of that.
 
 \subsection{Page Replacement}
 \subsubsection{Design}
@@ -363,15 +413,43 @@ write is complete the page is marked as `swapd', indicating that subsequent
 accesses to this page must be read from disk, and use of the corresponding
 frame is made available to the process requiring it.
 
-\subsubsection{TODO Discussion}
+\subsubsection{Discussion}
+Designing a scheme which maximised the amount of memory available for
+eviction, thereby maximising the number of processes available to run on the
+system, while preserving fairness received a significant amount of attention.
+While evicting from the currently running process, or even its parent, is a
+reasonably straight-forward approach neither make effective use of system
+resources.  However, if pages were to be evicted from other processes, it must
+be done in such a way that two or more processes would not compete for the
+same resource indefinitely.
+
+There are three factors to the process selection mechanism which help to
+ensure fairness:
+\begin{description}
+\item[queue-based selection] once a process is assessed for selection, every
+  other process on the system will be assessed before assessing that process
+  again.
+\item[threshold based selection] a process will only be selected should it
+  have more than the average number of pages available for eviction
+\item[biased towards current\_process] selection is biased towards the current
+  process (i.e., the process requesting pages) both by defaulting to this
+  process should no other process satisfy the requirements for eviction, and
+  by the random chance to select this process, which serves to defeat
+  processes endlessly competing for resources
+\end{description}
+
+As it is too expensive to consider all pages across all processes for
+eviction, it depends upon the correct accounting for the number of pages
+available to a process for eviction to calculate the threshold predicate,
+exposing the potential for future implementation mistakes.
 
 \subsection{Regions}
 Implemented in: \texttt{/apps/sos/src/addrspace.c}, \texttt{/apps/sos/src/handler.c}
 
 \subsubsection{Design}
-Regions are implemented as a singly-linked list.  Each region contains start,
-end, rights, and an offset for the starting location of that region in the elf
-file.
+Regions are implemented as a singly-linked list.  Each region also contains
+start, end, rights, and an offset for the starting location of that region in
+the elf file.
 
 \subsubsection{TODO Discussion}
 There is no optimisation on the lookup cost of a region.  This data structure
@@ -381,7 +459,7 @@ and in this instance the searching cost may be acceptable.  However as the
 number of regions increases, the performance of the system may be subject to
 significant degradation.
 
-A better approach may be... TODO
+TODO: How could this be fixed?
 
 \subsection{Page Faults}
 Implemented in: \texttt{/apps/sos/src/handler.c}
@@ -420,6 +498,7 @@ in memory, the referenced bit will be set and the page mapped back in to the
 process' address space.
 
 \subsubsection{TODO Discussion}
+TODO: Is any discussion needed?
 
 \subsection{Processes}
 Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
@@ -440,9 +519,9 @@ callback is the currently running process; a process starting after the
 creation time of the callback cannot own the callback, and thus the callback
 is discarded.
 
-\subsubsection{TODO Discussion}
+\subsubsection{Discussion}
 Neither the PID nor the running flag are strictly required.  A PID could
-equally have been derivedb via pointer arithmetic between the beginning of,
+equally have been derived via pointer arithmetic between the beginning of,
 and the current index of the table.  Similarly the running flag could be
 derived via a lookup into the process table.  However this does afford the
 opportunity to verify the correctness of data structure manipulation, and
@@ -469,15 +548,18 @@ An IO Vector provides the following fields:
 
 The benefit of the IO Vector is that it allows for otherwise non-contiguous
 pages to be treated as though contigous.  It also provides a means for
-restarting IO operations, and the IO Vectors needs simply be updated to
-reflect the current progress of an operation.
+representing the progress of an IO operations, where the IO Vector need simply
+be updated to reflect the current progress of an operation.
 
 IO Vectors are used to represent most I/O operations in SOS.
 
-\subsubsection{TODO Discussion}
-- Current usage means that we may do short IO ops (e.g. 10 bytes to finish
-reading a page), even though we could do a large IO op (4k) and write across
-IO Vectors simultaneously.
+\subsubsection{Discussion}
+Currently the usage of the IO Vector means that we may do short IO ops
+(e.g. 10 bytes to finish reading a page), even though we could do a large IO
+op (4k) and write across IO Vectors simultaneously.  Correcting this would
+incur some complexity in the implementation, though also offers the
+opportunity for significant performance improvements, in particular when
+reading files over NFS.
 
 \subsection{Serial Device}
 Implemented in: \texttt{/apps/sos/src/serial.c}
@@ -502,9 +584,7 @@ because of this.
 The serial driver is initialised at boot-time.
 
 \subsubsection{TODO Discussion}
-Storage and use of reader buffer
-
-Discuss the reason for pinning.
+Storage and use of reader buffer?  Discuss the reason for pinning?  Is this necessary?
 
 \subsection{NFS}
 Implemented in: \texttt{/apps/sos/src/sos\_nfs.c}
@@ -526,6 +606,7 @@ callback.  In the event of error, or completion, the callback is responsible
 for triggering an appropriate reply to the client over IPC.
 
 \subsubsection{TODO Discussion}
+TODO?
 
 \subsection{IO Device}
 \subsubsection{Design}
@@ -549,7 +630,7 @@ any driver.  Thus it currently exposes:
 For both the serial and NFS drivers.  As the serial driver does not support
 some of these operations, those operations are undefined (NULL).
 
-\subsubsection{TODO Discussion}
+\subsubsection{Discussion}
 The IO Device is a light-weight mechanism to abstract access to IO-related
 drivers.  An alternative to this would be the implementation of a VFS-like
 abstraction.  However, given that the goals of the project were to support a
