@@ -93,7 +93,7 @@ context.  The struct has many fields, which include:
 There are two further mechanisms for controlling the flow of execution, which
 effectively implement a blocked and ready queue:
 \begin{description}
-\item[longjmp()] provides a mechanism whereby jumping to the `ipc\_event\_buf'
+\item[longjmp()] provides a mechanism whereby jumping to the \texttt{ipc\_event\_buf}
   can halt execution of the process, where it can later be resumed by a
   callback handler;
 \item[add\_ready\_proc()] provides a `ready queue', where a process can be
@@ -176,10 +176,10 @@ section for details.
 During the execution of a system call, three functions are used to capture and
 access state:
 \begin{description}
-\item[current\_process] The process which invoked the current system call.
-\item[set\_current\_process] Set the current process based on a Process ID (see
+\item[current\_process()] The process which invoked the current system call.
+\item[set\_current\_process()] Set the current process based on a Process ID (see
   `Process Management' for details)
-\item[effective\_process] The process which SOS is acting on behalf of.  This
+\item[effective\_process()] The process which SOS is acting on behalf of.  This
   is usually identical to current\_process(), with the exception being spawning
   a child process.  It is defined in terms of the current process.
 \end{description}
@@ -408,8 +408,8 @@ of is killed in order to relieve the memory contention.
 
 Once a page has been selected, the contents of the frame are written to the
 next available location in the swap file.  During the copy, the PTE is marked
-as `pinned', and so is not valid for subsequent selection.  Finally once the
-write is complete the page is marked as `swapd', indicating that subsequent
+as \texttt{pinned}, and so is not valid for subsequent selection.  Finally once the
+write is complete the page is marked as \texttt{swapd}. indicating that subsequent
 accesses to this page must be read from disk, and use of the corresponding
 frame is made available to the process requiring it.
 
@@ -483,14 +483,14 @@ Therefore in this event content for code and data segments will be loaded from
 the ELF binary, while zeroed pages will be allocated for the stack and heap as
 the process faults within those regions.
 
-Data paged to disk will be indicated by the `swapd' bit in the corresponding
+Data paged to disk will be indicated by the \texttt{swapd} bit in the corresponding
 PTE.  In the event a fault occurs on a page with this bit set, the address
 (which corresponds to an offset within the swap file) will be used to read in
 the page.  During the read, another page may or may not be evicted depending
 on whether physical memory is available to facilitate the replacement.
 
 The final scenario in which page faults will occur is in order to set the
-`referenced' bit (`refd') of the page to facilitate second-chance page
+`referenced' bit (\texttt{refd}) of the page to facilitate second-chance page
 replacement.  During the replacement algorithm, pages where the referenced bit
 is unset will also be unmapped from the process' address space.  Thus when a
 fault occurs on a page where the referenced bit is not set, though it is still
@@ -539,7 +539,7 @@ An IO Vector provides the following fields:
 \begin{description}
 \item[vstart] The starting address of the frame or virtual address (conditional)
 \item[sz] The length of the operation to occur.  sz will be set such that the
-  operation does not exceed the page given the starting address `vstart'.
+  operation does not exceed the page given the starting address \texttt{vstart}.
 \item[next] The following IO Vector node.
 \item[sos\_iov\_flag] Flag indicating whether the IO Vector node corresponds to
   a SOS frame, or process virtual address (thereby indicating whether
@@ -568,7 +568,7 @@ Implemented in: \texttt{/apps/sos/src/serial.c}
 The serial device implementation satisfies single-reader / multiple-writer
 semantics, where the process is only permitted to read should no other process
 have the serial device open for reading.  This uses global state (named
-`reader\_pid`) within the serial driver, which allows the owning process to be
+\texttt{reader\_pid}) within the serial driver, which allows the owning process to be
 identified in constant time.
 
 Reads in SOS are buffered, though only the most recent line is preserved; any
