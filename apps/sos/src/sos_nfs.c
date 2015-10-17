@@ -56,8 +56,7 @@ sos_nfs_create_callback(uintptr_t cb, enum nfs_stat status, fhandle_t *fh,
     }
     free((callback_info_t*)cb);
 
-    sos_proc_t *proc = effective_process();
-    assert(proc);
+    sos_proc_t *proc = current_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
         fd_free(proc->fd_table, fd);
@@ -96,15 +95,14 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
     dprintf(3, "Entering nfs_open callback: %d\n", (int)pid);
     /*Use effective process here, as When we open an executable file, 
      * we define the opener is the new created client*/
-    sos_proc_t *proc = effective_process();
+    sos_proc_t *proc = effective_process(), *cur_proc = current_process();
     assert(proc);
-    int fd = proc->cont.fd;
+    int fd = cur_proc->cont.fd;
     of_entry_t *of = fd_lookup(proc, fd);
 
     assert(of);
-    dprintf(3, "status: %d %s\n", status, proc->cont.path);
+    dprintf(3, "status: %d %s\n", status, cur_proc->cont.path);
     if (status == NFSERR_NOENT && (of->mode & FM_WRITE)) {
-        // TODO: Implement time stamps
         uint32_t clock_upper = time_stamp() >> 32;
         uint32_t clock_lower = (time_stamp() << 32) >> 32;
 
@@ -114,8 +112,8 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
                                      .size = 0,
                                      .atime = {clock_upper, clock_lower},
                                      .mtime = {clock_upper, clock_lower}};
-        dprintf(2, "sos_nfs_open_callback %s %d\n", proc->cont.path, proc->cont.fd);
-        int err = nfs_create(&mnt_point, proc->cont.path, &default_attr, sos_nfs_create_callback, cb);
+        dprintf(2, "sos_nfs_open_callback %s %d\n", cur_proc->cont.path, cur_proc->cont.fd);
+        int err = nfs_create(&mnt_point, cur_proc->cont.path, &default_attr, sos_nfs_create_callback, cb);
         if (err > 0) {
             free((callback_info_t*)cb);
         }
@@ -123,7 +121,7 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
     } else if (status != NFS_OK) {
         // Clean up the preemptively created FD.
         fd_free(proc->fd_table, fd);
-        if (proc->cont.binary_nfs_open) {
+        if (cur_proc->cont.binary_nfs_open) {
             process_delete(proc);
         }
         syscall_end_continuation(current_process(), SOS_NFS_ERR, false);
@@ -135,7 +133,7 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
     of->fhandle = (fhandle_t*)malloc(sizeof(fhandle_t));
     *(of->fhandle) = *fh;
     assert(proc);
-    if (!proc->cont.binary_nfs_open) {
+    if (!cur_proc->cont.binary_nfs_open) {
         syscall_end_continuation(proc, fd, true);
     } else {
         add_ready_proc(pid);
@@ -149,14 +147,9 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
  * @return error
  */
 int sos_nfs_open(const char* filename, fmode_t mode) {
-    sos_proc_t *proc = effective_process();
-    pid_t pid;
-    if (proc->cont.parent_pid) {
-        pid = proc->cont.parent_pid;
-    } else {
-        pid = proc->pid;
-    }
-    dprintf(2, "sos_nfs_open %s %d\n", filename, proc->cont.fd);
+    sos_proc_t *cur_proc = current_process();
+    pid_t pid = cur_proc->pid;
+    dprintf(2, "sos_nfs_open %s %d\n", filename, cur_proc->cont.fd);
     callback_info_t *cb = malloc(sizeof(callback_info_t));
     if (!cb) {
         return ENOMEM;
@@ -192,17 +185,15 @@ sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
     }
     free((callback_info_t*)cb);
 
-    sos_proc_t *proc;
-    int fd;
     /*Use effective here, as When we open an executable file, 
      * we define the reader is the new created client*/
 
-    proc = effective_process();
-    fd = proc->cont.fd;
+    sos_proc_t *proc = effective_process(), *cur_proc = current_process();
+    int fd = proc->cont.fd;
 
     if (count == 0) {
-        if (!proc->cont.binary_nfs_read) {
-            syscall_end_continuation(proc, proc->cont.counter, true);
+        if (!cur_proc->cont.binary_nfs_read) {
+            syscall_end_continuation(cur_proc, cur_proc->cont.counter, true);
             return;
         } else {
             add_ready_proc(pid);
@@ -211,41 +202,42 @@ sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
     }
 
     if (status != NFS_OK) {
-        if (proc->cont.binary_nfs_read) {
+        if (cur_proc->cont.binary_nfs_read) {
             process_delete(proc);
         }
-        syscall_end_continuation(current_process(), SOS_NFS_ERR, false);
+        syscall_end_continuation(cur_proc, SOS_NFS_ERR, false);
         return;
     }
-    proc->cont.counter += count;
+    cur_proc->cont.counter += count;
     of_entry_t *of = fd_lookup(proc, fd);
     of->offset += (unsigned)count;
 
     sos_vaddr dst;
-    if (proc->cont.iov->sos_iov_flag) {
-        dst = proc->cont.iov->vstart;
+    if (cur_proc->cont.iov->sos_iov_flag) {
+        dst = cur_proc->cont.iov->vstart;
     } else {
-        dst = as_lookup_sos_vaddr(proc->vspace, proc->cont.iov->vstart);
+        dst = as_lookup_sos_vaddr(cur_proc->vspace, cur_proc->cont.iov->vstart);
     }
     assert(dst);
 
     memcpy((char*)dst, data, (size_t)count);
     dprintf(2, "READ %d bytes to %08x, now at offset: %u\n", count, proc->cont.iov->vstart, of->offset);
 
-    iovec_t *iov = proc->cont.iov;
+    iovec_t *iov = cur_proc->cont.iov;
     if (proc->cont.iov->sz == (size_t)count) { // finish reading an iov, and move to next one
-        proc->cont.iov = iov->next;
-        as_unpin_page(proc->vspace, iov->vstart);
+        cur_proc->cont.iov = iov->next;
+        if (!iov->sos_iov_flag)
+            as_unpin_page(cur_proc->vspace, iov->vstart);
         free(iov);
-        iov = proc->cont.iov;
+        iov = cur_proc->cont.iov;
     } else {
         iov->vstart += (size_t)count;
         iov->sz -= (size_t)count;
     }
 
     if (iov == NULL) { // All iovs are filled
-        if (!proc->cont.binary_nfs_read) {
-            syscall_end_continuation(proc, proc->cont.counter, true);
+        if (!cur_proc->cont.binary_nfs_read) {
+            syscall_end_continuation(cur_proc, cur_proc->cont.counter, true);
             return;
         }
     }
@@ -257,22 +249,17 @@ sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
  *
  */
 int sos_nfs_read(iovec_t* vec, int fd, int count) {
-    sos_proc_t *proc = effective_process();
-    pid_t pid;
-    if (proc->cont.parent_pid) {
-        pid = proc->cont.parent_pid;
-    } else {
-        pid = proc->pid;
-    }
+    sos_proc_t *proc = effective_process(), *cur_proc = current_process();
+    pid_t pid = cur_proc->pid;
     of_entry_t *of = fd_lookup(proc, fd);
 
-    assert(proc->cont.iov);
-    if (!proc->cont.binary_nfs_read) {
-        iov_ensure_loaded(*proc->cont.iov); // ensure the page to store the data is in memory
-        as_pin_page(proc->vspace, proc->cont.iov->vstart);
+    assert(cur_proc->cont.iov);
+    if (!cur_proc->cont.binary_nfs_read) {
+        iov_ensure_loaded(*cur_proc->cont.iov); // ensure the page to store the data is in memory
+        as_pin_page(proc->vspace, cur_proc->cont.iov->vstart);
     }
 
-    dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",proc->cont.iov->sz, proc->cont.iov->vstart, of->offset);
+    dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",cur_proc->cont.iov->sz, cur_proc->cont.iov->vstart, of->offset);
     printf("READING USING PID %d\n", pid);
     callback_info_t *cb = malloc(sizeof(callback_info_t));
     if (!cb) {
@@ -280,7 +267,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     }
     cb->pid = pid;
     cb->start_time = time_stamp();
-    int err = nfs_read(of->fhandle, (int)of->offset, (int)proc->cont.iov->sz, sos_nfs_read_callback, (uintptr_t)cb);
+    int err = nfs_read(of->fhandle, (int)of->offset, (int)cur_proc->cont.iov->sz, sos_nfs_read_callback, (uintptr_t)cb);
     if (err > 0) {
         free((callback_info_t*)cb);
     }
@@ -303,7 +290,7 @@ nfs_write_callback(uintptr_t cb, enum nfs_stat status, fattr_t *fattr, int count
     }
     free((callback_info_t*)cb);
 
-    sos_proc_t *proc = proc = current_process();
+    sos_proc_t *proc = current_process();
     int fd = proc->cont.fd;
     if (status != NFS_OK) {
         syscall_end_continuation(proc, SOS_NFS_ERR, false);

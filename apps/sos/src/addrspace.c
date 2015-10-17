@@ -1,3 +1,8 @@
+/**
+ * @file addrspace.c
+ * @brief Implementation of address space
+ */
+
 #include <sel4/sel4.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -160,16 +165,10 @@ static void as_free_kpts(sos_addrspace_t *as) {
     dprintf(4, "[AS] KPTs free'd\n");
 }
 
-void as_unpin_page(sos_addrspace_t *as, client_vaddr vaddr) {
-    pte_t *pt = as_lookup_pte(as, vaddr);
-    if (!pt) {
-        return;
-    }
-    as->pages_mapped++;
-    addrspace_pages++;
-    pt->pinned = false;
-}
-
+/**
+ * @brief Set page pin bit
+ *
+ */
 void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr) {
     pte_t *pt = as_lookup_pte(as, vaddr);
     if (!pt) {
@@ -180,6 +179,21 @@ void as_pin_page(sos_addrspace_t *as, client_vaddr vaddr) {
     pt->pinned = true;
 }
 
+void as_unpin_page(sos_addrspace_t *as, client_vaddr vaddr) {
+    pte_t *pt = as_lookup_pte(as, vaddr);
+    if (!pt) {
+        return;
+    }
+    as->pages_mapped++;
+    addrspace_pages++;
+    pt->pinned = false;
+}
+
+/**
+ * @brief free page list
+ *
+ * @param as
+ */
 static void as_free_ptes(sos_addrspace_t *as) {
     pte_t *pt;
     dprintf(3, "[AS] Freeing PTEs\n");
@@ -196,14 +210,11 @@ static void as_free_ptes(sos_addrspace_t *as) {
         assert(head_cnt <= 1);
         pt = as->repllist_head->next;
         if (as->repllist_head->swapd) {
-            // TODO: Make sure that the page cap is dealt with in this
-            // scenario.  (I think it is.)
             dprintf(4, "[AS] freeing swap\n");
             swap_free(LOAD_PAGE(as->repllist_head->addr));
         } else {
-
             dprintf(4, "[AS] freeing frame\n");
-            printf("Freeing from node %p\n", as->repllist_head);
+            dprintf(4, "[AS] Freeing from node %p\n", as->repllist_head);
             if(as->repllist_head->page_cap != seL4_CapNull) {
                 cspace_revoke_cap(cur_cspace, as->repllist_head->page_cap);
                 cspace_err_t err = cspace_delete_cap(cur_cspace, as->repllist_head->page_cap);
@@ -259,8 +270,8 @@ void as_free(sos_addrspace_t *as) {
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
 
-    sos_proc_t *proc = effective_process();
-    if (proc && proc->cont.alloc_page_frame) {
+    sos_proc_t *proc = current_process();
+    if (proc->cont.alloc_page_frame) {
         *sos_vaddr = proc->cont.alloc_page_frame;
     } else {
         // Create a frame
@@ -283,7 +294,7 @@ static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
  * @return 0 on success, non-zero on failure.
  */
 static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_CapRights rights) {
-    dprintf(0, "as_map_page");
+    dprintf(3, "as_map_page");
     int err;
     unsigned pt_idx = PT_LOOKUP(vaddr);
 
@@ -313,7 +324,7 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
 }
 
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
-    dprintf(0, "as_add_page %08x, %08x\n", vaddr, sos_vaddr);
+    dprintf(3, "as_add_page %08x, %08x\n", vaddr, sos_vaddr);
     int err;
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
@@ -329,7 +340,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
     if (pt == NULL) {
-        sos_unmap_frame(as->pd[pd_idx]);
+        sos_unmap_frame((seL4_Word)as->pd[pd_idx]);
         sos_unmap_frame(sos_vaddr);
         return ENOMEM;
     }
@@ -368,7 +379,7 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
     int err = as_add_page(as, vaddr, sos_vaddr);
-    effective_process()->cont.alloc_page_frame = 0;
+    current_process()->cont.alloc_page_frame = 0;
 
     if (err) {
         assert(err);
@@ -487,7 +498,6 @@ client_vaddr sos_brk(sos_addrspace_t *as, uintptr_t newbrk) {
  */
 void as_activate(sos_addrspace_t* as) {
     int err;
-        
     err = create_non_segment_regions(as);
     conditional_panic(err, "CREATING REGIONS FAILED\n");
 }
@@ -497,7 +507,6 @@ void as_activate(sos_addrspace_t* as) {
  * Should be called prior to the initialisation of a new process' TCB
  * @return pointer to the newly created address space (vspace)
  */
-// TODO return error
 int as_create(sos_addrspace_t **pas) {
     int err;
     dprintf(3, "[AS] as_create\n");
@@ -506,25 +515,34 @@ int as_create(sos_addrspace_t **pas) {
         as = malloc(sizeof(sos_addrspace_t));
         conditional_panic(!as, "No memory for address space");
         memset(as, 0, sizeof(sos_addrspace_t));
-        printf("finished memset\n");
+        dprintf(3, "[AS] finished memset\n");
         as->sos_pd_addr = ut_alloc(seL4_PageDirBits);
-        conditional_panic(!as->sos_pd_addr, "No memory for new Page Directory");
-        printf("cspace_ut_retyping\n");
+        if (!as->sos_pd_addr) {
+            ERR("No memory for new Page Directory");
+            return ENOMEM;
+        }
+        dprintf(3, "[AS] cspace_ut_retyping\n");
         err = cspace_ut_retype_addr(as->sos_pd_addr,
                                     seL4_ARM_PageDirectoryObject,
                                     seL4_PageDirBits,
                                     cur_cspace,
                                     &as->sos_pd_cap);
-        conditional_panic(err, "Failed to allocate page directory cap for client");
+        if (err) {
+            ERR("Failed to allocate page directory cap for client");
+            return err;
+        }
         *pas = as;
     } else 
         as = *pas;
     // Create the page directory
-    printf("Allocating new frame for PD\n");
+    dprintf(3, "Allocating new frame for PD\n");
     if (!as->pd) {
         err = (int)frame_alloc((seL4_Word*)&as->pd);
-        conditional_panic(!err, "Unable to get frame for PD!\n");
-        printf("allocating page for buf addr\n");
+        if (err) {
+            ERR("Unable to get frame for PD!\n");
+            return ENOMEM;
+        }
+        dprintf(3, "allocating page for buf addr\n");
     }
     if (!as->sos_ipc_buf_addr) {
         as_create_page(as, PROCESS_IPC_BUFFER, seL4_AllRights);

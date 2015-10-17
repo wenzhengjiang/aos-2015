@@ -1,3 +1,5 @@
+/* fd table and open file table */
+
 #include <assert.h>
 #include <log/panic.h>
 #include <string.h>
@@ -7,6 +9,10 @@
 #include "process.h"
 #include "frametable.h"
 #include "serial.h"
+
+#define verbose 5
+#include <log/debug.h>
+#include <log/panic.h>
 
 #define FD_TABLE_SIZE (MAX_FD+1)
 #define OPEN_FILE_TABLE_SIZE 1024
@@ -34,7 +40,11 @@ int fd_create_fd(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mod
     return 0;
 }
 
-// return fd; -1 means ENOMEM
+/**
+ * @brief start from fd 0, return the lowest free fd 
+ *
+ * @return fd or -1
+ */
 int fd_create(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode) {
     assert(fdt);
     assert(handle || io);
@@ -55,7 +65,7 @@ int fd_create(fd_table_t fdt, fhandle_t* handle, io_device_t* io, fmode_t mode) 
 int fd_free(fd_table_t fd_table, int fd) {
     assert(fd_table[fd]);
     if (fd_table[fd] == NULL) {
-        printf("fd %d not found to close\n", fd);
+        dprintf(3, "[FILE] fd %d not found to close\n", fd);
         return -1;
     }
     fd_table[fd]->io = NULL;
