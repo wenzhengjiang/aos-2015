@@ -102,9 +102,9 @@ effectively implement a blocked and ready queue:
 \end{description}
 
 At the completion of a syscall, the function
-\texttt{syscall_end_continuation()} is used to reply to the client in a
+\texttt{syscall\_end\_continuation()} is used to reply to the client in a
 consistent manner, ensuring that all execution state is released and reset
-appropriately.  The caller to syscall_end_continuation indicates the process
+appropriately.  The caller to syscall\_end\_continuation indicates the process
 to reply to, the return code, and whether or not the syscall was successful.
 
 \subsubsection{TODO Discussion}
