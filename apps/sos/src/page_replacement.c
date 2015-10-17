@@ -1,4 +1,7 @@
-
+/**
+ * @file page_replacement.c
+ * @brief Implementation of page replacement algorithm
+ */
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -33,30 +36,28 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
     int loop_count = 0;
     while(1) {
         if (head == as->repllist_head) {
-            if (loop_count > 1) {
-                dprintf(1, "No pages left for eviction. Invoking 'OOM killer'\n");
-                if (current_process()->cont.spawning_process != -1 &&
-                    current_process()->cont.spawning_process != 0) {
-                    assert(effective_process() != current_process());
-                    process_delete(effective_process());
-                    syscall_end_continuation(current_process(), -1, false);
-                } else {
-                    process_delete(current_process());
+            if (loop_count > 1) { // all pages are pinned or swaped 
+                dprintf(1, "[PR] No pages left for eviction. Invoking 'OOM killer'\n");
+                if (effective_process() != current_process()) {
+                    syscall_end_continuation(current_process(), 0, false);
                 }
+                process_delete(effective_process());
                 longjmp(ipc_event_env, -1);
             }
             loop_count++;
         }
-        printf("tick\n");
+        dprintf(4, "tick\n");
         if(as->repllist_head->pinned || as->repllist_head->swapd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
             continue;
         }
+        /*If reference bit is on, turn it off and unmap the page, so we can 
+         * turn it out in vm_fault handler*/
         if(as->repllist_head->refd) {
             as->repllist_tail = as->repllist_head;
             as->repllist_head = as->repllist_head->next;
-            seL4_ARM_Page_Unmap(as->repllist_tail->page_cap);
+            seL4_ARM_Page_Unmap(as->repllist_tail->page_cap); 
             cspace_revoke_cap(cur_cspace, as->repllist_tail->page_cap);
             err = cspace_delete_cap(cur_cspace, as->repllist_tail->page_cap);
             if (err != CSPACE_NOERROR) {
@@ -146,7 +147,15 @@ bool swap_is_page_swapped(sos_addrspace_t* as, client_vaddr addr) {
     return pt->swapd;
 }
 
-int swap_replace_page(client_vaddr readin) {
+/**
+ * @brief   read a page from swap file to memory
+ *          It needs to allocate a new frame or swap out another page 
+ *
+ * @param readin
+ *
+ * @return 
+ */
+int swap_in_page(client_vaddr readin) {
     dprintf(3, "[PR] STARTING PAGE REPLACEMENT\n");
     sos_proc_t* proc = current_process();
     sos_addrspace_t *as = proc->vspace;
@@ -157,8 +166,8 @@ int swap_replace_page(client_vaddr readin) {
         frame_alloc(&tmp);
         proc->cont.have_new_frame = true;
         proc->cont.original_page_addr = tmp;
-        printf("Finished eviction\n");
-        printf("proc %p, victim: %p\n", proc, proc->cont.page_replacement_victim);
+        dprintf(3, "[PR] Finished eviction\n");
+        dprintf(3, "[PR] proc %p, victim: %p\n", proc, proc->cont.page_replacement_victim);
     }
 
     dprintf(3, "[PR] replacement request %x\n", proc->cont.page_replacement_request);
@@ -188,7 +197,7 @@ int swap_replace_page(client_vaddr readin) {
         addrspace_pages++;
         as->pages_mapped++;
         to_load->swapd = false;
-        printf("OPR: %x\n", proc->cont.original_page_addr);
+        dprintf(3, "[PR] OPR: %x\n", proc->cont.original_page_addr);
         seL4_CPtr fc = frame_cap(proc->cont.original_page_addr);
         seL4_ARM_Page_Unify_Instruction(fc, 0, PAGE_SIZE);
         proc->cont.swap_status = 0;

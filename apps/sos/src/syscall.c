@@ -50,7 +50,7 @@ static inline unsigned CONST umax(unsigned a, unsigned b) {
 }
 
 /**
- * @brief Add a client to ready client queue 
+ * @brief Add a client to ready client queue (resume a process)
  *
  */
 void add_ready_proc(pid_t pid) {
@@ -263,7 +263,7 @@ void iov_ensure_loaded(iovec_t iov) {
     assert(reg); // addr in iov must already have been checked
     if (as_page_exists(as, iov.vstart)) {
         if (swap_is_page_swapped(as, iov.vstart)) {
-            swap_replace_page(iov.vstart);
+            swap_in_page(iov.vstart);
             as_reference_page(current_process()->vspace, iov.vstart, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
         } else if (!is_referenced(as, iov.vstart)) {

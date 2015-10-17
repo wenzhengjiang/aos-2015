@@ -259,8 +259,8 @@ void as_free(sos_addrspace_t *as) {
 static seL4_CPtr as_alloc_page(sos_addrspace_t *as, seL4_Word* sos_vaddr) {
     assert(as);
 
-    sos_proc_t *proc = effective_process();
-    if (proc && proc->cont.alloc_page_frame) {
+    sos_proc_t *proc = current_process();
+    if (proc->cont.alloc_page_frame) {
         *sos_vaddr = proc->cont.alloc_page_frame;
     } else {
         // Create a frame
@@ -368,7 +368,7 @@ int as_create_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CapRights rights) 
     seL4_Word sos_vaddr;
     cap = as_alloc_page(as, &sos_vaddr);
     int err = as_add_page(as, vaddr, sos_vaddr);
-    effective_process()->cont.alloc_page_frame = 0;
+    current_process()->cont.alloc_page_frame = 0;
 
     if (err) {
         assert(err);

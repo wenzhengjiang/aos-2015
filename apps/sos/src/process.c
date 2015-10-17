@@ -298,7 +298,6 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
         proc->start_time = time_stamp();
         proc_table[proc->pid] = proc;
         current_process()->cont.spawning_process = proc;
-        proc->cont.parent_pid = current_process()->pid;
     } else {
         proc = effective_process();
     }
@@ -487,29 +486,30 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     /* These required for loading program sections */
     printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
+    sos_proc_t* cur_proc = current_process();
 
     if (!proc) return -1;
 
     if (!proc->cont.binary_nfs_open) {
         /* TODO: Fix magic numbers */
-        proc->cont.fd = BINARY_READ_FD;
-        proc->cont.file_mode = FM_READ;
-        strncpy(proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
-        proc->cont.binary_nfs_open = true;
+        cur_proc->cont.fd = BINARY_READ_FD;
+        cur_proc->cont.file_mode = FM_READ;
+        strncpy(cur_proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
+        cur_proc->cont.binary_nfs_open = true;
         assert(proc->fd_table);
-        assert(proc->fd_table[proc->cont.fd]);
-        assert(proc->fd_table[proc->cont.fd]->io);
+        assert(proc->fd_table[cur_proc->cont.fd]);
+        assert(proc->fd_table[cur_proc->cont.fd]->io);
         assert(effective_process());
-        (proc->fd_table[proc->cont.fd])->io->open(proc->cont.path, proc->cont.file_mode);
+        (proc->fd_table[cur_proc->cont.fd])->io->open(cur_proc->cont.path, cur_proc->cont.file_mode);
         longjmp(ipc_event_env, -1);
     }
 
-    if (!proc->cont.binary_nfs_read) {
-        frame_alloc(&proc->cont.elf_load_addr);
-        assert(proc->cont.elf_load_addr);
-        proc->cont.iov = iov_create(proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
-        proc->cont.binary_nfs_read = true;
-        (proc->fd_table[proc->cont.fd])->io->read(proc->cont.iov, proc->cont.fd, PAGE_SIZE);
+    if (!cur_proc->cont.binary_nfs_read) {
+        frame_alloc(&cur_proc->cont.elf_load_addr);
+        assert(cur_proc->cont.elf_load_addr);
+        cur_proc->cont.iov = iov_create(cur_proc->cont.elf_load_addr, PAGE_SIZE, NULL, NULL, true);
+        cur_proc->cont.binary_nfs_read = true;
+        (proc->fd_table[cur_proc->cont.fd])->io->read(cur_proc->cont.iov, cur_proc->cont.fd, PAGE_SIZE);
         longjmp(ipc_event_env, -1);
         dprintf(1, "\nStarting \"%s\"...\n", app_name);
     }
@@ -517,16 +517,16 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     sos_addrspace_t *as = proc_as(proc);
     assert(as);
 
-    if (!proc->cont.as_activated) {
+    if (!cur_proc->cont.as_activated) {
         /* load the elf image */
-        err = elf_load(proc, (char*)proc->cont.elf_load_addr);
+        err = elf_load(proc, (char*)cur_proc->cont.elf_load_addr);
         if (err) {
             assert(effective_process() != current_process());
             sos_unmap_frame(proc->cont.elf_load_addr);
             process_delete(effective_process());
             return -1;
         }
-        proc->cont.as_activated = true;
+        cur_proc->cont.as_activated = true;
     }
     as_activate(as);
 
@@ -541,12 +541,11 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     }
     /* Start the new process */
     memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint((void*)proc->cont.elf_load_addr);
+    context.pc = elf_getEntryPoint((void*)cur_proc->cont.elf_load_addr);
     context.sp = PROCESS_STACK_TOP;
     assert(proc && proc->tcb_cap);
     seL4_TCB_WriteRegisters(proc->tcb_cap, 1, 0, 2, &context);
-    sos_unmap_frame(proc->cont.elf_load_addr);
-    memset(&proc->cont, 0, sizeof(cont_t));
+    sos_unmap_frame(cur_proc->cont.elf_load_addr);
 
     return proc->pid;
 }

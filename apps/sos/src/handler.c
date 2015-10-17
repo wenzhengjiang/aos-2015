@@ -69,7 +69,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
      * we're not re-entering this handler in the middle of loading page from elf file*/
     if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
         if (swap_is_page_swapped(as, faultaddr)) { // fault on a page in disk 
-            swap_replace_page(faultaddr); 
+            swap_in_page(faultaddr); 
             as_reference_page(current_process()->vspace, faultaddr, reg->rights);
             current_process()->cont.page_eviction_process = NULL;
         } else if (!is_referenced(as, faultaddr)) { // fault on a page whose reference bit is 0
