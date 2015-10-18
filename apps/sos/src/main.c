@@ -161,6 +161,7 @@ void syscall_loop(seL4_CPtr ep) {
             proc->cont.syscall_loop_initiations++;
             int err = sos_vm_fault(proc->cont.vm_fault_type, proc->cont.client_addr);
             if (err) {
+                process_delete(proc);
                 dprintf(0, "vm_fault couldn't be handled, process is killed %d \n", err);
             } else {
                 syscall_end_continuation(proc, 0, true); // reboot the client

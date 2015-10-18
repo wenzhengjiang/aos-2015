@@ -490,8 +490,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
 
     if (!proc) return -1;
 
-    if (!proc->cont.binary_nfs_open) {
-        /* TODO: Fix magic numbers */
+    if (!cur_proc->cont.binary_nfs_open) {
         cur_proc->cont.fd = BINARY_READ_FD;
         cur_proc->cont.file_mode = FM_READ;
         strncpy(cur_proc->cont.path, app_name, MAX_FILE_PATH_LENGTH);
@@ -522,7 +521,7 @@ pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
         err = elf_load(proc, (char*)cur_proc->cont.elf_load_addr);
         if (err) {
             assert(effective_process() != current_process());
-            sos_unmap_frame(proc->cont.elf_load_addr);
+            sos_unmap_frame(cur_proc->cont.elf_load_addr);
             process_delete(effective_process());
             return -1;
         }

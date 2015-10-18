@@ -537,8 +537,8 @@ int as_create(sos_addrspace_t **pas) {
     // Create the page directory
     dprintf(3, "Allocating new frame for PD\n");
     if (!as->pd) {
-        err = (int)frame_alloc((seL4_Word*)&as->pd);
-        if (err) {
+        int ret = (int)frame_alloc((seL4_Word*)&as->pd);
+        if (!ret) {
             ERR("Unable to get frame for PD!\n");
             return ENOMEM;
         }
@@ -553,4 +553,5 @@ int as_create(sos_addrspace_t **pas) {
         addrspace_pages--;
     }
     dprintf(3, "[AS] as_create success\n");
+    return 0;
 }

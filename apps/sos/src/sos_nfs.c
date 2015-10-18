@@ -189,8 +189,7 @@ sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
      * we define the reader is the new created client*/
 
     sos_proc_t *proc = effective_process(), *cur_proc = current_process();
-    int fd = proc->cont.fd;
-
+    int fd = cur_proc->cont.fd;
     if (count == 0) {
         if (!cur_proc->cont.binary_nfs_read) {
             syscall_end_continuation(cur_proc, cur_proc->cont.counter, true);
@@ -219,12 +218,11 @@ sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
         dst = as_lookup_sos_vaddr(cur_proc->vspace, cur_proc->cont.iov->vstart);
     }
     assert(dst);
-
     memcpy((char*)dst, data, (size_t)count);
-    dprintf(2, "READ %d bytes to %08x, now at offset: %u\n", count, proc->cont.iov->vstart, of->offset);
+    dprintf(2, "READ %d bytes to %08x, now at offset: %u\n", count, cur_proc->cont.iov->vstart, of->offset);
 
     iovec_t *iov = cur_proc->cont.iov;
-    if (proc->cont.iov->sz == (size_t)count) { // finish reading an iov, and move to next one
+    if (cur_proc->cont.iov->sz == (size_t)count) { // finish reading an iov, and move to next one
         cur_proc->cont.iov = iov->next;
         if (!iov->sos_iov_flag)
             as_unpin_page(cur_proc->vspace, iov->vstart);
