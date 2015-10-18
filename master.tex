@@ -81,17 +81,15 @@ unique to each \emph{process}.  This model allows execution to resume once an
 interrupt occurs, and thus permits SOS non-blocking I/O.
 
 \subsubsection{Discussion}
-While a multi-threaded kernel does offer performance advantages on SMP-capable
-hardware through the virtue of being able to serve multiple processes
-simultaneously, the benefits of multi-threading in a kernel are somewhat
-diminished.  There are two reasons for this: the first of which is locks,
-which limit scalability, the second of which is that time spent in the kernel
-should be designed such that it is minimised.  Thus this is primarily a
-concern for high performance applications.  SOS, while designed for
-efficiency, is not intended for high performance applications.  On ARM, seL4
-is uniprocessor-only and thus a single-threaded implementation may offer
-improved performance over a threaded implementation due to the costs imposed
-by locking.
+A multi-threaded kernel does offer performance advantages on SMP-capable
+hardware through the virtue of being able to allow entry from multiple clients
+simultaneously, the benefits of multi-threading in the environment SOS is
+designed for are somewhat diminished.  Foremost, on ARM, seL4 supports only a
+single core and thus a single-threaded implementation may offer improved
+performance over a threaded implementation due to the costs imposed by
+locking, though also there is only limited difference under
+non-high-performance workloads due to the prevalence of locking, which limits
+scalability in multi-threaded systems.
 
 The implementation of continuations in SOS is conceptually simple, and allows
 for type-checking at compile-time, which affords some correctness guarantees.
@@ -110,12 +108,12 @@ Implemented in: \texttt{/libs/libclock/src/main.c}
 
 \subsubsection{Design}
 The \texttt{event\_loop()} serves as the central point of dispatch within SOS, and
-services three different forms of events:
+services three different sources of events:
 
 \begin{enumerate}
-\item Ready Processes
+\item Ready queue
 \item Interrupts
-\item System Calls
+\item System calls
 \end{enumerate}
 
 Network and Timer interrupts may come over Asynchronous IPC.  The behaviour
@@ -123,12 +121,12 @@ for these will be described in their respective sections later in the
 document.  System Calls are received from processes, and will be discussed in
 depth in the following section.
 
-Ready processes are serviced before either Interrupts or System Calls.
-Processes are enqueued by interrupt handlers: once an interrupt request on
-behalf of the process is complete, that process is queued for selection in the
-event loop.  Conversely, it can be indicated that a continuation is waiting on
-an interrupt through the use of \texttt{longjmp} to \texttt{ipc\_event\_buf},
-re-entering the event loop.
+Processes in the Ready queue are serviced before either Interrupts or System
+Calls.  Processes are enqueued by interrupt handlers: once an interrupt
+request on behalf of the process is complete, that process is queued for
+selection in the event loop.  Conversely, the current flow of execution can
+indicate that it is waiting on an interrupt through the use of
+\texttt{longjmp} to \texttt{ipc\_event\_buf}, re-entering the event loop.
 
 At the completion of a client request, the function
 \texttt{syscall\_end\_continuation()} is used to reply to the client in a
@@ -139,22 +137,20 @@ successful.  At the completion of a request, the state of the process'
 continuation is reset.
 
 \subsubsection{Discussion}
-The choice of servicing `ready' processes prior to Sync or Async IPC allows
-SOS to maximise the number of concurrent I/O operations `in flight': instead
-of potentially serving I/O interrupts, we potentially spawn new I/O
-interrupts.  Scheduling such that I/O operations are prioritised is known to
-allow for higher performance.
+Earlier implementations of the process `ready queue` a stack, though this
+proved prone to starvation: earlier processes may never be serviced.  A queue
+is now used to guarantee fairness.
 
 \subsection{System Calls}
 Implemented in: \texttt{/apps/sos/src/handler.c}, \texttt{/apps/sos/src/syscall.c}
 
 \subsubsection{Design}
-As this is a continuation-based model, each syscall is implemented in two
-parts: a setup handler, and an execution handler.  The setup handler is called
-once, at the beginning of a syscall and before the execution handler is
-invoked.  This allows a single, consistent means of storing any arguments
-provided via IPC within the continuation, so that they may be available to the
-execution handler.
+To facilitate re-entry of the syscall handlers, each system call is
+implemented in two parts: a setup handler, and an execution handler.  The
+setup handler is called once, at the beginning of a syscall and before the
+execution handler is invoked.  This allows a single, consistent means of
+storing any arguments provided via IPC within the continuation, so that they
+may be available to the execution handler.
 
 The syscall dispatch is represented as a table which is indexed by the system
 call number and the handler type, giving simple and constant-time access to
@@ -192,24 +188,21 @@ complex representation of a function call.
 Implemented in: \texttt{/apps/sos/src/frametable.c}
 \subsubsection{Design}
 The frame table is the representation of physical memory. This memory is
-mapped by applications and also used by SOS.  Only frames are represented by
-the frametable, with other datatypes residing elsewhere in the system.
+mapped by applications and also used by SOS.  At boot-time the frame table is
+initialised for the entirety of memory, with frames backing the frame table
+being allocated at its beginning.  The frame table only supports
+\texttt{seL4\_SmallPageObjects}.
 
 The frame table is an array of structs, where each struct contains the details
 specific to the frame (namely, its address and CPtr), as well as a pointer to
-the next element.  When SOS bootstraps, all elements of the array are
-allocated, and the free pointer chains each node to its successor.
+the next element.
 
-This structure contains as a list of free frames: as frames are allocated,
-they are taken from the head of the list, and as they are freed, they are
-returned to the head of the list.  Thus giving a O(1) performance for
-allocation and de-allocation of frames.  Similarly, as the structure is an
-array, it also offers O(1) lookup as the address can be transformed in to an
-index into the array trivially.
+This structure contains as a linked-list of free frames, which gives O(1)
+performance for allocation and de-allocation of frames.  Similarly, as the
+underlying structure is an array, it also offers O(1) lookup as the address
+can be transformed in to an index into the array trivially.
 
 \subsubsection{Discussion}
-During booting, the frame table is allocated in full, with typed frames for
-the frame table being allocated `within' the frame table during allocation.
 As the data-structure is 12 bytes in size under the target architecture, this
 results in approximately 768 frames of memory being consumed per GiB of
 physical memory, delaying boot time.
@@ -218,11 +211,11 @@ Furthermore, as the data-structure for a frame doubles to provide pointers to
 the next free element, under high memory contention situations approximately
 1/3 of the frame table size will be used to store NULL pointers.  Improving
 the representation of the frame table would allow for another 256 frames to be
-made available for use per GiB of memory.  However, equates to 1MiB of memory
-per GiB, which is not significant for most applications.
+made available for use per GiB of memory.  However, this equates to 1MiB of
+memory per GiB, which is not significant for most applications.
 
 \subsection{Swap File}
-Implemented in: \texttt{/apps/sos/src/frametable.c}
+Implemented in: \texttt{/apps/sos/src/swap.c}
 
 \subsubsection{Design}
 When the system encounters contention for the available physical memory
@@ -261,8 +254,10 @@ Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
 \subsubsection{Design}
 The design for Process IDs allows for constant-time creation, lookup and
 removal, and will reuse process IDs minimally.  This is achieved via an array
-of `PID entries', where a PID entry is a double-linked node containing a
-process ID and a flag to indicate whether it corresponds to a running process.
+of `PID entries', where each entry in the array is a doubly-linked node, and
+can thus represent lists of both running and free PIDs.  A PID entry contains
+a process ID and a flag to indicate whether it corresponds to a running
+process.
 
 Closely related to the use of process IDs is the means by which a process is
 identified during a callback.  SOS accounts for potential race conditions by
@@ -273,14 +268,6 @@ known, it can be determined whether the process now owning the PID for the
 callback is the currently running process; a process starting after the
 creation time of the callback cannot own the callback, and thus the callback
 is discarded.
-
-\subsubsection{Discussion}
-Neither the PID nor the running flag are strictly required.  A PID could
-equally have been derived via pointer arithmetic between the beginning of,
-and the current index of the table.  Similarly the running flag could be
-derived via a lookup into the process table.  However this does afford the
-opportunity to verify the correctness of data structure manipulation, and
-clarifies the implementation.
 
 \subsection{Page Table}
 Implemented in: \texttt{/apps/sos/src/addrspace.c}
@@ -295,9 +282,11 @@ page table divides the virtual address as follows:
   \caption{Address Format for Page Table lookup}
 \end{figure}
 
-This scheme allows each the Page Directory and the second level of the Page
-Table to address 1024 4-byte entries within one 4096-byte frame: each 4-byte
-entry is a pointer to a Page Table Entry.
+This structure allows for constant-time lookup: the upper 10 most bits index
+into the Page Directory, the next upper 10-most bits index in to the second
+level of the Page Table.  This scheme allows each the Page Directory and the
+second level of the Page Table to address 1024 4-byte entries within one
+4096-byte frame: each 4-byte entry is a pointer to a Page Table Entry.
 
 A Page Table Entry (PTE) stores the frame address and page cap corresponding
 to the virtual address.  As only 20 bits of the frame address are actually
@@ -312,22 +301,15 @@ whether it has been referenced.  (See `Page Replacement' for details.)
   \caption{Address Format as stored in the Page Table Entry}
 \end{figure}
 
-This structure allows for efficient lookup: the upper 10 most bits index into
-the Page Directory, the next upper 10-most bits index in to the second level
-of the Page Table.
-
-A linked list is used as the size of a seL4 Page Directory and seL4 Page Table
-are 12 and 8 bits respectively, and thus do not map cleanly in to the SOS Page
-Table design.  However the data stored in the linked list never need be
-accessed explicitly, and exists only for the purpose of releasing the
-resource.  A linked list provides constant-time insertion while providing a
-simple design at the time of releasing the resources.
+A linked list is used as the internal seL4 Page Directory and Page Tables
+(which are 12 and 8 bits, respectively) do not map cleanly in to the SOS Page
+Table design.  The caps stored in this list exist only for the purpose of
+releasing the resource.
 
 \subsection{Page Replacement}
 \subsubsection{Design}
 SOS implements a second-chance local page replacement algorithm, which takes
-place over a number of steps, and occurs in the event that there are isn't any
-frames available in the frame table to allocate to a process.
+place over a number of steps:
 
 \begin{enumerate}
 \item Select the process from which to evict a page.
@@ -339,8 +321,7 @@ Selecting the process to evict from is based on a threshold applied across all
 process: whether the process exceeds the average number of `evictable' pages
 across all processes.  The first process identified which satisfies this
 requirement is selected for eviction, or if there isn't any process satisfying
-this requirement, the page is evicted from the process which SOS is acting on
-behalf of.
+this requirement, the page is evicted from the current process.
 
 In order to guarantee fairness of the system, the process for which eviction
 takes place is tracked, and subsequent selection takes place from the
