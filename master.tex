@@ -69,9 +69,10 @@ Implemented in: \texttt{/apps/sos/src/main.c}
 At its core, SOS uses an event-based model implemented using
 \emph{continuations}.  A continuation allows for non-blocking behaviour during
 otherwise by blocking in a single-threaded implementation (for example I/O) by
-providing a way to preserve execution state.  This allows for a
-single-threaded implementation, while preserving many of the performance
-characteristics of a multi-threaded implementation.
+providing a way to preserve execution state, thereby maximising the time where
+SOS is able to accept new client requests.  This allows for a single-threaded
+implementation, while preserving many of the performance characteristics of a
+multi-threaded implementation.
 
 A continuation is specific to a process and is used to track the current state
 of execution.  For each syscall, the requesting process is identified by an
@@ -101,90 +102,62 @@ effectively implement a blocked and ready queue:
   to the queue
 \end{description}
 
-At the completion of a syscall, the function
+At the completion of a client request, the function
 \texttt{syscall\_end\_continuation()} is used to reply to the client in a
 consistent manner, ensuring that all execution state is released and reset
-appropriately.  The caller to syscall\_end\_continuation indicates the process
-to reply to, the return code, and whether or not the syscall was successful.
+appropriately.  The caller to \texttt{syscall\_end\_continuation} indicates
+the process to reply to, the return code, and whether or not the request was
+successful.  At the completion of a request, the state of the process'
+continuation is reset.
 
 \subsubsection{Discussion}
-While a multi-threaded kernel does offer performance advantages through the
-virtue of being able to serve multiple processes simultaneously, the benefits
-of multi-threading in a kernel are somewhat diminished.  There are two reasons
-for this: the first of which is locks, which limit scalability, the second of
-which is that time spent in the kernel should be designed such that it is
-minimised.  Thus this is primarily a concern for high performance
-applications.  SOS, while designed for efficiency, is not intended for high
-performance applications.
-
-The benefit the event-based system provides is removing much of the complexity
-which makes reasoning about a multi-threaded system difficult, while allowing
-for performant, non-blocking implementation.  For this reason a model based on
-continuations was elected for SOS.
+While a multi-threaded kernel does offer performance advantages on SMP-capable
+hardware through the virtue of being able to serve multiple processes
+simultaneously, the benefits of multi-threading in a kernel are somewhat
+diminished.  There are two reasons for this: the first of which is locks,
+which limit scalability, the second of which is that time spent in the kernel
+should be designed such that it is minimised.  Thus this is primarily a
+concern for high performance applications.  SOS, while designed for
+efficiency, is not intended for high performance applications.  On ARM, seL4
+is uniprocessor-only and thus a single-threaded implementation may offer
+improved performance over a threaded implementation due to the costs imposed
+by locking.
 
 The implementation of continuations in SOS is conceptually simple, and allows
 for type-checking at compile-time, which affords some correctness guarantees.
 However, this struct becomes exceedingly large as more behaviours are added to
 SOS, each of which may depend on and need to extend upon the state already
-stored in the continuation.  As this is a per-process structure, it thus
-requires an additional frame to be allocated for every process running on the
-system, and should more functionality be added to SOS, may require multiple
-frames to be allocated causing concerns over contiguous allocation of the
-memory backing the structure.
-
-A more scalable approach would be to implement the continuation as an array or
-hash table, whereby 32-bit values could be accessed given a key.  This may
-seem a preferable for the reason of scalability, however static checks become
-increasingly valuable for offering correctness guarantees as an Operating
-System grows.  For this reason it was deemed an inferior approach to the
-single, large continuation structure given the scope of the project.
+stored in the continuation.
 
 Yet more sophisticated data structures could also be used, which are amenable
-to both static analysis, and better scalability, though the added complexity
-of managing these data structures exceeded the benefits for the current
-incarnation of SOS.
+to both static analysis or better scalability, such as a hash-table, though to
+achieve both static analysis and scalability requires a yet more sophisticated
+data structure which imposes added complexities outweighing the benefits
+offered to the current incarnation of SOS.
 
 \subsection{System Calls}
 Implemented in: \texttt{/apps/sos/src/handler.c}, \texttt{/apps/sos/src/syscall.c}
 
 \subsubsection{Design}
 As this is a continuation-based model, each syscall is implemented in two
-parts: a setup handler, and an execution handler.
+parts: a setup handler, and an execution handler.  The setup handler is called
+once, at the beginning of a syscall and before the execution handler is
+invoked.  This allows a single, consistent means of storing any arguments
+provided via IPC within the continuation, so that they may be available to the
+execution handler.
 
-The setup handler is called once, at the beginning of a syscall and before the
-execution handler is invoked.  This allows a single, consistent means of
-storing any arguments provided via IPC within the continuation, so that they
-may be available to the execution handler.
+The syscall dispatch is represented as a table which is indexed by the system
+call number and the handler type, giving simple and constant-time access to
+the syscalls implemented within SOS.
 
-The syscall dispatch is represented as a matrix, whereby the number of
-implemented syscalls form the `rows', and function pointers to the setup and
-execution handlers form the `columns'.  This gives simple and constant-time
-access to the syscalls implemented within SOS: the syscall lookup is an index
-into the array based on the syscall number, and the handler to be executed is
-also an index.
-
-A dispatching function, \texttt{handle\_syscall()} executes the setup handler
-should for the desired syscall (should one be defined), storing the fact that
-this has been executed in the continuation.  The dispatcher will then invoke
-the execution handler for that syscall.
-
-Should the execution of a syscall handler result in an operation which would
-otherwise be blocking, execution will return to the syscall loop until an
-interrupt occurs based on the completion of the event.  Refer to the previous
-section for details.
-
-During the execution of a system call, three functions are used to capture and
-access state:
+During the execution of a system call, two concepts are used to access the
+current current state:
 \begin{description}
-\item[current\_process()] The process which invoked the current system call.
-\item[set\_current\_process()] Set the current process based on a Process ID (see
-  `Process Management' for details)
-\item[effective\_process()] The process which SOS is acting on behalf of.  This
-  is usually identical to current\_process(), with the exception being spawning
+\item[current\_process] The process which invoked the current system call.
+\item[effective\_process] The process which SOS is acting on behalf of.  This
+  is usually identical to current\_process, with the exception being spawning
   a child process.  It is defined in terms of the current process.
 \end{description}
-At the completion of a syscall, the state of the process' continuation is
-reset.
 
 \subsubsection{Discussion}
 The approach to splitting the setup and execution handler for the syscalls
@@ -222,16 +195,13 @@ interrupts.
 Both timed callbacks and kernel tick callbacks are exposed via an interface
 for registering callback functions when these events occur.
 
-All kernel tick callbacks are called with each kernel tick.  Thus a developer
-needs to be aware of the performance characteristics of the tick handler being
-registered, and should ensure that the worst-case execution time is minimised.
-
 Timed callbacks are called after a timeout expires.  This is implemented by
 ensuring that all registrations are ordered at registration-time, and setting
 the corresponding Output Compare Register to the next event in the queue.  The
-next event in the queue is determined through a search, where overflow is
-accounted for by searching for the event such that the difference between the
-current time, and the event time is minimal.
+next event in the queue is determined through looking up the next callback in
+a array, which is sorted by callback time.  Timer overflow is accounted for by
+searching for the event such that the difference between the current time, and
+the event time is minimal at the time of registration.
 
 Timed callbacks are removed after being fired and are used to implement the
 \texttt{sleep} syscall.  As kernel tick events satisfy different semantics to
@@ -244,22 +214,18 @@ functionality.  Both EPIT and GPT timers on the Sabre have a very similar
 interface, and both could equally have been used.  However it was elected that
 the GPT is slightly simpler and fulfills all requirements.
 
-The implementation of the timer registration does not offer particularly
-strong performance characteristics, with both registration and search (for the
-next OCR time) being linear.  While this could be greatly improved, it imposes
-minimal performance degradation on SOS: registration is used infrequently and
-the search occurs only when a callback timeout occurs.
-
-While the performance impact is minor in typical applications, it does permit
-a malicious actor to affect the availability of SOS, and thus would need to be
-improved.
+The implementation trades-off registration and removal performance for
+interrupt performance: registration and removal are both linear time
+operations as they ensure the callback timeouts are sorted based on the time
+they must trigger.  The interrupt handler offers constant-time performance for
+the lookup for the expiring callbacks.
 
 \section{System Memory}
 \subsection{Frame Table}
 Implemented in: \texttt{/apps/sos/src/frametable.c}
 \subsubsection{Design}
 The frame table is the representation of physical memory. This memory is
-mapped by applications and also used by SOSH.  Only frames are represented by
+mapped by applications and also used by SOS.  Only frames are represented by
 the frametable, with other datatypes residing elsewhere in the system.
 
 The frame table is an array of structs, where each struct contains the details
@@ -267,21 +233,14 @@ specific to the frame (namely, its address and CPtr), as well as a pointer to
 the next element.  When SOS bootstraps, all elements of the array are
 allocated, and the free pointer chains each node to its successor.
 
-This structure serves as a list of free frames: as frames are allocated, they
-are taken from the head of the list, and as they are freed, they are returned
-to the head of the list.  Thus giving a O(1) performance for allocation and
-de-allocation of frames.  Similarly, as the structure is an array, it also
-offers O(1) lookup as the address can be transformed in to an index into the
-array trivially.
+This structure contains as a list of free frames: as frames are allocated,
+they are taken from the head of the list, and as they are freed, they are
+returned to the head of the list.  Thus giving a O(1) performance for
+allocation and de-allocation of frames.  Similarly, as the structure is an
+array, it also offers O(1) lookup as the address can be transformed in to an
+index into the array trivially.
 
 \subsubsection{Discussion}
-We could also have represented other datatypes within the `frame table' and
-provided a mapping back to them, though the vast majority of typed memory in
-the system is typed as frames, and so the added complexity of managing other
-datatypes in the frame table outweighs the minimal benefit it offers.  Instead
-memory of types other than \texttt{seL4\_ARM\_SmallPageObject} is stored
-explictily in other data structures.
-
 During booting, the frame table is allocated in full, with typed frames for
 the frame table being allocated `within' the frame table during allocation.
 As the data-structure is 12 bytes in size under the target architecture, this
@@ -292,7 +251,8 @@ Furthermore, as the data-structure for a frame doubles to provide pointers to
 the next free element, under high memory contention situations approximately
 1/3 of the frame table size will be used to store NULL pointers.  Improving
 the representation of the frame table would allow for another 256 frames to be
-made available for use per GiB of memory.
+made available for use per GiB of memory.  However, equates to 1MiB of memory
+per GiB, which is not significant for most applications.
 
 \subsection{Swap File}
 Implemented in: \texttt{/apps/sos/src/frametable.c}
@@ -301,8 +261,8 @@ Implemented in: \texttt{/apps/sos/src/frametable.c}
 When the system encounters contention for the available physical memory
 resources, some memory may be swapped to disk.  The data structure which
 underpins the swap file is similar to that which underpins the frame table: an
-array whose free nodes form a linked list, and as such offers the same
-performance characteristics as the frame table.
+array whose free nodes form a linked list, and as such also offers constant
+time lookup, allocation and deallocation.
 
 When reading data from the swap file, or otherwise freeing it, the swap file
 is not altered.
@@ -327,7 +287,7 @@ table'.  However, such an approach would fix the size of the swap file which
 may be a yet more significant issue on systems with restricted disk space or
 where the size of the swap file should otherwise be restricted.
 
-\section{Process Management}
+\section{Processes}
 \subsection{Page Table}
 Implemented in: \texttt{/apps/sos/src/addrspace.c}
 
@@ -352,22 +312,12 @@ This structure allows for efficient lookup: the upper 10 most bits index into
 the Page Directory, the next upper 10-most bits index in to the second level
 of the Page Table.
 
-For processes running upon the seL4 Microkernel efficiently, seL4 exposes its
-own Page Table implementation.  To manage this, the capability for the seL4
-Page Directory is stored in the process' Address Space, and the capability to
-each Page Table stored in a Linked List.
-
-The linked list is used as the size of a seL4 Page Directory and seL4 Page
-Table are 12 and 8 bits respectively, and thus do not map cleanly in to the
-SOS Page Table design.  However the data stored in the linked list never need
-be accessed explicitly, and exists only for the purpose of releasing the
+A linked list is used as the size of a seL4 Page Directory and seL4 Page Table
+are 12 and 8 bits respectively, and thus do not map cleanly in to the SOS Page
+Table design.  However the data stored in the linked list never need be
+accessed explicitly, and exists only for the purpose of releasing the
 resource.  A linked list provides constant-time insertion while providing a
 simple design at the time of releasing the resources.
-
-%\subsubsection{TODO Discussion}
-%Varying from seL4 implementation: 8/12
-%Why we did it
-%How we accounted for implications of that.
 
 \subsection{Page Replacement}
 \subsubsection{Design}
@@ -403,15 +353,14 @@ algorithm proceeds to the next allocated page.
 Pages which are pinned, or already swapped to disk are not considered valid
 for selection.  Thus there is the potential that there are no pages in the
 process which are valid selection.  In this event, (i.e., the event we iterate
-through the loop more than twice), the process which SOS is acting on behalf
+through the list more than twice), the process which SOS is acting on behalf
 of is killed in order to relieve the memory contention.
 
 Once a page has been selected, the contents of the frame are written to the
 next available location in the swap file.  During the copy, the PTE is marked
-as \texttt{pinned}, and so is not valid for subsequent selection.  Finally once the
-write is complete the page is marked as \texttt{swapd}. indicating that subsequent
-accesses to this page must be read from disk, and use of the corresponding
-frame is made available to the process requiring it.
+as \texttt{pinned}, and so is not valid for subsequent selection.  Finally
+once the write is complete the page is marked as \texttt{swapd}, indicating an
+address on disk.
 
 \subsubsection{Discussion}
 Designing a scheme which maximised the amount of memory available for
@@ -451,15 +400,10 @@ Regions are implemented as a singly-linked list.  Each region also contains
 start, end, rights, and an offset for the starting location of that region in
 the elf file.
 
-\subsubsection{TODO Discussion}
-There is no optimisation on the lookup cost of a region.  This data structure
-is searched in a number of cases, but most importantly, in the event of a VM
-Fault.  A binary may have as few as 4 segments mapped in to the address space,
-and in this instance the searching cost may be acceptable.  However as the
-number of regions increases, the performance of the system may be subject to
-significant degradation.
-
-TODO: How could this be fixed?
+\subsubsection{Discussion}
+There is no optimisation on the lookup cost of a region.  This could be
+optimised through the use of a Red-Black tree or similar data structure,
+though is unnecessarily complex more most applications.
 
 \subsection{Page Faults}
 Implemented in: \texttt{/apps/sos/src/handler.c}
@@ -496,9 +440,6 @@ is unset will also be unmapped from the process' address space.  Thus when a
 fault occurs on a page where the referenced bit is not set, though it is still
 in memory, the referenced bit will be set and the page mapped back in to the
 process' address space.
-
-\subsubsection{TODO Discussion}
-TODO: Is any discussion needed?
 
 \subsection{Processes}
 Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
@@ -549,7 +490,10 @@ An IO Vector provides the following fields:
 The benefit of the IO Vector is that it allows for otherwise non-contiguous
 pages to be treated as though contiguous.  It also provides a means for
 representing the progress of an IO operations, where the IO Vector need simply
-be updated to reflect the current progress of an operation.
+be updated to reflect the current progress of an operation.  Similarly, we
+need only guarantee the page for the current IO Vector is in memory, thus
+alleviating the need to read all pages for the current IO operation into
+memory.
 
 IO Vectors are used to represent most I/O operations in SOS.
 
@@ -583,9 +527,6 @@ because of this.
 
 The serial driver is initialised at boot-time.
 
-\subsubsection{TODO Discussion}
-Storage and use of reader buffer?  Discuss the reason for pinning?  Is this necessary?
-
 \subsection{NFS}
 Implemented in: \texttt{/apps/sos/src/sos\_nfs.c}
 
@@ -605,13 +546,10 @@ Detection of completion of the syscall is handled individually in each
 callback.  In the event of error, or completion, the callback is responsible
 for triggering an appropriate reply to the client over IPC.
 
-\subsubsection{TODO Discussion}
-TODO?
-
-\subsection{IO Device}
+\subsection{I/O Device Abstraction}
 \subsubsection{Design}
-An IO device is an abstraction over both block and character devices.  In the
-case of SOS, this abstracts both Serial and NFS to create a uniform IO
+The I/O Device is an abstraction over both block and character devices.  In
+the case of SOS, this abstracts both Serial and NFS to create a uniform IO
 interface through mapping function pointers to their respective
 implementations.
 
