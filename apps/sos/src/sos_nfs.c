@@ -19,7 +19,7 @@
 #include "syscall.h"
 #include "addrspace.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 #define SOS_NFS_ERR (-1)
@@ -139,7 +139,7 @@ sos_nfs_open_callback(uintptr_t cb, enum nfs_stat status,
         add_ready_proc(pid);
     }
     free((callback_info_t*)cb);
-    printf("Finishing nfs_open callback\n");
+    dprintf(3, "Finishing nfs_open callback\n");
 }
 
 /**
@@ -175,7 +175,7 @@ int sos_nfs_open(const char* filename, fmode_t mode) {
 static void
 sos_nfs_read_callback(uintptr_t cb, enum nfs_stat status,
                       fattr_t *fattr, int count, void* data) {
-    printf("Read callback: %d\n", count);
+    dprintf(3, "Read callback: %d\n", count);
     (void)fattr;
     pid_t pid = ((callback_info_t*)cb)->pid;
     set_current_process(pid);
@@ -258,7 +258,7 @@ int sos_nfs_read(iovec_t* vec, int fd, int count) {
     }
 
     dprintf(2, "READING up to %d bytes to %08x, now at offset: %u\n",cur_proc->cont.iov->sz, cur_proc->cont.iov->vstart, of->offset);
-    printf("READING USING PID %d\n", pid);
+    dprintf(3, "READING USING PID %d\n", pid);
     callback_info_t *cb = malloc(sizeof(callback_info_t));
     if (!cb) {
         return ENOMEM;

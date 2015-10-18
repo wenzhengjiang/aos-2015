@@ -47,7 +47,7 @@
 #include <autoconf.h>
 #include <errno.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -334,10 +334,8 @@ int main(void) {
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(-1, "\nSOS entering syscall loop\n");
-    syscall_loop(_sos_ipc_ep_cap);
     srand(26706);
-    printf("game over!\n");
-    while(1) {  }
+    syscall_loop(_sos_ipc_ep_cap);
 
     /* Not reached */
     return 0;

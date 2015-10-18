@@ -26,7 +26,7 @@
 #define HANDLER_EXEC   (1)
 
 #define MAX_SYSCALL_NO (100)
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -64,7 +64,7 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
         return EACCES;
     }
 
-    dprintf(-1, "sos_vm_fault %08x\n", faultaddr);
+    dprintf(3, "sos_vm_fault %08x\n", faultaddr);
     /* Fault on an existing page and 
      * we're not re-entering this handler in the middle of loading page from elf file*/
     if (as_page_exists(as, faultaddr) && !proc->cont.binary_nfs_read) {
@@ -177,7 +177,7 @@ static int getdirent_setup (void) {
     dprintf(4, "SYS GETDIRENT\n");
     size_t nbyte = (size_t)seL4_GetMR(2);
     unsigned int pos = (int)seL4_GetMR(1);
-    if (nbyte == 0 || pos == 0) return EINVAL;
+    if (pos == 0) return EINVAL;
     current_process()->cont.position_arg = pos;
     current_process()->cont.length_arg = nbyte;
     return 0;
@@ -306,6 +306,6 @@ void handle_syscall(seL4_Word syscall_number) {
             return ;
         }
     } else {
-        printf("Unknown syscall %d\n", syscall_number);
+        ERR("Unknown syscall %d\n", syscall_number);
     }
 }

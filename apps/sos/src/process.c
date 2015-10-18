@@ -27,7 +27,7 @@
 #include "file.h"
 #include "sos_nfs.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -251,10 +251,11 @@ sos_proc_t *select_eviction_process(void) {
         dprintf(3, "page_threshold: %u, %d, %d\n", page_threshold(), i, proc->running);
         assert(proc_table[i]);
         assert(proc_table[i]->vspace);
-        dprintf(3, "mapped: %u\n", proc_table[i]->vspace->pages_mapped);
+        dprintf(3, "mapped: %u, threshold = %u\n", proc_table[i]->vspace->pages_mapped, page_threshold());
         if (proc_table[i]->vspace->pages_mapped > page_threshold()) {
+            dprintf(3, "evict process %d\n", i);
             last_evicted_proc = &pid_table[i];
-                assert(proc_table[last_evicted_proc->pid]);
+            assert(proc_table[last_evicted_proc->pid]);
             return proc_table[i];
         }
         proc = proc->next;
@@ -340,7 +341,7 @@ sos_proc_t* process_create(char *name, seL4_CPtr fault_ep) {
  * @brief Free a process and all its resources, clear up everything ...
  */
 void process_delete(sos_proc_t* proc) {
-    printf("process delete\n");
+    dprintf(3, "process delete\n");
     assert(proc);
     // Remove it from running pid queue and add it to free pd queue
     {
@@ -477,14 +478,13 @@ int process_wake_waiters(sos_proc_t *proc) {
 
 pid_t start_process(char* app_name, seL4_CPtr fault_ep) {
     static sos_proc_t* proc = NULL;
-    printf("start_process\n");
+    dprintf(3, "start_process\n");
     int err;
 
     /* These required for setting up the TCB */
     seL4_UserContext context;
 
     /* These required for loading program sections */
-    printf("check continuation\n");
     proc = process_create(app_name, fault_ep);
     sos_proc_t* cur_proc = current_process();
 

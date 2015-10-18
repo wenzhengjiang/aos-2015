@@ -15,7 +15,7 @@
 #include "handler.h"
 #include <assert.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -39,6 +39,7 @@ static pte_t* swap_choose_replacement_page(sos_addrspace_t* as) {
             if (loop_count > 1) { // all pages are pinned or swaped 
                 dprintf(1, "[PR] No pages left for eviction. Invoking 'OOM killer'\n");
                 if (effective_process() != current_process()) {
+                    WARN("Failed to start the new process");
                     syscall_end_continuation(current_process(), 0, false);
                 }
                 process_delete(effective_process());
@@ -130,7 +131,7 @@ int swap_evict_page(sos_proc_t *evict_proc) {
         process_delete(effective_process());
         longjmp(ipc_event_env, -1);
     } else {
-        printf("Jumping back\n");
+        dprintf(4, "[PR] Jumping back\n");
         // Wait on network irq
         longjmp(ipc_event_env, -1);
     }

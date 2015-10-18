@@ -29,7 +29,7 @@ typedef struct kernel_page_table {
 typedef struct page_table_entry {
     seL4_CPtr page_cap;
     struct page_table_entry *next;
-    sos_vaddr addr : 24; // swap_addr when swapd bit is on; frame_addr when swapd bit is off
+    sos_vaddr addr : 20; // swap_addr when swapd bit is on; frame_addr when swapd bit is off
     bool refd : 1;      // reference bit
     bool pinned : 1;    // page is pinned, so it can't be swaped
     bool swapd  : 1;    // page is swaped to disk

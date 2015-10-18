@@ -18,7 +18,7 @@
 #include "process.h"
 #include <assert.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -35,7 +35,7 @@
 #define PD_LOOKUP(vaddr) (vaddr >> (32ul - PD_BITS))
 #define PT_LOOKUP(vaddr) ((vaddr << PD_BITS) >> (32ul - PT_BITS))
 
-int addrspace_pages = 0;
+size_t addrspace_pages = 0;
 
 static inline unsigned CONST umin(unsigned a, unsigned b) {
     return (a < b) ? a : b;

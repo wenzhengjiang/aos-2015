@@ -17,7 +17,7 @@
 #include "network.h"
 #include "syscall.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -161,7 +161,7 @@ swap_write_callback(uintptr_t cb, enum nfs_stat status, fattr_t *fattr, int coun
         return;
     }
     int cnt = proc->cont.swap_cnt;
-    printf("Asking to write PAGE_SIZE - cnt (%u) bytes\n", PAGE_SIZE - cnt);
+    dprintf(3, "[SWAP] Asking to write PAGE_SIZE - cnt (%u) bytes\n", PAGE_SIZE - cnt);
     if (nfs_write(&swap_handle, proc->cont.swap_file_offset + cnt, PAGE_SIZE - cnt,
                   (void*)(proc->cont.swap_page+cnt), swap_write_callback,
                   (uintptr_t)cb)) {

@@ -17,7 +17,7 @@
 
 #define SERIAL_BUF_SIZE  1024
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 

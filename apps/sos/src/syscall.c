@@ -26,7 +26,7 @@
 #include <syscallno.h>
 #include <clock/clock.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -416,7 +416,6 @@ int sos__sys_write(void) {
         return EPERM;
     }
     if (nbyte == 0) {
-        WARN("sos__sys_write 0 nbyte \n");
         syscall_end_continuation(current_process(), 0, true);
         return 0;
     }
@@ -430,6 +429,10 @@ int sos__sys_stat(void) {
 }
 
 int sos__sys_getdirent(void) {
+    if (current_process()->cont.length_arg == 0) {
+        syscall_end_continuation(current_process(), 0, true);
+        return 0;
+    }
     return nfs_io.getdirent();
 }
 
@@ -553,8 +556,9 @@ int sos__sys_usleep(void) {
     if (current_process()->cont.delay == 0) {
         syscall_end_continuation(current_process(), 0, true);
     }
-    int err = register_timer(current_process()->cont.delay, sys_notify_client, (int*)current_process()->pid);
-    return err;
+    int id = register_timer(current_process()->cont.delay, sys_notify_client, (int*)current_process()->pid);
+    if (id == 0) return ENOMEM;
+    else return 0;
 }
 
 int sos__sys_timestamp(void) {

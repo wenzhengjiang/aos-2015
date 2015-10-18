@@ -21,7 +21,7 @@
 #include "page_replacement.h"
 #include "swap.h"
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -107,7 +107,7 @@ int sos_map_frame(seL4_Word vaddr) {
 int sos_unmap_frame(seL4_Word vaddr) {
     assert(vaddr < (PROCESS_STACK_TOP - PAGE_SIZE));
     seL4_Word idx = VADDR_TO_FADDR(vaddr) / PAGE_SIZE;
-    printf("vaddr, %x, idx: %d\n", vaddr, idx);
+    dprintf(2, "[FRAME] vaddr, %x, idx: %d\n", vaddr, idx);
     dprintf(2, "[FRAME] Freeing frame\n");
     if (frame_free(vaddr)) {
         ERR("[FRAME] Error during frame_free\n");
@@ -227,7 +227,7 @@ seL4_Word frame_alloc(seL4_Word *vaddr) {
                 }
             }
             evict_proc = proc->cont.page_eviction_process;
-            printf("Evicting from PID: %d\n", evict_proc->pid);
+            dprintf(3, "[FRAME] Evicting from PID: %d\n", evict_proc->pid);
             // swap out it's page
             swap_evict_page(evict_proc);
         }

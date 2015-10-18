@@ -26,7 +26,7 @@
 #include <ut/ut.h>
 #include <device/mapping.h>
 
-#define verbose 5
+#define verbose 0
 #include <log/debug.h>
 #include <log/panic.h>
 
@@ -138,7 +138,6 @@ int elf_load(sos_proc_t* proc, char *elf_file) {
         ERR("Too many ELF segments in file\n");
     }
     for (int i = 0; i < num_headers; i++) {
-        printf("Elf has %d headers\n", num_headers);
 
         seL4_Word source_addr;
         unsigned long flags, segment_size, vaddr;
@@ -153,7 +152,7 @@ int elf_load(sos_proc_t* proc, char *elf_file) {
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
         /* Copy it across into the vspace. */
-        dprintf(-1, " * Loading segment %08x-->%08x %x\n", (int)vaddr, (int)(vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights));
+        dprintf(3, " * Loading segment %08x-->%08x %x\n", (int)vaddr, (int)(vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights));
         sos_region_t* reg = as_region_create(as, (seL4_Word)vaddr, ((seL4_Word)vaddr + segment_size), (int)(get_sel4_rights_from_elf(flags) & seL4_AllRights), source_addr);
         // err = load_segment_into_vspace(proc, dest_as, source_addr, segment_size, file_size, vaddr,
         if (reg == NULL) {
