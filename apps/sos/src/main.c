@@ -77,7 +77,7 @@ seL4_CPtr _sos_interrupt_ep_cap;
  *
  * @param ep endpoints where to receive triggered events
  */
-void syscall_loop(seL4_CPtr ep) {
+void event_loop(seL4_CPtr ep) {
     sos_proc_t *proc = NULL;
     static bool bootstrapped = false;
     static bool bootstrap_init = false;
@@ -334,7 +334,7 @@ int main(void) {
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(-1, "\nSOS entering syscall loop\n");
-    syscall_loop(_sos_ipc_ep_cap);
+    event_loop(_sos_ipc_ep_cap);
     srand(26706);
     printf("game over!\n");
     while(1) {  }
