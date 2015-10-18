@@ -302,6 +302,7 @@ int frame_free(seL4_Word vaddr) {
     dprintf(2, "[FRAME] Unmap complete\n");
 
     sos_proc_t* proc = current_process();
+    assert(proc);
     proc->frames_available--;
     process_frames--;
 

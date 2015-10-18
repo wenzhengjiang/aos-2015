@@ -164,10 +164,13 @@ int swap_in_page(client_vaddr readin) {
     if (!proc->cont.have_new_frame) {
         assert(as->repllist_head && as->repllist_tail);
         seL4_Word tmp;
-        frame_alloc(&tmp);
+        if(frame_alloc(&tmp) == 0) {
+            ERR("Failed to make frame for page to swap in");
+            process_delete(current_process());
+        }
         proc->cont.have_new_frame = true;
         proc->cont.original_page_addr = tmp;
-        dprintf(3, "[PR] Finished eviction\n");
+        dprintf(3, "[PR] Finished eviction, new frame = %08x\n", proc->cont.original_page_addr);
         dprintf(3, "[PR] proc %p, victim: %p\n", proc, proc->cont.page_replacement_victim);
     }
 
@@ -185,7 +188,6 @@ int swap_in_page(client_vaddr readin) {
 
         sos_swap_read(proc->cont.original_page_addr, LOAD_PAGE(to_load->addr));
         longjmp(ipc_event_env, -1);
-        assert(proc->cont.original_page_addr != 0);
     }
     if (proc->cont.swap_status == SWAP_SUCCESS) {
         pte_t *to_load = as_lookup_pte(as, proc->cont.page_replacement_request);
@@ -205,6 +207,7 @@ int swap_in_page(client_vaddr readin) {
         proc->cont.page_replacement_request = 0;
         proc->cont.original_page_addr = 0;
         proc->cont.page_replacement_victim = NULL;
+        proc->cont.have_new_frame = false;
         return 0;
     } else {
         longjmp(ipc_event_env, -1);

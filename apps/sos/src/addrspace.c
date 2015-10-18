@@ -325,17 +325,19 @@ static int as_map_page(sos_addrspace_t *as, seL4_Word vaddr, seL4_CPtr fc, seL4_
 
 int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     dprintf(3, "as_add_page %08x, %08x\n", vaddr, sos_vaddr);
+    assert(as);
     int err;
     seL4_Word pd_idx = PD_LOOKUP(vaddr);
     seL4_Word pt_idx = PT_LOOKUP(vaddr);
     assert(pt_idx < PT_SIZE && pt_idx >= 0);
     if (as->pd[pd_idx] == NULL) {
-        err = (int)frame_alloc((seL4_Word*)&as->pd[pd_idx]);
-        if (err == 0) {
+        int ret = (int)frame_alloc((seL4_Word*)&as->pd[pd_idx]);
+        if (ret == 0) {
             sos_unmap_frame(sos_vaddr);
             return ENOMEM;
         }
     }
+    dprintf(3, "register to frame table\n");
     assert(as->pd[pd_idx][pt_idx] == 0);
     as->pd[pd_idx][pt_idx] = malloc(sizeof(pte_t));
     pte_t* pt = as->pd[pd_idx][pt_idx];
@@ -353,6 +355,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     pt->swapd = false;
     pt->addr = SAVE_PAGE(sos_vaddr);
     
+    dprintf(3, "insert to page list\n");
     if (as->repllist_tail == NULL) {
         assert(as->repllist_head == NULL);
         as->repllist_head = pt;
@@ -361,7 +364,7 @@ int as_add_page(sos_addrspace_t *as, client_vaddr vaddr, sos_vaddr sos_vaddr) {
     }
     as->repllist_tail = pt;
     pt->next = as->repllist_head;
-    dprintf(0, "as_add_page complete");
+    dprintf(3, "as_add_page complete");
     return 0;
 }
 
