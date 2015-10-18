@@ -448,9 +448,9 @@ int main(void) {
     char *bp, *p;
 
     //large_num_proc_test(10);
-     two_coye();
+    // two_coye();
     //build_tree();
-    m5_test() ;
+    //m5_test() ;
     in = open("console", O_RDONLY);
     bp = buf;
     done = 0;
