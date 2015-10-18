@@ -55,13 +55,13 @@ benefits and trade-offs of the decision, and possible alternative approaches.
 Refer to Doxygen documentation for implementation-specific details and
 conventions.
 
-There are 4 distinct problem-areas that have been explored in SOS: Interrupts
-and Syscalls, Memory, I/O and Process Management.  Interrupts and Syscalls
-requests are essential for all interaction with SOS, and thus offer a solid
-starting point for introducing the system architecture from a higher level
-perspective.
+There are 4 distinct problem-areas that have been explored in SOS: the
+architecture and execution model, system memory and swapping, processes and
+virtual addresses and I/O and drivers.  Understanding the architecture of SOS,
+the event loop and syscall dispatch are essential for understanding subsequent
+discussions, and thus offers a solid starting point for introducing SOS.
 
-\section{Interrupts and System Calls}
+\section{Architecture}
 \subsection{Execution Model}
 \subsubsection{Design}
 Implemented in: \texttt{/apps/sos/src/main.c}
@@ -74,41 +74,11 @@ SOS is able to accept new client requests.  This allows for a single-threaded
 implementation, while preserving many of the performance characteristics of a
 multi-threaded implementation.
 
-A continuation is specific to a process and is used to track the current state
-of execution.  For each syscall, the requesting process is identified by an
-IPC badged with its Process ID (see `Process Management' for details) thus
-allowing association between the process and the syscall.  Similarly,
-interrupt handlers also are provided with the Process ID should it be
-utilising a continuation.  By allowing execution state to be isolated on a
-per-process basis, and thus allow execution t restored to preserve
-
-A continuation in SOS is a struct which describes the current execution
-context.  The struct has many fields, which include:
-
-\begin{itemize}
-\item the original syscall number
-\item the number of re-entries into the syscall handler
-\item the number of bytes read or written
-\end{itemize}
-
-There are two further mechanisms for controlling the flow of execution, which
-effectively implement a blocked and ready queue:
-\begin{description}
-\item[longjmp()] provides a mechanism whereby jumping to the \texttt{ipc\_event\_buf}
-  can halt execution of the process, where it can later be resumed by a
-  callback handler;
-\item[add\_ready\_proc()] provides a `ready queue', where a process can be
-  flagged as ready by a callback handler, by this function to add the process
-  to the queue
-\end{description}
-
-At the completion of a client request, the function
-\texttt{syscall\_end\_continuation()} is used to reply to the client in a
-consistent manner, ensuring that all execution state is released and reset
-appropriately.  The caller to \texttt{syscall\_end\_continuation} indicates
-the process to reply to, the return code, and whether or not the request was
-successful.  At the completion of a request, the state of the process'
-continuation is reset.
+A continuation is used to track the current state of execution, including for
+example, the original syscall number or fault address and the number of bytes
+read or written during the current entry to the kernel.  A continuation is
+unique to each \emph{process}.  This model allows execution to resume once an
+interrupt occurs, and thus permits SOS non-blocking I/O.
 
 \subsubsection{Discussion}
 While a multi-threaded kernel does offer performance advantages on SMP-capable
@@ -134,6 +104,46 @@ to both static analysis or better scalability, such as a hash-table, though to
 achieve both static analysis and scalability requires a yet more sophisticated
 data structure which imposes added complexities outweighing the benefits
 offered to the current incarnation of SOS.
+
+\subsection{Events}
+Implemented in: \texttt{/libs/libclock/src/main.c}
+
+\subsubsection{Design}
+The \texttt{event\_loop()} serves as the central point of dispatch within SOS, and
+services three different forms of events:
+
+\begin{enumerate}
+\item Ready Processes
+\item Interrupts
+\item System Calls
+\end{enumerate}
+
+Network and Timer interrupts may come over Asynchronous IPC.  The behaviour
+for these will be described in their respective sections later in the
+document.  System Calls are received from processes, and will be discussed in
+depth in the following section.
+
+Ready processes are serviced before either Interrupts or System Calls.
+Processes are enqueued by interrupt handlers: once an interrupt request on
+behalf of the process is complete, that process is queued for selection in the
+event loop.  Conversely, it can be indicated that a continuation is waiting on
+an interrupt through the use of \texttt{longjmp} to \texttt{ipc\_event\_buf},
+re-entering the event loop.
+
+At the completion of a client request, the function
+\texttt{syscall\_end\_continuation()} is used to reply to the client in a
+consistent manner, ensuring that all execution state is released and reset
+appropriately.  The caller to \texttt{syscall\_end\_continuation} indicates
+the process to reply to, the return code, and whether or not the request was
+successful.  At the completion of a request, the state of the process'
+continuation is reset.
+
+\subsubsection{Discussion}
+The choice of servicing `ready' processes prior to Sync or Async IPC allows
+SOS to maximise the number of concurrent I/O operations `in flight': instead
+of potentially serving I/O interrupts, we potentially spawn new I/O
+interrupts.  Scheduling such that I/O operations are prioritised is known to
+allow for higher performance.
 
 \subsection{System Calls}
 Implemented in: \texttt{/apps/sos/src/handler.c}, \texttt{/apps/sos/src/syscall.c}
@@ -176,49 +186,6 @@ and represented consistently.
 
 The downside of this approach would be that the linked list largely becomes a
 complex representation of a function call.
-
-\subsection{Timer Interrupts}
-Implemented in: \texttt{/libs/libclock/src/clock.c}
-
-\subsubsection{Design}
-The timer interrupt was implemented using the GPT timer on the SABRE.
-
-The GPT timer allows multiple Output Compare Registers to be set
-simultaneously, and thus affords the ability to support two different types of
-interrupts.
-
-\begin{enumerate}
-\item Regular 100ms kernel tick
-\item Timed callback events
-\end{enumerate}
-
-Both timed callbacks and kernel tick callbacks are exposed via an interface
-for registering callback functions when these events occur.
-
-Timed callbacks are called after a timeout expires.  This is implemented by
-ensuring that all registrations are ordered at registration-time, and setting
-the corresponding Output Compare Register to the next event in the queue.  The
-next event in the queue is determined through looking up the next callback in
-a array, which is sorted by callback time.  Timer overflow is accounted for by
-searching for the event such that the difference between the current time, and
-the event time is minimal at the time of registration.
-
-Timed callbacks are removed after being fired and are used to implement the
-\texttt{sleep} syscall.  As kernel tick events satisfy different semantics to
-timed callback events in the implementation, they are distinguished in the
-interface.
-
-\subsubsection{Discussion}
-Alternatively the EPIT timer could have been used to implement this
-functionality.  Both EPIT and GPT timers on the Sabre have a very similar
-interface, and both could equally have been used.  However it was elected that
-the GPT is slightly simpler and fulfills all requirements.
-
-The implementation trades-off registration and removal performance for
-interrupt performance: registration and removal are both linear time
-operations as they ensure the callback timeouts are sorted based on the time
-they must trigger.  The interrupt handler offers constant-time performance for
-the lookup for the expiring callbacks.
 
 \section{System Memory}
 \subsection{Frame Table}
@@ -287,7 +254,34 @@ table'.  However, such an approach would fix the size of the swap file which
 may be a yet more significant issue on systems with restricted disk space or
 where the size of the swap file should otherwise be restricted.
 
-\section{Processes}
+\section{Processes and Virtual Memory}
+\subsection{Process Management}
+Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
+
+\subsubsection{Design}
+The design for Process IDs allows for constant-time creation, lookup and
+removal, and will reuse process IDs minimally.  This is achieved via an array
+of `PID entries', where a PID entry is a double-linked node containing a
+process ID and a flag to indicate whether it corresponds to a running process.
+
+Closely related to the use of process IDs is the means by which a process is
+identified during a callback.  SOS accounts for potential race conditions by
+using a reference to a `callback' structure, which contains the creation time
+of the callback, and the PID corresponding to the process which the callback
+was created on behalf of.  Given that the creation time of the process is
+known, it can be determined whether the process now owning the PID for the
+callback is the currently running process; a process starting after the
+creation time of the callback cannot own the callback, and thus the callback
+is discarded.
+
+\subsubsection{Discussion}
+Neither the PID nor the running flag are strictly required.  A PID could
+equally have been derived via pointer arithmetic between the beginning of,
+and the current index of the table.  Similarly the running flag could be
+derived via a lookup into the process table.  However this does afford the
+opportunity to verify the correctness of data structure manipulation, and
+clarifies the implementation.
+
 \subsection{Page Table}
 Implemented in: \texttt{/apps/sos/src/addrspace.c}
 
@@ -295,7 +289,11 @@ Implemented in: \texttt{/apps/sos/src/addrspace.c}
 SOS implements a two-level page table within a process' address space.  The
 page table divides the virtual address as follows:
 
-TODO: INSERT DIAGRAM
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=80mm]{add-format.png}
+  \caption{Address Format for Page Table lookup}
+\end{figure}
 
 This scheme allows each the Page Directory and the second level of the Page
 Table to address 1024 4-byte entries within one 4096-byte frame: each 4-byte
@@ -307,6 +305,12 @@ used, the lower 12 bits in the PTE are available for other purposes.
 Currently, 3 of these lower-most bits are used to provide flags indicating:
 whether the page data is stored on-disk, whether the page is pinned, and
 whether it has been referenced.  (See `Page Replacement' for details.)
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=80mm]{pte-addr-format.png}
+  \caption{Address Format as stored in the Page Table Entry}
+\end{figure}
 
 This structure allows for efficient lookup: the upper 10 most bits index into
 the Page Directory, the next upper 10-most bits index in to the second level
@@ -441,34 +445,7 @@ fault occurs on a page where the referenced bit is not set, though it is still
 in memory, the referenced bit will be set and the page mapped back in to the
 process' address space.
 
-\subsection{Processes}
-Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
-
-\subsubsection{Design}
-The design for Process IDs allows for constant-time creation, lookup and
-removal, and will reuse process IDs minimally.  This is achieved via an array
-of `PID entries', where a PID entry is a double-linked node containing a
-process ID and a flag to indicate whether it corresponds to a running process.
-
-Closely related to the use of process IDs is the means by which a process is
-identified during a callback.  SOS accounts for potential race conditions by
-using a reference to a `callback' structure, which contains the creation time
-of the callback, and the PID corresponding to the process which the callback
-was created on behalf of.  Given that the creation time of the process is
-known, it can be determined whether the process now owning the PID for the
-callback is the currently running process; a process starting after the
-creation time of the callback cannot own the callback, and thus the callback
-is discarded.
-
-\subsubsection{Discussion}
-Neither the PID nor the running flag are strictly required.  A PID could
-equally have been derived via pointer arithmetic between the beginning of,
-and the current index of the table.  Similarly the running flag could be
-derived via a lookup into the process table.  However this does afford the
-opportunity to verify the correctness of data structure manipulation, and
-clarifies the implementation.
-
-\section{I/O}
+\section{I/O and Drivers}
 \subsection{IO Vectors}
 Implemented in: \texttt{/apps/sos/src/file.c}
 
@@ -504,6 +481,36 @@ op (4k) and write across IO Vectors simultaneously.  Correcting this would
 incur some complexity in the implementation, though also offers the
 opportunity for significant performance improvements, in particular when
 reading files over NFS.
+
+
+\subsection{I/O Device Abstraction}
+\subsubsection{Design}
+The I/O Device is an abstraction over both block and character devices.  In
+the case of SOS, this abstracts both Serial and NFS to create a uniform IO
+interface through mapping function pointers to their respective
+implementations.
+
+Thus an IO Device provides an interface for all available IO operations over
+any driver.  Thus it currently exposes:
+
+\begin{itemize}
+\item open
+\item close
+\item read
+\item write
+\item getdirent
+\item stat
+\end{itemize}
+
+For both the serial and NFS drivers.  As the serial driver does not support
+some of these operations, those operations are undefined (NULL).
+
+\subsubsection{Discussion}
+The IO Device is a light-weight mechanism to abstract access to IO-related
+drivers.  An alternative to this would be the implementation of a VFS-like
+abstraction.  However, given that the goals of the project were to support a
+single, flat filesystem, and a serial device, this was deemed an overly
+extravagant abstraction.
 
 \subsection{Serial Device}
 Implemented in: \texttt{/apps/sos/src/serial.c}
@@ -546,34 +553,48 @@ Detection of completion of the syscall is handled individually in each
 callback.  In the event of error, or completion, the callback is responsible
 for triggering an appropriate reply to the client over IPC.
 
-\subsection{I/O Device Abstraction}
+\subsection{Timer Interrupts}
+Implemented in: \texttt{/libs/libclock/src/clock.c}
+
 \subsubsection{Design}
-The I/O Device is an abstraction over both block and character devices.  In
-the case of SOS, this abstracts both Serial and NFS to create a uniform IO
-interface through mapping function pointers to their respective
-implementations.
+The timer interrupt was implemented using the GPT timer on the SABRE.
 
-Thus an IO Device provides an interface for all available IO operations over
-any driver.  Thus it currently exposes:
+The GPT timer allows multiple Output Compare Registers to be set
+simultaneously, and thus affords the ability to support two different types of
+interrupts.
 
-\begin{itemize}
-\item open
-\item close
-\item read
-\item write
-\item getdirent
-\item stat
-\end{itemize}
+\begin{enumerate}
+\item Regular 100ms kernel tick
+\item Timed callback events
+\end{enumerate}
 
-For both the serial and NFS drivers.  As the serial driver does not support
-some of these operations, those operations are undefined (NULL).
+Both timed callbacks and kernel tick callbacks are exposed via an interface
+for registering callback functions when these events occur.
+
+Timed callbacks are called after a timeout expires.  This is implemented by
+ensuring that all registrations are ordered at registration-time, and setting
+the corresponding Output Compare Register to the next event in the queue.  The
+next event in the queue is determined through looking up the next callback in
+a array, which is sorted by callback time.  Timer overflow is accounted for by
+searching for the event such that the difference between the current time, and
+the event time is minimal at the time of registration.
+
+Timed callbacks are removed after being fired and are used to implement the
+\texttt{sleep} syscall.  As kernel tick events satisfy different semantics to
+timed callback events in the implementation, they are distinguished in the
+interface.
 
 \subsubsection{Discussion}
-The IO Device is a light-weight mechanism to abstract access to IO-related
-drivers.  An alternative to this would be the implementation of a VFS-like
-abstraction.  However, given that the goals of the project were to support a
-single, flat filesystem, and a serial device, this was deemed an overly
-extravagant abstraction.
+Alternatively the EPIT timer could have been used to implement this
+functionality.  Both EPIT and GPT timers on the Sabre have a very similar
+interface, and both could equally have been used.  However it was elected that
+the GPT is slightly simpler and fulfills all requirements.
+
+The implementation trades-off registration and removal performance for
+interrupt performance: registration and removal are both linear time
+operations as they ensure the callback timeouts are sorted based on the time
+they must trigger.  The interrupt handler offers constant-time performance for
+the lookup for the expiring callbacks.
 
 \end{document}
 %%% Local Variables:
