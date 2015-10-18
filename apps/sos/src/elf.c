@@ -67,25 +67,38 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
  * @return 
  */
 int load_page_into_vspace(sos_proc_t* proc,
-                          uint32_t src,
-                          unsigned long dst) {
+                          uint32_t offset,
+                          unsigned long faultdst) {
 
     sos_addrspace_t *as = proc_as(proc);
 
     /* We work a page at a time in the destination vspace. */
     assert(as);
     //assert(dst == PAGE_ALIGN(dst));
-    dprintf(3, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
+    unsigned long dst = faultdst;
+    sos_region_t *reg = as_vaddr_region(as, dst);
+    assert(reg);
+    size_t nbytes = PAGESIZE;
 
-    unsigned long kdst = as_lookup_sos_vaddr(as, dst);
-    seL4_CPtr sos_cap = frame_cap(kdst);
-    assert(sos_cap != seL4_CapNull);
-    /* Now copy our data into the destination vspace. */
-    int nbytes = PAGESIZE - (dst & PAGEMASK);
+
+    if (reg->start > dst) {
+        nbytes -= (reg->start - dst);
+        dst = reg->start;
+    } else {
+        dst = PAGE_ALIGN(dst);
+    }
+
+    if ((reg->end - dst) < PAGESIZE) {
+        nbytes -= PAGESIZE - (reg->end % PAGESIZE);
+    }
+
+    unsigned long src = offset + dst - reg->start;
+    dprintf(3, "load_page_into_vspace: src=%08x,dst=%08x\n", src, dst);
 
     proc->cont.iov = iov_create(dst, nbytes, NULL, NULL, false);
     assert(proc->fd_table[proc->cont.fd]);
     proc->fd_table[proc->cont.fd]->offset = src;
+
     if (!proc->cont.binary_nfs_read) {
         proc->cont.binary_nfs_read = true;
         proc->fd_table[BINARY_READ_FD]->io->read(proc->cont.iov,
@@ -93,6 +106,16 @@ int load_page_into_vspace(sos_proc_t* proc,
                                                  nbytes);
         longjmp(ipc_event_env, -1);
     }
+
+    unsigned long kdst = as_lookup_sos_vaddr(as, dst);
+    if (kdst == 0) {
+        return EINVAL;
+    }
+    seL4_CPtr sos_cap = frame_cap(kdst);
+    if (sos_cap == seL4_CapNull) {
+        return EINVAL;
+    }
+    assert(sos_cap != seL4_CapNull);
 
     /* Not observable to I-cache yet so flush the frame */
     seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
@@ -115,6 +138,8 @@ int elf_load(sos_proc_t* proc, char *elf_file) {
         ERR("Too many ELF segments in file\n");
     }
     for (int i = 0; i < num_headers; i++) {
+        printf("Elf has %d headers\n", num_headers);
+
         seL4_Word source_addr;
         unsigned long flags, segment_size, vaddr;
 

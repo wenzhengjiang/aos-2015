@@ -97,9 +97,13 @@ int sos_vm_fault(seL4_Word faulttype, seL4_Word faultaddr) {
             if (aligned_addr < reg->start) {
                 aligned_addr = reg->start;
             }
-            load_page_into_vspace(proc,
-                                  (aligned_addr - reg->start) + reg->elf_addr,
-                                  aligned_addr);
+            int err = load_page_into_vspace(proc,
+                                        reg->elf_addr,
+                                        faultaddr);
+            if (err) {
+                ERR("FAILED TO LOAD PAGE FOR PROC\n");
+                process_delete(proc);
+            }
         }
     }
     return 0;
