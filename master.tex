@@ -153,7 +153,7 @@ storing any arguments provided via IPC within the continuation, so that they
 may be available to the execution handler.
 
 The syscall dispatch is represented as a table which is indexed by the system
-call number and the handler type, giving simple and constant-time access to
+call number and the handler type, giving simple and O(1) access to
 the syscalls implemented within SOS.
 
 During the execution of a system call, two concepts are used to access the
@@ -252,7 +252,7 @@ where the size of the swap file should otherwise be restricted.
 Implemented in: \texttt{/apps/sos/src/process.c}, \texttt{/apps/sos/src/elf.c}
 
 \subsubsection{Design}
-The design for Process IDs allows for constant-time creation, lookup and
+The design for Process IDs allows for O(1) creation, lookup and
 removal, and will reuse process IDs minimally.  This is achieved via an array
 of `PID entries', where each entry in the array is a doubly-linked node, and
 can thus represent lists of both running and free PIDs.  A PID entry contains
@@ -282,7 +282,7 @@ page table divides the virtual address as follows:
   \caption{Address Format for Page Table lookup}
 \end{figure}
 
-This structure allows for constant-time lookup: the upper 10 most bits index
+This structure allows for O(1) lookup: the upper 10 most bits index
 into the Page Directory, the next upper 10-most bits index in to the second
 level of the Page Table.  This scheme allows each the Page Directory and the
 second level of the Page Table to address 1024 4-byte entries within one
@@ -307,6 +307,8 @@ Table design.  The caps stored in this list exist only for the purpose of
 releasing the resource.
 
 \subsection{Page Replacement}
+Implemented in: \texttt{/apps/sos/src/page_replacement.c}
+
 \subsubsection{Design}
 SOS implements a second-chance local page replacement algorithm, which takes
 place over a number of steps:
@@ -324,10 +326,10 @@ requirement is selected for eviction, or if there isn't any process satisfying
 this requirement, the page is evicted from the current process.
 
 In order to guarantee fairness of the system, the process for which eviction
-takes place is tracked, and subsequent selection takes place from the
-following process.  Similarly, in order to prevent starvation as a result of
-two or more processes competing indefinitely for frames, so that they are able
-to make progress while the system is under very high resource constraints, the
+takes place is tracked, and subsequent selection takes place from the next
+process.  Similarly, in order to prevent starvation as a result of two or more
+processes competing indefinitely for frames, so that they are able to make
+progress while the system is under very high resource constraints, the
 algorithm may randomly select the current process for eviction.
 
 The page replacement algorithm uses a circular linked list of pages.  For each
@@ -351,11 +353,13 @@ address on disk.
 Designing a scheme which maximised the amount of memory available for
 eviction, thereby maximising the number of processes available to run on the
 system, while preserving fairness received a significant amount of attention.
-While evicting from the currently running process, or even its parent, is a
-reasonably straight-forward approach neither make effective use of system
-resources.  However, if pages were to be evicted from other processes, it must
-be done in such a way that two or more processes would not compete for the
-same resource indefinitely.
+While evicting from the currently running process, or even its parent, is
+naive approach does not make effective use of system resources.
+
+The final implementation extends local replacement, and takes into account
+that if pages were to be evicted from any process, it must be done in such a
+way that two or more processes would not compete for the same resource
+indefinitely.
 
 There are three factors to the process selection mechanism which help to
 ensure fairness:
@@ -378,7 +382,7 @@ available to a process for eviction to calculate the threshold predicate,
 exposing the potential for future implementation mistakes.
 
 \subsection{Regions}
-Implemented in: \texttt{/apps/sos/src/addrspace.c}, \texttt{/apps/sos/src/handler.c}
+Implemented in: \texttt{/apps/sos/src/addrspace.c}
 
 \subsubsection{Design}
 Regions are implemented as a singly-linked list.  Each region also contains
@@ -387,8 +391,8 @@ the elf file.
 
 \subsubsection{Discussion}
 There is no optimisation on the lookup cost of a region.  This could be
-optimised through the use of a Red-Black tree or similar data structure,
-though is unnecessarily complex more most applications.
+optimised through the use of binary search or similar approach, though is
+unnecessarily complex for most applications.
 
 \subsection{Page Faults}
 Implemented in: \texttt{/apps/sos/src/handler.c}
@@ -398,8 +402,9 @@ Page faults within SOS occur in a number of circumstances:
 
 \begin{itemize}
 \item for lazy-loading data in from an ELF binary;
-\item faulting-in new pages within the heap or stack, and
-\item when the process attempts to read data, which has been paged to disk, back into memory;
+\item faulting-in new pages within the heap or stack;
+\item when the process attempts to read data, which has been paged to disk,
+  back into memory, and
 \item as a means of setting the frame referenced bit for second chance replacement
 \end{itemize}
 
@@ -431,13 +436,13 @@ process' address space.
 Implemented in: \texttt{/apps/sos/src/file.c}
 
 \subsubsection{Design}
-An IO Vector is a representation of client or SOS-internal pages, allowing
-memory to be mapped for I/O on-demand.
+An IO Vector list is a representation of client or SOS-internal pages,
+allowing memory to be mapped for I/O on-demand.
 
 An IO Vector provides the following fields:
 \begin{description}
 \item[vstart] The starting address of the frame or virtual address (conditional)
-\item[sz] The length of the operation to occur.  sz will be set such that the
+\item[sz] The length of the operation to occur.  \texttt{sz} will be set such that the
   operation does not exceed the page given the starting address \texttt{vstart}.
 \item[next] The following IO Vector node.
 \item[sos\_iov\_flag] Flag indicating whether the IO Vector node corresponds to
@@ -445,24 +450,23 @@ An IO Vector provides the following fields:
   address translation is required)
 \end{description}
 
-The benefit of the IO Vector is that it allows for otherwise non-contiguous
-pages to be treated as though contiguous.  It also provides a means for
-representing the progress of an IO operations, where the IO Vector need simply
-be updated to reflect the current progress of an operation.  Similarly, we
-need only guarantee the page for the current IO Vector is in memory, thus
-alleviating the need to read all pages for the current IO operation into
-memory.
+The benefit of the IO Vector list is that it allows for otherwise
+non-contiguous pages to be treated as though contiguous.  It also provides a
+means for representing the progress of an IO operations, where the IO Vector
+list need simply be updated to reflect the current progress of an operation.
+Similarly, we need only guarantee the page for the current IO Vector is in
+memory, thus alleviating the need to read all pages for the current IO
+operation into memory.
 
 IO Vectors are used to represent most I/O operations in SOS.
 
 \subsubsection{Discussion}
 Currently the usage of the IO Vector means that we may do short IO ops
-(e.g. 10 bytes to finish reading a page), even though we could do a large IO
-op (4k) and write across IO Vectors simultaneously.  Correcting this would
-incur some complexity in the implementation, though also offers the
-opportunity for significant performance improvements, in particular when
-reading files over NFS.
-
+(e.g. 10 bytes to finish reading a page) considering only a single IO Vector
+at each time, even though we could do a large IO op (4k) and write across IO
+Vectors simultaneously.  Correcting this would incur some complexity in the
+implementation, though also offers the opportunity for significant performance
+improvements, in particular when reading files over NFS.
 
 \subsection{I/O Device Abstraction}
 \subsubsection{Design}
@@ -499,13 +503,9 @@ Implemented in: \texttt{/apps/sos/src/serial.c}
 \subsubsection{Design}
 The serial device implementation satisfies single-reader / multiple-writer
 semantics, where the process is only permitted to read should no other process
-have the serial device open for reading.  This uses global state (named
-\texttt{reader\_pid}) within the serial driver, which allows the owning process to be
-identified in constant time.
-
-Reads in SOS are buffered, though only the most recent line is preserved; any
-subsequent line is discarded.  This provides bounds over the size of the
-buffer, while allowing non-blocking behaviour should have already been
+have the serial device open for reading.  Reads in SOS are buffered, though
+only the most recent line is preserved.  This provides bounds over the size of
+the buffer, while allowing non-blocking behaviour should have already been
 provided from the user.
 
 When the read() is invoked by the client, the pages corresponding to that read
@@ -520,11 +520,12 @@ Implemented in: \texttt{/apps/sos/src/sos\_nfs.c}
 
 \subsubsection{Design}
 The NFS implementation in SOS relies heavily on callbacks and continuations,
-which have been discussed previously.  Prior to spawning a request for which a
-subsequent callback is expected, a `callback info' struct will be allocated,
-which contains the time the callback was initiated and the process initiating
-the callback.  The address of this is used as the token, and uniquely
-identifies the context for the callback once the callback is realised.
+which have been discussed previously in order to achieve non-blocking I/O
+operations within SOS.  Prior to spawning a request for which a subsequent
+callback is expected, a `callback info' struct will be allocated, which
+contains the time the callback was initiated and the process initiating the
+callback.  The address of this is used as the token, and uniquely identifies
+the context for the callback once the callback is realised.
 
 The PID from the callback is used to set the context for the subsequent
 execution, in the same was as the badge for a process' IPC is used to set the
@@ -574,7 +575,7 @@ the GPT is slightly simpler and fulfills all requirements.
 The implementation trades-off registration and removal performance for
 interrupt performance: registration and removal are both linear time
 operations as they ensure the callback timeouts are sorted based on the time
-they must trigger.  The interrupt handler offers constant-time performance for
+they must trigger.  The interrupt handler offers O(1) performance for
 the lookup for the expiring callbacks.
 
 \end{document}
